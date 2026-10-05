@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap">
+<style>
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;background:#0a0b0d}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:#0a0b0d;color:#eceef1;-webkit-font-smoothing:antialiased}
+a{color:oklch(0.82 0.12 258);text-decoration:none}
+a:hover{color:#eceef1}
+::selection{background:oklch(0.74 0.19 258 / 0.35)}
+input::placeholder{color:#5d626c}
+</style>
+</helmet>
+<div ref="{{ rootRef }}" style="min-height:100vh;background:#0a0b0d;color:#eceef1;font-family:'Geist',system-ui,sans-serif;font-size:16px;line-height:1.5;overflow-x:hidden">
+
+<nav style="position:sticky;top:0;z-index:50;background:rgba(10,11,13,0.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:14px clamp(20px,5vw,48px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="font-weight:600;letter-spacing:-0.02em;font-size:17px">x402<span style="color:oklch(0.74 0.19 258)">·</span>card</div>
+      <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:0.1em;color:#8b909a;border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:3px 8px">SANDBOX</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:clamp(12px,3vw,28px);font-size:14px">
+      <a href="#beat-1" style="color:#8b909a">How it works</a>
+      <a href="#feed" style="color:#8b909a">Activity</a>
+      <button data-cta="" style="font-family:inherit;font-size:14px;font-weight:500;background:#eceef1;color:#0a0b0d;border:none;border-radius:999px;padding:8px 14px;cursor:pointer" style-hover="background:oklch(0.82 0.12 258)">Issue card</button>
+    </div>
+  </div>
+</nav>
+
+<header data-screen-label="Hero" style="max-width:1200px;margin:0 auto;padding:clamp(56px,10vh,120px) clamp(20px,5vw,48px) clamp(72px,12vh,140px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:clamp(40px,6vw,80px);align-items:center">
+  <div style="display:flex;flex-direction:column;gap:28px">
+    <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;color:#8b909a">SPEND CARDS FOR AI AGENTS · ADDRESSED BY ENS</div>
+    <h1 style="margin:0;font-weight:500;font-size:clamp(42px,6vw,76px);line-height:1.02;letter-spacing:-0.035em;text-wrap:balance">Fund an agent by name. <span style="color:#6b707a">Never handle a card number.</span></h1>
+    <p style="margin:0;font-size:18px;color:#8b909a;max-width:480px;text-wrap:pretty">x402 Card issues virtual cards to AI agents, addressed by ENS name. Policy lives in text records. Humans approve the exceptions.</p>
+    <div style="display:flex;align-items:center;gap:12px;padding:14px 14px 14px 18px;border-radius:14px;background:#101216;border:1px solid rgba(255,255,255,0.1);max-width:480px">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex:none"><circle cx="7" cy="7" r="5" stroke="#8b909a" stroke-width="1.5"></circle><line x1="11" y1="11" x2="14.5" y2="14.5" stroke="#8b909a" stroke-width="1.5" stroke-linecap="round"></line></svg>
+      <input data-hero-q="" spellcheck="false" autocomplete="off" aria-label="ENS name" placeholder="yourbot.x402card.eth" style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:#eceef1;font-family:'Geist Mono',ui-monospace,monospace;font-size:15px;padding:0">
+      <div data-hero-st="" style="flex:none;font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;letter-spacing:0.06em;color:oklch(0.82 0.12 258);background:oklch(0.74 0.19 258 / 0.14);border-radius:999px;padding:4px 9px;opacity:0;transition:opacity .3s ease">RESOLVED</div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button data-cta="" style="font-family:inherit;font-size:15px;font-weight:500;background:oklch(0.74 0.19 258);color:#0a0b0d;border:none;border-radius:12px;padding:13px 20px;cursor:pointer" style-hover="background:oklch(0.8 0.17 258)">Issue an agent card</button>
+      <a href="#beat-1" style="font-size:15px;color:#eceef1;border:1px solid rgba(255,255,255,0.14);border-radius:12px;padding:12px 20px;display:inline-flex;align-items:center;white-space:nowrap;flex:none" style-hover="border-color:rgba(255,255,255,0.3)">See how it works</a>
+    </div>
+  </div>
+  <div style="position:relative;min-height:clamp(300px,40vw,460px);display:flex;align-items:center;justify-content:center;perspective:1200px">
+    <div style="position:absolute;width:70%;height:36%;bottom:10%;background:radial-gradient(closest-side,oklch(0.74 0.19 258 / 0.28),transparent);filter:blur(30px);pointer-events:none"></div>
+    <div data-tilt="" style="position:relative;width:100%;max-width:440px;transform-style:preserve-3d;will-change:transform">
+      <div data-hero-card="" style="position:relative;width:100%;aspect-ratio:1.586;border-radius:22px;background:linear-gradient(140deg,#1d212b 0%,#111318 55%,#0b0c10 100%);border:1px solid rgba(255,255,255,0.12);box-shadow:0 40px 80px -30px rgba(0,0,0,0.9),inset 0 1px 0 rgba(255,255,255,0.08);padding:clamp(18px,4vw,28px);display:flex;flex-direction:column;justify-content:space-between;opacity:0.12;filter:blur(12px);transform:translateY(18px) scale(0.94);transition:opacity .25s ease, filter .25s ease, transform .25s ease">
+        <div style="position:absolute;inset:0;border-radius:inherit;background:radial-gradient(90% 70% at 100% 0%,oklch(0.74 0.19 258 / 0.25),transparent 60%);pointer-events:none"></div>
+        <div style="position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none"><div data-sheen="" style="position:absolute;top:0;bottom:0;left:-50%;width:200%;background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,0.07) 50%,transparent 60%)"></div></div>
+        <div style="position:relative;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:600;letter-spacing:-0.02em;font-size:18px">x402<span style="color:oklch(0.74 0.19 258)">·</span>card</div>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:0.14em;color:#8b909a">AGENT · VIRTUAL</div>
+        </div>
+        <div style="position:relative;width:44px;height:33px;border-radius:7px;background:linear-gradient(135deg,#3b404b,#22252c);border:1px solid rgba(255,255,255,0.14)"></div>
+        <div style="position:relative;display:flex;flex-direction:column;gap:8px">
+          <div data-hero-num="" style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;letter-spacing:0.16em;color:#8b909a">•••• •••• •••• 4021</div>
+          <div data-hero-name="" style="font-family:'Geist Mono',ui-monospace,monospace;font-size:clamp(15px,2.2vw,19px);color:#eceef1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:1.3em"></div>
+        </div>
+        <div data-hero-glow="" style="position:absolute;inset:-1px;border-radius:inherit;border:1px solid oklch(0.74 0.19 258);box-shadow:0 0 50px oklch(0.74 0.19 258 / 0.45);opacity:0;pointer-events:none"></div>
+      </div>
+    </div>
+    <div data-hero-res="" style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:#8b909a;opacity:0;transition:opacity .4s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">resolving…</div>
+  </div>
+</header>
+
+<section id="beat-1" data-screen-label="01 Name to Card" style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:clamp(72px,12vh,140px) clamp(20px,5vw,48px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:clamp(36px,6vw,80px);align-items:center">
+    <div style="display:flex;flex-direction:column;gap:22px;max-width:480px">
+      <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;display:flex;gap:10px"><span style="color:oklch(0.82 0.12 258)">01</span><span style="color:#8b909a">NAME → CARD</span></div>
+      <h2 style="margin:0;font-weight:500;font-size:clamp(30px,3.6vw,46px);line-height:1.08;letter-spacing:-0.03em;text-wrap:balance">A name is the whole interface.</h2>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:#8b909a;text-wrap:pretty">Type an ENS name and a virtual card is issued against it. The 16-digit number exists, but your agent never sees it. It pays by name.</p>
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:6px 12px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px"><span style="color:#5d626c">cause</span><span style="color:#b9bdc6">type scout.x402card.eth</span><span style="color:#5d626c">effect</span><span style="color:#b9bdc6">card issued, number masked</span></div>
+    </div>
+    <div data-stage="1" style="position:relative;min-height:460px;border-radius:24px;background:#0f1115;border:1px solid rgba(255,255,255,0.07);padding:clamp(24px,4vw,40px);display:flex;align-items:center;justify-content:center;overflow:hidden">
+      <button data-replay="1" style="position:absolute;top:14px;right:14px;z-index:5;font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#8b909a;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:5px 10px;cursor:pointer" style-hover="color:#eceef1;border-color:rgba(255,255,255,0.25)">↻ replay</button>
+      <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:28px;align-items:center">
+        <div style="width:100%;display:flex;gap:8px;align-items:center;padding:7px 7px 7px 16px;border-radius:12px;background:#0a0b0d;border:1px solid rgba(255,255,255,0.1)">
+          <div style="flex:1;min-width:0;position:relative;font-family:'Geist Mono',ui-monospace,monospace;font-size:13.5px;height:22px;display:flex;align-items:center;overflow:hidden;white-space:nowrap">
+            <span data-a="ph" style="position:absolute;left:0;color:#5d626c">type an ENS name</span>
+            <span data-a="in" style="color:#eceef1"></span>
+            <span data-a="caret" style="display:inline-block;width:1.5px;height:16px;background:oklch(0.74 0.19 258);margin-left:1px;opacity:0"></span>
+          </div>
+          <button data-a="btn" style="flex:none;font-family:inherit;font-size:13px;font-weight:500;background:oklch(0.74 0.19 258);color:#0a0b0d;border:none;border-radius:8px;padding:8px 12px">Issue</button>
+        </div>
+        <div data-a="card" style="position:relative;width:100%;max-width:340px;aspect-ratio:1.586;border-radius:18px;background:linear-gradient(140deg,#1c2029 0%,#111318 55%,#0b0c10 100%);border:1px solid rgba(255,255,255,0.1);box-shadow:0 30px 60px -24px rgba(0,0,0,0.8);overflow:hidden;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between;opacity:0;transform:translateY(28px) scale(0.96)">
+          <div style="position:absolute;inset:0;background:radial-gradient(90% 70% at 100% 0%,oklch(0.74 0.19 258 / 0.22),transparent 60%);pointer-events:none"></div>
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600;letter-spacing:-0.02em;font-size:15px">x402<span style="color:oklch(0.74 0.19 258)">·</span>card</div><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.12em;color:#8b909a">AGENT · VIRTUAL</div></div>
+          <div style="position:relative;width:36px;height:27px;border-radius:6px;background:linear-gradient(135deg,#3b404b,#22252c);border:1px solid rgba(255,255,255,0.12)"></div>
+          <div style="position:relative;display:flex;flex-direction:column;gap:6px">
+            <div data-a="num" style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;letter-spacing:0.14em;color:#8b909a">•••• •••• •••• ••••</div>
+            <div data-a="name" style="font-family:'Geist Mono',ui-monospace,monospace;font-size:14px;color:#eceef1;min-height:21px;white-space:nowrap"></div>
+          </div>
+        </div>
+        <div data-a="cap" style="opacity:0;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:#8b909a;text-align:center;display:flex;flex-wrap:wrap;justify-content:center;gap:4px 14px"><span>number: <span style="color:#eceef1">never exposed</span></span><span>handle: <span style="color:oklch(0.82 0.12 258)">scout.x402card.eth</span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-2" data-screen-label="02 Policy in ENS" style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:clamp(72px,12vh,140px) clamp(20px,5vw,48px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:clamp(36px,6vw,80px);align-items:center">
+    <div style="display:flex;flex-direction:column;gap:22px;max-width:480px">
+      <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;display:flex;gap:10px"><span style="color:oklch(0.82 0.12 258)">02</span><span style="color:#8b909a">POLICY LIVES IN ENS</span></div>
+      <h2 style="margin:0;font-weight:500;font-size:clamp(30px,3.6vw,46px);line-height:1.08;letter-spacing:-0.03em;text-wrap:balance">Limits are just text records.</h2>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:#8b909a;text-wrap:pretty">Spend rules are stored on the name itself. Change a record and every charge is checked against the new value. No dashboard, no redeploy.</p>
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:6px 12px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px"><span style="color:#5d626c">cause</span><span style="color:#b9bdc6">text records set on the name</span><span style="color:#5d626c">effect</span><span style="color:#b9bdc6">card enforces them</span></div>
+    </div>
+    <div data-stage="2" style="position:relative;min-height:460px;border-radius:24px;background:#0f1115;border:1px solid rgba(255,255,255,0.07);padding:clamp(24px,4vw,40px);display:flex;align-items:center;justify-content:center;overflow:hidden">
+      <button data-replay="2" style="position:absolute;top:14px;right:14px;z-index:5;font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#8b909a;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:5px 10px;cursor:pointer" style-hover="color:#eceef1;border-color:rgba(255,255,255,0.25)">↻ replay</button>
+      <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:26px;align-items:center">
+        <div style="width:100%;border-radius:14px;border:1px solid rgba(255,255,255,0.08);background:#0a0b0d;overflow:hidden;font-family:'Geist Mono',ui-monospace,monospace">
+          <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#8b909a"><span style="color:#b9bdc6">researcher.x402card.eth</span><span>TEXT</span></div>
+          <div data-a="r1" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 14px;font-size:12.5px"><span style="color:#8b909a">card.limit.tx</span><span data-a="v1" style="color:#eceef1">50</span></div>
+          <div data-a="r2" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 14px;font-size:12.5px"><span style="color:#8b909a">card.limit.monthly</span><span data-a="v2" style="color:#eceef1">500</span></div>
+          <div data-a="r3" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 14px;font-size:12.5px"><span style="color:#8b909a">card.mcc.allow</span><span data-a="v3" style="color:#eceef1">software</span></div>
+        </div>
+        <div data-a="card" style="position:relative;width:100%;max-width:340px;aspect-ratio:1.586;border-radius:18px;background:linear-gradient(140deg,#1c2029 0%,#111318 55%,#0b0c10 100%);border:1px solid rgba(255,255,255,0.1);box-shadow:0 30px 60px -24px rgba(0,0,0,0.8);overflow:hidden;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="position:absolute;inset:0;background:radial-gradient(90% 70% at 100% 0%,oklch(0.74 0.19 258 / 0.22),transparent 60%);pointer-events:none"></div>
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600;letter-spacing:-0.02em;font-size:15px">x402<span style="color:oklch(0.74 0.19 258)">·</span>card</div><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.12em;color:#8b909a">AGENT · VIRTUAL</div></div>
+          <div style="position:relative;width:36px;height:27px;border-radius:6px;background:linear-gradient(135deg,#3b404b,#22252c);border:1px solid rgba(255,255,255,0.12)"></div>
+          <div style="position:absolute;right:20px;top:50%;margin-top:-42px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;font-family:'Geist Mono',ui-monospace,monospace;font-size:10.5px">
+            <div data-a="t1" style="opacity:0;padding:4px 8px;border-radius:6px;border:1px solid oklch(0.74 0.19 258 / 0.5);background:oklch(0.74 0.19 258 / 0.14);color:oklch(0.86 0.1 258);white-space:nowrap">tx ≤ $50</div>
+            <div data-a="t2" style="opacity:0;padding:4px 8px;border-radius:6px;border:1px solid oklch(0.74 0.19 258 / 0.5);background:oklch(0.74 0.19 258 / 0.14);color:oklch(0.86 0.1 258);white-space:nowrap">month ≤ $500</div>
+            <div data-a="t3" style="opacity:0;padding:4px 8px;border-radius:6px;border:1px solid oklch(0.74 0.19 258 / 0.5);background:oklch(0.74 0.19 258 / 0.14);color:oklch(0.86 0.1 258);white-space:nowrap">mcc: software</div>
+          </div>
+          <div style="position:relative;display:flex;flex-direction:column;gap:6px">
+            <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;letter-spacing:0.14em;color:#8b909a">•••• •••• •••• 7318</div>
+            <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:14px;color:#eceef1;white-space:nowrap">researcher.x402card.eth</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-3" data-screen-label="03 Spend" style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:clamp(72px,12vh,140px) clamp(20px,5vw,48px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:clamp(36px,6vw,80px);align-items:center">
+    <div style="display:flex;flex-direction:column;gap:22px;max-width:480px">
+      <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;display:flex;gap:10px"><span style="color:oklch(0.82 0.12 258)">03</span><span style="color:#8b909a">SPEND</span></div>
+      <h2 style="margin:0;font-weight:500;font-size:clamp(30px,3.6vw,46px);line-height:1.08;letter-spacing:-0.03em;text-wrap:balance">In-policy charges clear. The rest bounce.</h2>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:#8b909a;text-wrap:pretty">Every authorization is checked against the card’s records in real time. A decline tells the agent exactly which rule it hit, so it can adapt instead of retrying.</p>
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:6px 12px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px"><span style="color:#5d626c">cause</span><span style="color:#b9bdc6">$42 software charge · $18 casino charge</span><span style="color:#5d626c">effect</span><span style="color:#b9bdc6">one approved, one declined with reason</span></div>
+    </div>
+    <div data-stage="3" style="position:relative;min-height:460px;border-radius:24px;background:#0f1115;border:1px solid rgba(255,255,255,0.07);padding:clamp(24px,4vw,40px);display:flex;align-items:center;justify-content:center;overflow:hidden">
+      <button data-replay="3" style="position:absolute;top:14px;right:14px;z-index:5;font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#8b909a;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:5px 10px;cursor:pointer" style-hover="color:#eceef1;border-color:rgba(255,255,255,0.25)">↻ replay</button>
+      <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:30px;align-items:center">
+        <div style="display:grid;place-items:center;height:44px;width:100%">
+          <div data-a="m1" style="grid-area:1/1;opacity:0;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:999px;background:#15181e;border:1px solid rgba(255,255,255,0.12);font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;white-space:nowrap"><span style="color:#eceef1;font-weight:600">$42.00</span><span style="color:#8b909a">ModelHub API · MCC 5734</span></div>
+          <div data-a="m2" style="grid-area:1/1;opacity:0;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:999px;background:#15181e;border:1px solid rgba(255,255,255,0.12);font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;white-space:nowrap"><span style="color:#eceef1;font-weight:600">$18.00</span><span style="color:#8b909a">SpinPalace · MCC 7995</span></div>
+        </div>
+        <div data-a="card" style="position:relative;width:100%;max-width:340px;aspect-ratio:1.586;border-radius:18px;background:linear-gradient(140deg,#1c2029 0%,#111318 55%,#0b0c10 100%);border:1px solid rgba(255,255,255,0.1);box-shadow:0 30px 60px -24px rgba(0,0,0,0.8);overflow:hidden;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="position:absolute;inset:0;background:radial-gradient(90% 70% at 100% 0%,oklch(0.74 0.19 258 / 0.22),transparent 60%);pointer-events:none"></div>
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600;letter-spacing:-0.02em;font-size:15px">x402<span style="color:oklch(0.74 0.19 258)">·</span>card</div><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.12em;color:#8b909a">AGENT · VIRTUAL</div></div>
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <div style="width:36px;height:27px;border-radius:6px;background:linear-gradient(135deg,#3b404b,#22252c);border:1px solid rgba(255,255,255,0.12)"></div>
+            <div style="display:flex;gap:6px;font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;color:oklch(0.86 0.1 258)"><span style="padding:3px 7px;border-radius:5px;background:oklch(0.74 0.19 258 / 0.12)">tx ≤ $50</span><span style="padding:3px 7px;border-radius:5px;background:oklch(0.74 0.19 258 / 0.12)">mcc: software</span></div>
+          </div>
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-end;gap:10px">
+            <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+              <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;letter-spacing:0.14em;color:#8b909a">•••• 7318</div>
+              <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:#eceef1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">researcher.x402card.eth</div>
+            </div>
+            <div style="text-align:right;font-family:'Geist Mono',ui-monospace,monospace;flex:none"><div style="font-size:9.5px;letter-spacing:0.12em;color:#5d626c">SPENT / MO</div><div data-a="spent" style="font-size:13px;color:#eceef1">$0 / $500</div></div>
+          </div>
+        </div>
+        <div style="display:grid;place-items:center;min-height:48px;width:100%">
+          <div data-a="ok" style="grid-area:1/1;opacity:0;display:flex;align-items:center;gap:10px;font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:oklch(0.8 0.16 155)"><span style="width:22px;height:22px;border-radius:50%;background:oklch(0.8 0.16 155);color:#0a0b0d;display:grid;place-items:center;font-size:13px;font-weight:700">✓</span><span>APPROVED · $42 ≤ card.limit.tx</span></div>
+          <div data-a="err" style="grid-area:1/1;opacity:0;display:flex;flex-direction:column;align-items:center;gap:4px;font-family:'Geist Mono',ui-monospace,monospace;text-align:center"><span style="font-size:12.5px;color:oklch(0.7 0.19 25);font-weight:500">✕ MERCHANT_CATEGORY_NOT_ALLOWED</span><span style="font-size:11.5px;color:#8b909a">7995 ∉ card.mcc.allow</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-4" data-screen-label="04 Funding by name" style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:clamp(72px,12vh,140px) clamp(20px,5vw,48px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:clamp(36px,6vw,80px);align-items:center">
+    <div style="display:flex;flex-direction:column;gap:22px;max-width:480px">
+      <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;display:flex;gap:10px"><span style="color:oklch(0.82 0.12 258)">04</span><span style="color:#8b909a">FUNDING BY NAME</span></div>
+      <h2 style="margin:0;font-weight:500;font-size:clamp(30px,3.6vw,46px);line-height:1.08;letter-spacing:-0.03em;text-wrap:balance">The agent asks. A human says yes.</h2>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:#8b909a;text-wrap:pretty">When an agent needs more than its policy allows, the request pauses. You approve once; the allowance and the ENS record update together.</p>
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:6px 12px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px"><span style="color:#5d626c">cause</span><span style="color:#b9bdc6">you press Approve</span><span style="color:#5d626c">effect</span><span style="color:#b9bdc6">allowance $500 → $800</span></div>
+    </div>
+    <div data-stage="4" style="position:relative;min-height:460px;border-radius:24px;background:#0f1115;border:1px solid rgba(255,255,255,0.07);padding:clamp(24px,4vw,40px);display:flex;align-items:center;justify-content:center;overflow:hidden">
+      <button data-replay="4" style="position:absolute;top:14px;right:14px;z-index:5;font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#8b909a;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:5px 10px;cursor:pointer" style-hover="color:#eceef1;border-color:rgba(255,255,255,0.25)">↻ replay</button>
+      <div style="width:100%;max-width:360px;display:flex;flex-direction:column;align-items:center">
+        <div data-a="req" style="opacity:0;width:100%;padding:14px 16px;border-radius:14px;background:#0a0b0d;border:1px solid rgba(255,255,255,0.1);display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;color:oklch(0.82 0.12 258);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">researcher.x402card.eth</span><span style="font-size:13px;color:#8b909a">requests funds · dataset license</span></div>
+          <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:20px;color:#eceef1;flex:none">+$300</div>
+        </div>
+        <div data-a="l1" style="width:1px;height:22px;background:rgba(255,255,255,0.22);transform:scaleY(0);transform-origin:top"></div>
+        <div data-a="pol" style="opacity:0;width:100%;padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;gap:10px;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px">
+          <span data-a="dot" style="width:8px;height:8px;border-radius:50%;background:#5d626c;flex:none"></span>
+          <span style="color:#8b909a;flex:none">policy</span>
+          <span data-a="polst" style="color:#eceef1;min-width:0">idle</span>
+        </div>
+        <div data-a="l2" style="width:1px;height:22px;background:rgba(255,255,255,0.22);transform:scaleY(0);transform-origin:top"></div>
+        <div data-a="act" style="opacity:0.25;display:flex;flex-direction:column;align-items:center;gap:8px">
+          <div style="position:relative">
+            <div data-a="ring" style="position:absolute;inset:-5px;border-radius:14px;border:1.5px solid oklch(0.74 0.19 258);opacity:0;pointer-events:none"></div>
+            <button data-a="approve" style="position:relative;font-family:inherit;font-size:14px;font-weight:500;background:oklch(0.74 0.19 258);color:#0a0b0d;border:none;border-radius:10px;padding:11px 22px;cursor:pointer">Approve $300</button>
+          </div>
+          <span style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#5d626c">human in the loop · alice.eth</span>
+        </div>
+        <div style="width:100%;margin-top:28px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span style="font-size:13px;color:#8b909a">Monthly allowance</span><span data-a="allow" style="font-family:'Geist Mono',ui-monospace,monospace;font-size:15px;color:#eceef1">$500</span></div>
+          <div style="height:8px;border-radius:999px;background:rgba(255,255,255,0.07);overflow:hidden"><div data-a="fill" style="height:100%;width:100%;border-radius:999px;background:oklch(0.74 0.19 258);transform:scaleX(0.5);transform-origin:left"></div></div>
+          <div style="display:flex;justify-content:space-between;gap:10px;font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#5d626c"><span data-a="rec">card.limit.monthly = 500</span><span>$1,000</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-5" data-screen-label="05 Kill switch" style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:clamp(72px,12vh,140px) clamp(20px,5vw,48px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:clamp(36px,6vw,80px);align-items:center">
+    <div style="display:flex;flex-direction:column;gap:22px;max-width:480px">
+      <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;display:flex;gap:10px"><span style="color:oklch(0.82 0.12 258)">05</span><span style="color:#8b909a">KILL SWITCH</span></div>
+      <h2 style="margin:0;font-weight:500;font-size:clamp(30px,3.6vw,46px);line-height:1.08;letter-spacing:-0.03em;text-wrap:balance">Anomaly in. Card frozen.</h2>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:#8b909a;text-wrap:pretty">Velocity spikes, new IPs, odd merchants. The engine freezes the card and writes the status to ENS, so every resolver sees it at once.</p>
+      <div style="display:grid;grid-template-columns:64px 1fr;gap:6px 12px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08);font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px"><span style="color:#5d626c">cause</span><span style="color:#b9bdc6">38 tx in 60s</span><span style="color:#5d626c">effect</span><span style="color:#b9bdc6">card.status = frozen</span></div>
+    </div>
+    <div data-stage="5" style="position:relative;min-height:460px;border-radius:24px;background:#0f1115;border:1px solid rgba(255,255,255,0.07);padding:clamp(24px,4vw,40px);display:flex;align-items:center;justify-content:center;overflow:hidden">
+      <button data-replay="5" style="position:absolute;top:14px;right:14px;z-index:5;font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#8b909a;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:5px 10px;cursor:pointer" style-hover="color:#eceef1;border-color:rgba(255,255,255,0.25)">↻ replay</button>
+      <div style="width:100%;max-width:360px;display:flex;flex-direction:column;gap:22px;align-items:center">
+        <div style="width:100%;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;gap:10px;font-family:'Geist Mono',ui-monospace,monospace;font-size:11px;color:#5d626c"><span>tx / 10s</span><span>last 5 min</span></div>
+          <div style="height:96px;display:flex;align-items:flex-end;gap:3px;border-bottom:1px solid rgba(255,255,255,0.08)">
+            <sc-for list="{{ bars }}" as="b" hint-placeholder-count="28"><div data-bar="" data-h="{{ b.h }}" style="flex:1;height:{{ b.hpx }};background:rgba(255,255,255,0.16);border-radius:2px 2px 0 0;transform-origin:bottom"></div></sc-for>
+          </div>
+          <div data-a="alert" style="opacity:0;font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;color:oklch(0.7 0.19 25)">ANOMALY · 38 tx in 60s · 12× baseline</div>
+        </div>
+        <div data-a="card" style="position:relative;width:100%;max-width:340px;aspect-ratio:1.586;border-radius:18px;background:linear-gradient(140deg,#1c2029 0%,#111318 55%,#0b0c10 100%);border:1px solid rgba(255,255,255,0.1);box-shadow:0 30px 60px -24px rgba(0,0,0,0.8);overflow:hidden;padding:20px 22px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="position:absolute;inset:0;background:radial-gradient(90% 70% at 100% 0%,oklch(0.74 0.19 258 / 0.22),transparent 60%);pointer-events:none"></div>
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600;letter-spacing:-0.02em;font-size:15px">x402<span style="color:oklch(0.74 0.19 258)">·</span>card</div><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.12em;color:#8b909a">AGENT · VIRTUAL</div></div>
+          <div style="position:relative;width:36px;height:27px;border-radius:6px;background:linear-gradient(135deg,#3b404b,#22252c);border:1px solid rgba(255,255,255,0.12)"></div>
+          <div style="position:relative;display:flex;flex-direction:column;gap:6px">
+            <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12.5px;letter-spacing:0.14em;color:#8b909a">•••• •••• •••• 7318</div>
+            <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:14px;color:#eceef1;white-space:nowrap">researcher.x402card.eth</div>
+          </div>
+          <div data-a="frost" style="position:absolute;inset:0;z-index:3;border-radius:inherit;background:radial-gradient(60% 50% at 20% 20%,rgba(235,245,255,0.30),transparent 70%),radial-gradient(50% 60% at 85% 80%,rgba(235,245,255,0.24),transparent 70%),linear-gradient(160deg,rgba(210,228,255,0.20),rgba(170,200,240,0.10));backdrop-filter:blur(7px) saturate(0.5);-webkit-backdrop-filter:blur(7px) saturate(0.5);box-shadow:inset 0 0 0 1px rgba(220,235,255,0.35),inset 0 0 40px rgba(220,235,255,0.25);opacity:0"></div>
+          <div data-a="stamp" style="position:absolute;inset:0;z-index:4;display:grid;place-items:center;opacity:0"><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;letter-spacing:0.24em;color:#0a0b0d;background:oklch(0.92 0.04 230);border-radius:8px;padding:8px 14px;font-weight:600">FROZEN</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;font-family:'Geist Mono',ui-monospace,monospace">
+          <div style="font-size:13.5px;color:#8b909a;perspective:400px">card.status = <span data-a="status" style="display:inline-block;color:oklch(0.8 0.16 155)">active</span></div>
+          <div data-a="after" style="opacity:0;font-size:11.5px;color:#5d626c">next charge → <span style="color:oklch(0.9 0.05 230)">CARD_FROZEN</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="feed" data-screen-label="Activity + CTA" style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:clamp(72px,12vh,140px) clamp(20px,5vw,48px);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:clamp(36px,6vw,80px);align-items:start">
+    <div style="display:flex;flex-direction:column;gap:22px;max-width:480px">
+      <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px;letter-spacing:0.08em;display:flex;gap:10px;align-items:center"><span data-live-dot="" style="width:7px;height:7px;border-radius:50%;background:oklch(0.8 0.16 155)"></span><span style="color:#8b909a">LIVE · SANDBOX STREAM</span></div>
+      <h2 style="margin:0;font-weight:500;font-size:clamp(30px,3.6vw,46px);line-height:1.08;letter-spacing:-0.03em;text-wrap:balance">Every agent, every charge, by name.</h2>
+      <p style="margin:0;font-size:17px;line-height:1.6;color:#8b909a;text-wrap:pretty">One feed across your fleet. Declines carry their rule, holds wait for a human, freezes show up the moment they happen.</p>
+    </div>
+    <div style="border-radius:24px;background:#0f1115;border:1px solid rgba(255,255,255,0.07);padding:8px clamp(16px,3vw,28px) 12px;min-width:0">
+      <div data-feed-live="" style="display:flex;flex-direction:column"></div>
+      <div style="display:flex;flex-direction:column">
+        <sc-for list="{{ feed }}" as="r" hint-placeholder-count="6">
+          <div data-feed-static="" style="display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid rgba(255,255,255,0.06)">
+            <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:11.5px;color:#5d626c">{{ r.t }}</div>
+            <div style="min-width:0"><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:#eceef1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.agent }}</div><div style="font-size:13px;color:#8b909a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.merch }}</div></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px"><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:13px;color:#eceef1">{{ r.amt }}</div><div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:10px;letter-spacing:0.06em;padding:3px 7px;border-radius:5px;color:{{ r.c }};background:{{ r.bg }}">{{ r.st }}</div></div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  <div style="max-width:1200px;margin:0 auto;padding:0 clamp(20px,5vw,48px) clamp(80px,14vh,160px)">
+    <div style="border-radius:28px;border:1px solid rgba(255,255,255,0.08);background:radial-gradient(80% 120% at 50% 0%,oklch(0.74 0.19 258 / 0.12),transparent 60%),#0f1115;padding:clamp(48px,8vw,96px) clamp(24px,5vw,64px);display:flex;flex-direction:column;align-items:center;text-align:center;gap:22px">
+      <h2 style="margin:0;font-weight:500;font-size:clamp(32px,4.4vw,56px);line-height:1.05;letter-spacing:-0.035em;max-width:720px;text-wrap:balance">Give your agent a name, not a number.</h2>
+      <p style="margin:0;font-size:17px;color:#8b909a;max-width:460px">Pick a name, set three records, and it can pay. Takes about a minute in the sandbox.</p>
+      <button data-cta="" style="margin-top:8px;font-family:inherit;font-size:16px;font-weight:500;background:oklch(0.74 0.19 258);color:#0a0b0d;border:none;border-radius:12px;padding:15px 26px;cursor:pointer" style-hover="background:oklch(0.8 0.17 258)">Issue an agent card</button>
+    </div>
+  </div>
+</section>
+
+<footer style="border-top:1px solid rgba(255,255,255,0.06)">
+  <div style="max-width:1200px;margin:0 auto;padding:28px clamp(20px,5vw,48px);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;color:#5d626c">
+    <div style="font-weight:600;letter-spacing:-0.02em;color:#8b909a">x402<span style="color:oklch(0.74 0.19 258)">·</span>card</div>
+    <div style="font-family:'Geist Mono',ui-monospace,monospace;font-size:12px">Sandbox demo, no real money.</div>
+  </div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  rootRef = React.createRef();
+  runs = {};
+  cleanups = [];
+  KINDS = {
+    ok: { st: 'APPROVED', c: 'oklch(0.8 0.16 155)', bg: 'oklch(0.8 0.16 155 / 0.1)' },
+    mcc: { st: 'MCC_NOT_ALLOWED', c: 'oklch(0.7 0.19 25)', bg: 'oklch(0.7 0.19 25 / 0.12)' },
+    hold: { st: 'PENDING_HUMAN', c: 'oklch(0.84 0.14 80)', bg: 'oklch(0.84 0.14 80 / 0.1)' },
+    fund: { st: 'FUNDED', c: 'oklch(0.86 0.1 258)', bg: 'oklch(0.74 0.19 258 / 0.14)' },
+    frz: { st: 'FROZEN', c: 'oklch(0.9 0.05 230)', bg: 'oklch(0.9 0.05 230 / 0.1)' },
+  };
+  EVENTS = [
+    ['researcher', 'ModelHub API · inference', '$4.12', 'ok'],
+    ['scout', 'Vectorbase · storage', '$11.00', 'ok'],
+    ['travel-bot', 'SkyFare · airline', '$389.00', 'hold'],
+    ['ops-copilot', 'Computa · GPU hours', '$27.40', 'ok'],
+    ['pricing-bot', 'SpinPalace · gambling', '$18.00', 'mcc'],
+    ['researcher', 'alice.eth · top-up', '+$300.00', 'fund'],
+    ['scout', 'DataLoom · datasets', '$46.00', 'ok'],
+    ['ledger-bot', 'velocity anomaly', '—', 'frz'],
+    ['ops-copilot', 'MailRelay · email API', '$2.80', 'ok'],
+    ['travel-bot', 'GeoTile · maps API', '$6.50', 'ok'],
+    ['pricing-bot', 'LuxeGoods · retail', '$129.00', 'mcc'],
+  ];
+  fmt(d) { return d.toTimeString().slice(0, 8); }
+  row(e, t) { return { t, agent: e[0] + '.x402card.eth', merch: e[1], amt: e[2], ...this.KINDS[e[3]] }; }
+  bars = Array.from({ length: 28 }, (_, i) => { const h = 10 + ((i * 37) % 17) + (i % 3) * 4; return { h, hpx: h + 'px' }; });
+  feed = (() => { const now = Date.now(); let o = 0; return [0, 1, 2, 3, 4, 5].map(i => { o += 6 + ((i * 13) % 19); return this.row(this.EVENTS[i], this.fmt(new Date(now - o * 1000))); }); })();
+
+  renderVals() { return { rootRef: this.rootRef, bars: this.bars, feed: this.feed }; }
+
+  componentDidMount() {
+    const root = this.rootRef.current; if (!root) return;
+    this.root = root;
+    this.R = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.initTilt(); this.initHero(); this.initBeats(); this.initFeed();
+    root.querySelectorAll('[data-cta]').forEach(b => this.on(b, 'click', () => {
+      window.scrollTo({ top: 0, behavior: this.R ? 'auto' : 'smooth' });
+      const q = root.querySelector('[data-hero-q]');
+      this.heroStop = true;
+      setTimeout(() => { q.value = ''; q.dispatchEvent(new Event('input')); q.focus(); }, this.R ? 0 : 450);
+    }));
+  }
+  componentWillUnmount() { this.dead = true; this.cleanups.forEach(f => f()); }
+  on(t, ev, fn, o) { t.addEventListener(ev, fn, o); this.cleanups.push(() => t.removeEventListener(ev, fn, o)); }
+
+  initTilt() {
+    const w = this.root.querySelector('[data-tilt]'), sheen = this.root.querySelector('[data-sheen]');
+    if (!w || this.R) return;
+    let tx = 0, ty = 0, x = 0, y = 0, raf;
+    const cl = v => Math.max(-1, Math.min(1, v));
+    this.on(window, 'pointermove', e => {
+      const r = w.getBoundingClientRect();
+      tx = cl((e.clientX - (r.left + r.width / 2)) / r.width);
+      ty = cl((e.clientY - (r.top + r.height / 2)) / r.height);
+    });
+    this.on(window, 'deviceorientation', e => {
+      if (e.gamma == null) return;
+      tx = cl(e.gamma / 30); ty = cl((e.beta - 45) / 30);
+    });
+    const loop = t => {
+      if (this.dead) return;
+      x += (tx - x) * 0.07; y += (ty - y) * 0.07;
+      const bob = Math.sin(t / 1500) * 6;
+      w.style.transform = `translate3d(0,${bob.toFixed(2)}px,0) rotateX(${(-y * 10).toFixed(2)}deg) rotateY(${(x * 14).toFixed(2)}deg)`;
+      if (sheen) sheen.style.transform = `translate3d(${(x * 22).toFixed(2)}%,0,0)`;
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    this.cleanups.push(() => cancelAnimationFrame(raf));
+  }
+
+  initHero() {
+    const $ = s => this.root.querySelector(s);
+    const q = $('[data-hero-q]'), card = $('[data-hero-card]'), name = $('[data-hero-name]'), num = $('[data-hero-num]'),
+      st = $('[data-hero-st]'), res = $('[data-hero-res]'), glow = $('[data-hero-glow]');
+    const target = 'researcher.x402card.eth';
+    let resolved = false;
+    const last4 = s => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 9973; return String(1000 + (h % 9000)); };
+    const set = p => {
+      card.style.transition = 'opacity .25s ease, filter .25s ease, transform .25s ease';
+      card.style.opacity = (0.12 + 0.45 * p).toFixed(3);
+      card.style.filter = `blur(${(12 * (1 - p)).toFixed(1)}px)`;
+      card.style.transform = `translateY(${(18 * (1 - p)).toFixed(1)}px) scale(${(0.94 + 0.03 * p).toFixed(3)})`;
+    };
+    const update = v => {
+      name.textContent = v;
+      const ok = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/i.test(v) && v.length > 4;
+      if (ok) {
+        const l4 = v === target ? '4021' : last4(v);
+        num.textContent = '•••• •••• •••• ' + l4;
+        res.textContent = `${v} → card ••${l4} · active`;
+        if (!resolved) {
+          resolved = true;
+          card.style.transition = this.R ? 'none' : 'opacity .7s cubic-bezier(.2,.9,.2,1), filter .7s cubic-bezier(.2,.9,.2,1), transform .8s cubic-bezier(.2,1.2,.3,1)';
+          card.style.opacity = '1'; card.style.filter = 'blur(0px)'; card.style.transform = 'none';
+          if (!this.R) glow.animate([{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 0 }], { duration: 1100, easing: 'ease-out' });
+        }
+        st.style.opacity = '1'; res.style.opacity = '1';
+      } else {
+        resolved = false;
+        set(Math.min(1, v.length / target.length) * 0.9);
+        st.style.opacity = '0'; res.style.opacity = v ? '1' : '0';
+        res.textContent = v ? 'resolving…' : '';
+      }
+    };
+    this.on(q, 'input', () => { this.heroStop = true; update(q.value.trim()); });
+    this.on(q, 'focus', () => { this.heroStop = true; });
+    if (this.R) { q.value = target; update(target); return; }
+    let i = 0;
+    const step = () => {
+      if (this.dead || this.heroStop) return;
+      i++; q.value = target.slice(0, i); update(q.value);
+      if (i < target.length) this.t = setTimeout(step, 55 + Math.random() * 45);
+    };
+    this.t = setTimeout(step, 700);
+    this.cleanups.push(() => clearTimeout(this.t));
+  }
+
+  initBeats() {
+    this.io = new IntersectionObserver(es => es.forEach(e => {
+      if (e.isIntersecting && !e.target.dataset.played) { e.target.dataset.played = '1'; this.play(e.target.dataset.stage); }
+    }), { threshold: 0.45 });
+    this.root.querySelectorAll('[data-stage]').forEach(s => this.io.observe(s));
+    this.cleanups.push(() => this.io.disconnect());
+    this.root.querySelectorAll('[data-replay]').forEach(b => this.on(b, 'click', () => this.play(b.dataset.replay)));
+    const ap = this.root.querySelector('[data-stage="4"] [data-a="approve"]');
+    this.on(ap, 'click', () => { const f = this._approve; this._approve = null; f && f(); });
+  }
+
+  play(id) {
+    const stage = this.root.querySelector(`[data-stage="${id}"]`);
+    const token = (this.runs[id] || 0) + 1; this.runs[id] = token;
+    const c = this.ctx(stage, () => this.dead || this.runs[id] !== token);
+    c.reset();
+    this['beat' + id](c).catch(e => { if (e !== 'cancel') console.error(e); });
+  }
+
+  ctx(stage, cancelled) {
+    const R = this.R;
+    const check = () => { if (cancelled()) throw 'cancel'; };
+    const $ = n => stage.querySelector(`[data-a="${n}"]`);
+    const wait = async ms => { await new Promise(r => setTimeout(r, R ? Math.min(ms, 20) : ms)); check(); };
+    const to = async (el, kf, o = {}) => {
+      if (R && o.it === Infinity) return;
+      const a = el.animate(kf, { duration: R ? 1 : (o.d || 500), delay: R ? 0 : (o.delay || 0), easing: o.e || 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards', iterations: o.it || 1 });
+      if (o.nowait || o.it === Infinity) return a;
+      await a.finished.catch(() => {}); check(); return a;
+    };
+    const text = (el, t) => { if (el.dataset.t === undefined) el.dataset.t = el.textContent; el.textContent = t; };
+    return {
+      $, stage, wait, to, text, check,
+      reset() {
+        stage.querySelectorAll('[data-clone]').forEach(n => n.remove());
+        stage.querySelectorAll('*').forEach(el => {
+          el.getAnimations().forEach(a => a.cancel());
+          if (el.dataset.t !== undefined) el.textContent = el.dataset.t;
+        });
+      },
+      async type(el, s, ms = 55) {
+        if (R) { text(el, s); return; }
+        text(el, '');
+        for (let i = 1; i <= s.length; i++) { el.textContent = s.slice(0, i); await wait(ms + Math.random() * 30); }
+      },
+      async scramble(el, last) {
+        const d = () => String(Math.floor(Math.random() * 10));
+        if (!R) for (let f = 0; f < 12; f++) {
+          text(el, Array.from({ length: 4 }, () => d() + d() + d() + d()).join(' '));
+          await wait(45);
+        }
+        text(el, '•••• •••• •••• ' + last);
+      },
+      async count(el, a, b, d) {
+        if (R) { text(el, '$' + b); return; }
+        const t0 = performance.now();
+        await new Promise(res => {
+          const f = t => { const p = Math.min(1, (t - t0) / d), e = 1 - Math.pow(1 - p, 3); text(el, '$' + Math.round(a + (b - a) * e)); p < 1 && !cancelled() ? requestAnimationFrame(f) : res(); };
+          requestAnimationFrame(f);
+        });
+        check();
+      },
+      async fly(from, target, o = {}) {
+        const sr = stage.getBoundingClientRect(), a = from.getBoundingClientRect(), b = target.getBoundingClientRect();
+        const c = target.cloneNode(true);
+        c.removeAttribute('data-a'); c.setAttribute('data-clone', '');
+        Object.assign(c.style, { position: 'absolute', margin: '0', zIndex: '20', pointerEvents: 'none', opacity: '1',
+          left: (a.left + a.width / 2 - b.width / 2 - sr.left) + 'px', top: (a.top + a.height / 2 - b.height / 2 - sr.top) + 'px', width: b.width + 'px' });
+        stage.appendChild(c);
+        const dx = b.left - (a.left + a.width / 2 - b.width / 2), dy = b.top - (a.top + a.height / 2 - b.height / 2);
+        await to(c, [{ transform: 'translate(0,0) scale(0.9)', boxShadow: '0 0 0 0 oklch(0.74 0.19 258 / 0)' },
+          { transform: `translate(${dx * 0.5}px,${dy * 0.5}px) scale(1.06)`, boxShadow: '0 0 24px 2px oklch(0.74 0.19 258 / 0.6)', offset: 0.5 },
+          { transform: `translate(${dx}px,${dy}px) scale(1)`, boxShadow: '0 0 12px 0 oklch(0.74 0.19 258 / 0.4)' }], { d: o.d || 650, e: 'cubic-bezier(.45,0,.2,1)' });
+        return c;
+      },
+      dy(a, b) { const r1 = a.getBoundingClientRect(), r2 = b.getBoundingClientRect(); return (r2.top + r2.height / 2) - (r1.top + r1.height / 2); },
+    };
+  }
+
+  async beat1(c) {
+    const { $ } = c;
+    await c.wait(350);
+    c.to($('ph'), [{ opacity: 1 }, { opacity: 0 }], { d: 150 });
+    c.to($('caret'), [{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0, offset: 0.51 }, { opacity: 0 }], { d: 1000, it: Infinity, e: 'linear' });
+    await c.type($('in'), 'scout.x402card.eth', 55);
+    await c.wait(250);
+    c.to($('btn'), [{ transform: 'scale(1)' }, { transform: 'scale(0.93)' }, { transform: 'scale(1)' }], { d: 260 });
+    await c.to($('btn'), [{ boxShadow: '0 0 0 0 oklch(0.74 0.19 258 / 0.6)' }, { boxShadow: '0 0 0 14px oklch(0.74 0.19 258 / 0)' }], { d: 450 });
+    await c.to($('card'), [{ opacity: 0, transform: 'translateY(28px) scale(0.96)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }], { d: 700 });
+    await c.scramble($('num'), '5880');
+    await c.type($('name'), 'scout.x402card.eth', 26);
+    await c.to($('cap'), [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { d: 500 });
+  }
+
+  async beat2(c) {
+    const { $ } = c;
+    await c.wait(400);
+    const hl = 'oklch(0.74 0.19 258 / 0.12)';
+    for (let i = 1; i <= 3; i++) {
+      const row = $('r' + i), tag = $('t' + i);
+      await c.to(row, [{ background: 'rgba(0,0,0,0)' }, { background: hl }], { d: 280 });
+      const clone = await c.fly($('v' + i), tag, { d: 700 });
+      await c.to(tag, [{ opacity: 0, boxShadow: '0 0 12px 0 oklch(0.74 0.19 258 / 0.4)' }, { opacity: 1, boxShadow: '0 0 0 0 oklch(0.74 0.19 258 / 0)' }], { d: 60 });
+      clone.remove();
+      c.to(row, [{ background: hl }, { background: 'rgba(255,255,255,0.02)' }], { d: 500 });
+      await c.wait(180);
+    }
+    c.to($('card'), [{ boxShadow: '0 30px 60px -24px rgba(0,0,0,0.8), 0 0 0 0 oklch(0.74 0.19 258 / 0)' }, { boxShadow: '0 30px 60px -24px rgba(0,0,0,0.8), 0 0 0 1px oklch(0.74 0.19 258 / 0.6)', offset: 0.4 }, { boxShadow: '0 30px 60px -24px rgba(0,0,0,0.8), 0 0 0 0 oklch(0.74 0.19 258 / 0)' }], { d: 900 });
+  }
+
+  async beat3(c) {
+    const { $ } = c, card = $('card'), m1 = $('m1'), m2 = $('m2');
+    const base = '0 30px 60px -24px rgba(0,0,0,0.8)';
+    await c.wait(300);
+    await c.to(m1, [{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'translateY(0)' }], { d: 450 });
+    await c.wait(450);
+    const d = c.dy(m1, card);
+    await c.to(m1, [{ opacity: 1, transform: 'translateY(0) scale(1)' }, { opacity: 0, transform: `translateY(${d}px) scale(0.4)` }], { d: 560, e: 'cubic-bezier(.55,0,.8,.2)' });
+    c.to(card, [{ transform: 'scale(1)', boxShadow: base + ', 0 0 0 0 oklch(0.8 0.16 155 / 0)' }, { transform: 'scale(1.025)', boxShadow: base + ', 0 0 0 2px oklch(0.8 0.16 155 / 0.7), 0 0 40px oklch(0.8 0.16 155 / 0.3)', offset: 0.3 }, { transform: 'scale(1)', boxShadow: base + ', 0 0 0 0 oklch(0.8 0.16 155 / 0)' }], { d: 800 });
+    c.text($('spent'), '$42 / $500');
+    c.to($('spent'), [{ color: 'oklch(0.8 0.16 155)' }, { color: '#eceef1' }], { d: 1200 });
+    await c.to($('ok'), [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { d: 400 });
+    await c.wait(1500);
+    c.to($('ok'), [{ opacity: 1 }, { opacity: 0 }], { d: 300 });
+    await c.to(m2, [{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'translateY(0)' }], { d: 450 });
+    await c.wait(450);
+    await c.to(m2, [{ transform: 'translateY(0)' }, { transform: `translateY(${d * 0.5}px)` }], { d: 380, e: 'cubic-bezier(.55,0,.8,.2)' });
+    c.to(m2, [{ borderColor: 'rgba(255,255,255,0.12)', background: '#15181e' }, { borderColor: 'oklch(0.7 0.19 25)', background: 'oklch(0.7 0.19 25 / 0.12)' }], { d: 200 });
+    c.to(card, [{ transform: 'translateY(0)' }, { transform: 'translateY(4px)', offset: 0.3 }, { transform: 'translateY(0)' }], { d: 300 });
+    c.to($('err'), [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { d: 400, delay: 350 });
+    await c.to(m2, [{ transform: `translateY(${d * 0.5}px)` }, { transform: 'translateY(-12px)', offset: 0.4 }, { transform: 'translate(-9px,0)', offset: 0.55 }, { transform: 'translate(8px,0)', offset: 0.68 }, { transform: 'translate(-5px,0)', offset: 0.8 }, { transform: 'translate(3px,0)', offset: 0.9 }, { transform: 'translate(0,0)' }], { d: 800, e: 'ease-out' });
+  }
+
+  async beat4(c) {
+    const { $ } = c;
+    const amb = 'oklch(0.84 0.14 80)', grn = 'oklch(0.8 0.16 155)';
+    await c.wait(300);
+    await c.to($('req'), [{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'none' }], { d: 450 });
+    await c.to($('l1'), [{ transform: 'scaleY(0)' }, { transform: 'scaleY(1)' }], { d: 300 });
+    await c.to($('pol'), [{ opacity: 0 }, { opacity: 1 }], { d: 300 });
+    c.text($('polst'), 'evaluating…');
+    c.to($('dot'), [{ background: '#5d626c' }, { background: '#eceef1' }], { d: 300 });
+    await c.wait(800);
+    c.text($('polst'), 'PAUSED · $300 > card.limit.tx');
+    c.to($('polst'), [{ color: amb }, { color: amb }], { d: 10 });
+    c.to($('pol'), [{ borderColor: 'rgba(255,255,255,0.1)' }, { borderColor: 'oklch(0.84 0.14 80 / 0.6)' }], { d: 300 });
+    c.to($('dot'), [{ background: amb, boxShadow: '0 0 0 0 oklch(0.84 0.14 80 / 0.6)' }, { background: amb, boxShadow: '0 0 0 7px oklch(0.84 0.14 80 / 0)' }], { d: 1200, it: Infinity, e: 'ease-out' });
+    c.to($('dot'), [{ background: amb }, { background: amb }], { d: 10 });
+    await c.to($('l2'), [{ transform: 'scaleY(0)' }, { transform: 'scaleY(1)' }], { d: 300 });
+    await c.to($('act'), [{ opacity: 0.25 }, { opacity: 1 }], { d: 300 });
+    c.to($('ring'), [{ opacity: 0.9, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.18)' }], { d: 1400, it: Infinity, e: 'ease-out' });
+    await new Promise(res => { this._approve = res; });
+    c.check();
+    c.to($('ring'), [{ opacity: 0 }, { opacity: 0 }], { d: 10 });
+    c.to($('approve'), [{ transform: 'scale(1)' }, { transform: 'scale(0.94)' }, { transform: 'scale(1)' }], { d: 240 });
+    c.text($('approve'), 'Approved ✓');
+    c.to($('approve'), [{ background: 'oklch(0.74 0.19 258)' }, { background: grn }], { d: 300 });
+    c.text($('polst'), 'RELEASED · approved by alice.eth');
+    c.to($('polst'), [{ color: grn }, { color: grn }], { d: 10 });
+    c.to($('pol'), [{ borderColor: 'oklch(0.84 0.14 80 / 0.6)' }, { borderColor: 'oklch(0.8 0.16 155 / 0.5)' }], { d: 300 });
+    c.to($('dot'), [{ background: grn, boxShadow: '0 0 0 0 rgba(0,0,0,0)' }, { background: grn, boxShadow: '0 0 0 0 rgba(0,0,0,0)' }], { d: 10 });
+    await c.wait(250);
+    c.text($('rec'), 'card.limit.monthly = 800');
+    c.to($('rec'), [{ color: 'oklch(0.86 0.1 258)' }, { color: 'oklch(0.86 0.1 258)', offset: 0.7 }, { color: '#5d626c' }], { d: 2000 });
+    c.to($('fill'), [{ transform: 'scaleX(0.5)' }, { transform: 'scaleX(0.8)' }], { d: 1100, e: 'cubic-bezier(.4,0,.2,1)' });
+    await c.count($('allow'), 500, 800, 1100);
+  }
+
+  async beat5(c) {
+    const { $ } = c, red = 'oklch(0.7 0.19 25)', ice = 'oklch(0.9 0.05 230)';
+    await c.wait(300);
+    const spike = [...c.stage.querySelectorAll('[data-bar]')].slice(-8);
+    spike.forEach((b, i) => {
+      const s = Math.min(92, 46 + i * 7) / +b.dataset.h;
+      c.to(b, [{ transform: 'scaleY(1)', background: 'rgba(255,255,255,0.16)' }, { transform: `scaleY(${s})`, background: red }], { d: 380, delay: i * 85, e: 'cubic-bezier(.3,1.3,.5,1)' });
+    });
+    await c.wait(spike.length * 85 + 380);
+    await c.to($('alert'), [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { d: 350 });
+    await c.wait(400);
+    c.to($('card'), [{ boxShadow: '0 30px 60px -24px rgba(0,0,0,0.8)' }, { boxShadow: '0 30px 60px -24px rgba(0,0,0,0.8), 0 0 50px oklch(0.9 0.05 230 / 0.25)' }], { d: 1100 });
+    await c.to($('frost'), [{ opacity: 0 }, { opacity: 1 }], { d: 1100, e: 'cubic-bezier(.3,.6,.3,1)' });
+    const s = $('status');
+    await c.to(s, [{ transform: 'rotateX(0deg)' }, { transform: 'rotateX(90deg)' }], { d: 170, e: 'ease-in' });
+    c.text(s, 'frozen');
+    await c.to(s, [{ transform: 'rotateX(-90deg)', color: ice }, { transform: 'rotateX(0deg)', color: ice }], { d: 220, e: 'ease-out' });
+    await c.to($('stamp'), [{ opacity: 0, transform: 'scale(1.15)' }, { opacity: 1, transform: 'scale(1)' }], { d: 380 });
+    await c.to($('after'), [{ opacity: 0 }, { opacity: 1 }], { d: 400 });
+  }
+
+  initFeed() {
+    const live = this.root.querySelector('[data-feed-live]');
+    const stat = [...this.root.querySelectorAll('[data-feed-static]')];
+    const dot = this.root.querySelector('[data-live-dot]');
+    if (dot && !this.R) dot.animate([{ opacity: 1 }, { opacity: 0.25 }, { opacity: 1 }], { duration: 1600, iterations: Infinity });
+    const mono = "font-family:'Geist Mono',ui-monospace,monospace";
+    let n = 6;
+    const add = () => {
+      if (this.dead) return;
+      const r = this.row(this.EVENTS[n++ % this.EVENTS.length], this.fmt(new Date()));
+      const el = document.createElement('div');
+      el.setAttribute('style', 'display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid rgba(255,255,255,0.06)');
+      el.innerHTML = `<div style="${mono};font-size:11.5px;color:#5d626c">${r.t}</div><div style="min-width:0"><div style="${mono};font-size:13px;color:#eceef1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.agent}</div><div style="font-size:13px;color:#8b909a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.merch}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px"><div style="${mono};font-size:13px;color:#eceef1">${r.amt}</div><div style="${mono};font-size:10px;letter-spacing:0.06em;padding:3px 7px;border-radius:5px;color:${r.c};background:${r.bg}">${r.st}</div></div>`;
+      live.prepend(el);
+      while (live.children.length > 6) live.lastElementChild.remove();
+      const keep = 6 - live.children.length;
+      stat.forEach((s, i) => { s.style.display = i < keep ? '' : 'none'; });
+      if (!this.R) el.animate([{ opacity: 0, transform: 'translateY(-8px)', background: 'oklch(0.74 0.19 258 / 0.08)' }, { opacity: 1, transform: 'none', background: 'rgba(0,0,0,0)' }], { duration: 900, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    };
+    const iv = setInterval(add, 2600);
+    this.cleanups.push(() => clearInterval(iv));
+  }
+}
+</script>
+</body>
+</html>

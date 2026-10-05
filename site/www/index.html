@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>x402·card: spend cards for AI agents, addressed by ENS</title>
+<meta name="description" content="x402 Card issues virtual cards to AI agents, addressed by ENS name. Policy lives in text records. Humans approve the exceptions. Sandbox demo, no real money.">
+<meta name="theme-color" content="#0a0b0d">
+<meta property="og:title" content="x402·card: fund an agent by name">
+<meta property="og:description" content="Virtual spend cards for AI agents, addressed by ENS name. Policy lives in text records. Humans approve the exceptions.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='7' width='28' height='18' rx='4' fill='%231c2029' stroke='%235b8cff' stroke-width='1.5'/%3E%3Crect x='6' y='12' width='7' height='5' rx='1.2' fill='%233b404b'/%3E%3Ccircle cx='24' cy='20' r='2' fill='%235b8cff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <div class="nav-left">
+      <div class="wordmark">x402<i>·</i>card</div>
+      <div class="pill-sandbox">SANDBOX</div>
+    </div>
+    <div class="nav-links">
+      <a href="#beat-1" class="hide-sm">How it works</a>
+      <a href="#feed" class="hide-sm">Activity</a>
+      <a href="#hood" class="hide-sm">Under the hood</a>
+      <button class="btn-nav" data-cta>Issue card</button>
+    </div>
+  </div>
+</nav>
+
+<main>
+<header class="wrap hero">
+  <div class="hero-copy">
+    <div class="kicker">Spend cards for AI agents · addressed by ENS</div>
+    <h1>Fund an agent by name. <span>Never handle a card number.</span></h1>
+    <p class="hero-sub">x402 Card issues virtual cards to AI agents, addressed by ENS name. Policy lives in text records. Humans approve the exceptions.</p>
+    <label class="search">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex:none"><circle cx="7" cy="7" r="5" stroke="#8b909a" stroke-width="1.5"/><line x1="11" y1="11" x2="14.5" y2="14.5" stroke="#8b909a" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <input data-hero-q spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="ENS name" placeholder="yourbot.x402card.eth">
+      <div class="search-st" data-hero-st>RESOLVED</div>
+    </label>
+    <div class="hero-btns">
+      <button class="btn-primary" data-cta>Issue an agent card</button>
+      <a class="btn-ghost" href="#beat-1">See how it works</a>
+    </div>
+  </div>
+  <div class="hero-stage">
+    <div class="floor-glow"></div>
+    <div class="tilt" data-tilt>
+      <div class="card hero-card" data-hero-card>
+        <div class="sheen-clip"><div class="sheen" data-sheen></div></div>
+        <div class="card-top"><div class="wordmark">x402<i>·</i>card</div><div class="card-kind">AGENT · VIRTUAL</div></div>
+        <div class="chip"></div>
+        <div class="card-bottom">
+          <div class="card-num" data-hero-num>•••• •••• •••• 4021</div>
+          <div class="card-name" data-hero-name></div>
+        </div>
+        <div class="hero-glow" data-hero-glow></div>
+      </div>
+    </div>
+    <div class="hero-res" data-hero-res aria-live="polite"></div>
+  </div>
+</header>
+
+<section id="beat-1" class="section">
+  <div class="wrap section-grid">
+    <div class="section-copy">
+      <div class="kicker"><span class="n">01</span><span>Name → Card</span></div>
+      <h2>A name is the whole interface.</h2>
+      <p class="body">Type an ENS name and a virtual card is issued against it. The 16-digit number exists, but your agent never sees it. It pays by name.</p>
+      <div class="ce"><span>cause</span><span>type scout.x402card.eth</span><span>effect</span><span>card issued, number masked</span></div>
+    </div>
+    <div class="stage" data-stage="1">
+      <button class="replay" data-replay="1">↻ replay</button>
+      <div class="stage-col" style="gap:28px">
+        <div class="fake-input">
+          <div class="fake-field">
+            <span class="fake-ph" data-a="ph">type an ENS name</span>
+            <span data-a="in" style="color:var(--text)"></span>
+            <span class="caret" data-a="caret"></span>
+          </div>
+          <button class="btn-sm" data-a="btn" tabindex="-1">Issue</button>
+        </div>
+        <div class="card" data-a="card" style="opacity:0;transform:translateY(28px) scale(0.96)">
+          <div class="card-top"><div class="wordmark">x402<i>·</i>card</div><div class="card-kind">AGENT · VIRTUAL</div></div>
+          <div class="chip"></div>
+          <div class="card-bottom">
+            <div class="card-num" data-a="num">•••• •••• •••• ••••</div>
+            <div class="card-name" data-a="name"></div>
+          </div>
+        </div>
+        <div class="caption" data-a="cap" style="opacity:0"><span>number: <span style="color:var(--text)">never exposed</span></span><span>handle: <span style="color:var(--accent-light)">scout.x402card.eth</span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-2" class="section">
+  <div class="wrap section-grid">
+    <div class="section-copy">
+      <div class="kicker"><span class="n">02</span><span>Policy lives in ENS</span></div>
+      <h2>Limits are just text records.</h2>
+      <p class="body">Spend rules are stored on the name itself and served by a signed ENS gateway. Change a record and the card’s controls follow. No dashboard, no redeploy.</p>
+      <div class="ce"><span>cause</span><span>text records set on the name</span><span>effect</span><span>card enforces them</span></div>
+    </div>
+    <div class="stage" data-stage="2">
+      <button class="replay" data-replay="2">↻ replay</button>
+      <div class="stage-col" style="gap:26px">
+        <div class="records">
+          <div class="records-head"><span>researcher.x402card.eth</span><span>TEXT</span></div>
+          <div class="rec-row" data-a="r1"><span>card.limit.tx</span><span data-a="v1">50</span></div>
+          <div class="rec-row" data-a="r2"><span>card.limit.monthly</span><span data-a="v2">500</span></div>
+          <div class="rec-row" data-a="r3"><span>card.mcc.allow</span><span data-a="v3">5734,7372</span></div>
+        </div>
+        <div class="card" data-a="card">
+          <div class="card-top"><div class="wordmark">x402<i>·</i>card</div><div class="card-kind">AGENT · VIRTUAL</div></div>
+          <div class="chip"></div>
+          <div class="tags-stack">
+            <div class="tag" data-a="t1" style="opacity:0">tx ≤ $50</div>
+            <div class="tag" data-a="t2" style="opacity:0">month ≤ $500</div>
+            <div class="tag" data-a="t3" style="opacity:0">mcc: software</div>
+          </div>
+          <div class="card-bottom">
+            <div class="card-num">•••• •••• •••• 7318</div>
+            <div class="card-name">researcher.x402card.eth</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-3" class="section">
+  <div class="wrap section-grid">
+    <div class="section-copy">
+      <div class="kicker"><span class="n">03</span><span>Spend</span></div>
+      <h2>In-policy charges clear. The rest bounce.</h2>
+      <p class="body">Every authorization is checked against the card’s controls in real time. A decline tells the agent exactly which rule it hit, so it can adapt instead of retrying.</p>
+      <div class="ce"><span>cause</span><span>$42 software charge · $18 casino charge</span><span>effect</span><span>one approved, one declined with reason</span></div>
+    </div>
+    <div class="stage" data-stage="3">
+      <button class="replay" data-replay="3">↻ replay</button>
+      <div class="stage-col" style="gap:30px">
+        <div style="display:grid;place-items:center;height:44px;width:100%">
+          <div class="charge" data-a="m1"><b>$42.00</b><span>ModelHub API · MCC 5734</span></div>
+          <div class="charge" data-a="m2"><b>$18.00</b><span>SpinPalace · MCC 7995</span></div>
+        </div>
+        <div class="card" data-a="card">
+          <div class="card-top"><div class="wordmark">x402<i>·</i>card</div><div class="card-kind">AGENT · VIRTUAL</div></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <div class="chip"></div>
+            <div style="display:flex;gap:6px"><span class="tag-sm">tx ≤ $50</span><span class="tag-sm">mcc: software</span></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10px">
+            <div class="card-bottom">
+              <div class="card-num">•••• 7318</div>
+              <div class="card-name" style="font-size:13px">researcher.x402card.eth</div>
+            </div>
+            <div class="mono" style="text-align:right;flex:none"><div class="spent-label">SPENT / MO</div><div data-a="spent" style="font-size:13px;color:var(--text)">$0 / $500</div></div>
+          </div>
+        </div>
+        <div style="display:grid;place-items:center;min-height:48px;width:100%">
+          <div class="result-ok" data-a="ok"><i>✓</i><span>APPROVED · $42 ≤ card.limit.tx</span></div>
+          <div class="result-err" data-a="err"><span>✕ MERCHANT_CATEGORY_NOT_ALLOWED</span><span>7995 ∉ card.mcc.allow</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-4" class="section">
+  <div class="wrap section-grid">
+    <div class="section-copy">
+      <div class="kicker"><span class="n">04</span><span>Funding by name</span></div>
+      <h2>The agent asks. A human says yes.</h2>
+      <p class="body">When an agent asks for more than its policy allows, the request pauses. The approval is bound to that exact name, amount and currency. Approve once; the allowance and the ENS record update together.</p>
+      <div class="ce"><span>cause</span><span>you press Approve</span><span>effect</span><span>allowance $500 → $800</span></div>
+    </div>
+    <div class="stage" data-stage="4">
+      <button class="replay" data-replay="4">↻ replay</button>
+      <div class="stage-col">
+        <div class="req" data-a="req">
+          <div style="display:flex;flex-direction:column;gap:3px;min-width:0"><span class="mono" style="font-size:12.5px;color:var(--accent-light);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">researcher.x402card.eth</span><span style="font-size:13px;color:var(--muted)">requests funds · dataset license</span></div>
+          <div class="mono" style="font-size:20px;color:var(--text);flex:none">+$300</div>
+        </div>
+        <div class="connector" data-a="l1"></div>
+        <div class="policy-row" data-a="pol">
+          <span class="dot" data-a="dot"></span>
+          <span style="color:var(--muted);flex:none">policy</span>
+          <span data-a="polst" style="color:var(--text);min-width:0">idle</span>
+        </div>
+        <div class="connector" data-a="l2"></div>
+        <div data-a="act" style="opacity:0.25;display:flex;flex-direction:column;align-items:center;gap:8px">
+          <div style="position:relative">
+            <div class="ring" data-a="ring"></div>
+            <button class="approve-btn" data-a="approve">Approve $300</button>
+          </div>
+          <span class="mono" style="font-size:11px;color:var(--dim)">human in the loop · alice.eth</span>
+        </div>
+        <div style="width:100%;margin-top:28px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><span style="font-size:13px;color:var(--muted)">Monthly allowance</span><span class="mono" data-a="allow" style="font-size:15px;color:var(--text)">$500</span></div>
+          <div class="track"><div class="fill" data-a="fill"></div></div>
+          <div class="mono" style="display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--dim)"><span data-a="rec">card.limit.monthly = 500</span><span>$1,000</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="beat-5" class="section">
+  <div class="wrap section-grid">
+    <div class="section-copy">
+      <div class="kicker"><span class="n">05</span><span>Kill switch</span></div>
+      <h2>Anomaly in. Card frozen.</h2>
+      <p class="body">Bursts of authorizations, repeated blocked merchants. The engine freezes the card and writes the status to ENS, so every resolver sees it at once. Only a human can unfreeze.</p>
+      <div class="ce"><span>cause</span><span>38 tx in 60s</span><span>effect</span><span>card.status = frozen</span></div>
+    </div>
+    <div class="stage" data-stage="5">
+      <button class="replay" data-replay="5">↻ replay</button>
+      <div class="stage-col" style="gap:22px">
+        <div style="width:100%;display:flex;flex-direction:column;gap:10px">
+          <div class="mono" style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--dim)"><span>tx / 10s</span><span>last 5 min</span></div>
+          <div class="bars" data-bars></div>
+          <div class="mono" data-a="alert" style="opacity:0;font-size:12px;color:var(--error)">ANOMALY · 38 tx in 60s · 12× baseline</div>
+        </div>
+        <div class="card" data-a="card">
+          <div class="card-top"><div class="wordmark">x402<i>·</i>card</div><div class="card-kind">AGENT · VIRTUAL</div></div>
+          <div class="chip"></div>
+          <div class="card-bottom">
+            <div class="card-num">•••• •••• •••• 7318</div>
+            <div class="card-name">researcher.x402card.eth</div>
+          </div>
+          <div class="frost" data-a="frost"></div>
+          <div class="stamp" data-a="stamp"><div>FROZEN</div></div>
+        </div>
+        <div class="mono" style="display:flex;flex-direction:column;align-items:center;gap:8px">
+          <div style="font-size:13.5px;color:var(--muted);perspective:400px">card.status = <span data-a="status" style="display:inline-block;color:var(--success)">active</span></div>
+          <div data-a="after" style="opacity:0;font-size:11.5px;color:var(--dim)">next charge → <span style="color:var(--ice)">CARD_INACTIVE</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="feed" class="section">
+  <div class="wrap section-grid" style="align-items:start">
+    <div class="section-copy">
+      <div class="kicker"><span class="live-dot sample" data-live-dot></span><span data-live-label>Sample stream</span></div>
+      <h2>Every agent, every charge, by name.</h2>
+      <p class="body">One feed across your fleet. Declines carry their rule, holds wait for a human, freezes show up the moment they happen.</p>
+      <p class="body" data-feed-note style="font-size:13px;color:var(--dim)">Showing sample events. Real sandbox events appear here as agents use their cards.</p>
+    </div>
+    <div class="feed-panel"><div data-feed></div></div>
+  </div>
+</section>
+
+<section id="hood" class="section">
+  <div class="wrap" style="padding-top:clamp(72px,12vh,140px);padding-bottom:clamp(48px,8vh,96px);display:flex;flex-direction:column;gap:36px">
+    <div class="section-copy" style="max-width:640px">
+      <div class="kicker"><span class="n">→</span><span>Under the hood</span></div>
+      <h2>Real names. Real resolver. Sandbox money.</h2>
+      <p class="body"><span class="mono" style="color:var(--text)">*.x402card.eth</span> resolves on Ethereum mainnet through an ENSIP-10 offchain resolver. Cards and charges run on the Airwallex sandbox. Agents connect over MCP and never see a card number or an API key.</p>
+    </div>
+    <div class="hood-grid">
+      <div class="hood-card">
+        <div class="k">ENS · mainnet</div>
+        <h3>OffchainResolver</h3>
+        <p>Every lookup reverts with an EIP-3668 OffchainLookup. The contract checks the gateway’s signature before returning a record.</p>
+        <a class="addr" href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">0xf11eb8f6…792a0 ↗</a>
+      </div>
+      <div class="hood-card">
+        <div class="k">Gateway</div>
+        <h3>Signed CCIP-Read</h3>
+        <p>A Cloudflare Worker answers <span class="mono">text()</span> lookups from the card’s policy and signs each answer for five minutes. Card numbers and IDs are never stored in records.</p>
+        <span class="addr" style="color:var(--text-2)">x402card.dmpay.workers.dev/gateway</span>
+      </div>
+      <div class="hood-card">
+        <div class="k">Agents · MCP</div>
+        <h3>Five tools, one token per card</h3>
+        <p>issue_card, get_card, request_funding, freeze, list_transactions. An agent’s token only works for its own name.</p>
+<pre class="code"><span class="c">// MCP client config</span>
+{ <span class="s">"x402card"</span>: {
+    <span class="s">"type"</span>: <span class="s">"http"</span>,
+    <span class="s">"url"</span>: <span class="s">"https://x402card.dmpay.workers.dev/mcp"</span>,
+    <span class="s">"headers"</span>: { <span class="s">"Authorization"</span>: <span class="s">"Bearer x4c_…"</span> } } }</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="border-top:none">
+  <div class="wrap cta-wrap">
+    <div class="cta">
+      <h2>Give your agent a name, not a number.</h2>
+      <p>Pick a name, set three records, and it can pay. Takes about a minute in the sandbox.</p>
+      <button class="btn-primary" data-cta>Issue an agent card</button>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="wordmark">x402<i>·</i>card</div>
+    <div class="foot-links">
+      <a href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">resolver ↗</a>
+      <span>Sandbox demo, no real money.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>

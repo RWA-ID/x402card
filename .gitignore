@@ -1,0 +1,7 @@
+node_modules/
+.dev.vars
+.wrangler/
+dist/
+.DS_Store
+# Claude Design export (reference only; its runtime is not ours to redistribute)
+site/design/support.js

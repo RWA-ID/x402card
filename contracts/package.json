@@ -1,0 +1,13 @@
+{
+  "name": "x402card-contracts",
+  "private": true,
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^4.1.2",
+    "dotenv": "^16.6.1",
+    "hardhat": "^2.29.1"
+  }
+}

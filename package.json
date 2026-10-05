@@ -1,0 +1,20 @@
+{
+  "name": "x402card",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify:airwallex": "node scripts/verify-airwallex.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test 'src/**/*.test.ts'",
+    "smoke:issuing": "node scripts/smoke-issuing.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261005.1",
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.147.0"
+  },
+  "dependencies": {
+    "viem": "^2.57.3"
+  }
+}

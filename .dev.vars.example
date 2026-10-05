@@ -1,0 +1,6 @@
+# Copy to .dev.vars (gitignored). Sandbox keys only: Account > Developer > API keys.
+AWX_CLIENT_ID=
+AWX_API_KEY=
+GATEWAY_SIGNER_KEY=
+MCP_ADMIN_TOKEN=
+APPROVAL_SECRET=
