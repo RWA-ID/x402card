@@ -2,6 +2,7 @@
 //   /gateway/...           CCIP-Read gateway for *.x402card.eth (public)
 //   /mcp                   MCP server for agents (bearer token)
 //   /api/approvals[/:id]   list / decide escalated funding (admin token)
+//   /api/cards             fleet: every card with records + pending count (admin token)
 //   /api/cards/:name/unfreeze   human-only unfreeze (admin token)
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
 //   /public/feed           recent policy events across cards, for the demo site
@@ -12,6 +13,7 @@ import { gatewayResponse } from "./ens/gateway.ts";
 import { McpServer, authenticate } from "./mcp.ts";
 import { AirwallexIssuer, CardService, describeError, fullName, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
+import { FakeIssuer } from "./testing.ts";
 
 export interface Env {
   KV: KVNamespace;
@@ -22,7 +24,14 @@ export interface Env {
   MCP_ADMIN_TOKEN: string;
   APPROVAL_SECRET: string;
   CARDHOLDER_EMAIL?: string;
+  /** Where humans approve escalations; {id} is replaced. */
+  APPROVAL_URL?: string;
+  /** Local dev only (`wrangler dev --var ISSUER:fake`): in-memory issuer instead of Airwallex. */
+  ISSUER?: string;
 }
+
+// One fake per isolate, so local dev keeps state between requests.
+let fakeIssuer: FakeIssuer | undefined;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -31,14 +40,16 @@ const CORS = {
 };
 
 function service(env: Env, store: Store): CardService {
-  const awx = new AirwallexClient({
-    clientId: env.AWX_CLIENT_ID,
-    apiKey: env.AWX_API_KEY,
-    tokenStore: new KvTokenStore(env.KV),
-  });
-  return new CardService(store, new AirwallexIssuer(awx), {
+  const issuer =
+    env.ISSUER === "fake"
+      ? (fakeIssuer ??= new FakeIssuer())
+      : new AirwallexIssuer(
+          new AirwallexClient({ clientId: env.AWX_CLIENT_ID, apiKey: env.AWX_API_KEY, tokenStore: new KvTokenStore(env.KV) }),
+        );
+  return new CardService(store, issuer, {
     approvalSecret: env.APPROVAL_SECRET,
     cardholderEmail: env.CARDHOLDER_EMAIL ?? "agents@x402card.dev",
+    approvalUrl: env.APPROVAL_URL,
   });
 }
 
@@ -112,6 +123,10 @@ export default {
           if (typeof body.approve !== "boolean") return json({ error: "body must be {approve: boolean}" }, 400);
           const { sig: _sig, ...a } = { sig: "", ...(await svc.decide(m[1], body.approve, body.by || "admin")) };
           return json({ approval: a, card: await svc.getCard(a.name) });
+        }
+        if (path === "/api/cards" && req.method === "GET") {
+          const labels = await store.listLabels();
+          return json({ cards: await Promise.all(labels.map((l) => svc.getCard(l))) });
         }
         const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/unfreeze$/);
         if (u && req.method === "POST") return json({ card: await svc.unfreeze(u[1], "admin") });

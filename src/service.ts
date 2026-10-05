@@ -84,12 +84,14 @@ export interface SafeTransaction {
 
 export type FundingResult =
   | { decision: "approved"; reason: string; new_monthly_limit: number }
-  | { decision: "pending_human"; reason: string; approval_id: string; approver: string }
+  | { decision: "pending_human"; reason: string; approval_id: string; approver: string; approval_url?: string }
   | { decision: "denied"; reason: string };
 
 export interface ServiceOptions {
   approvalSecret: string;
   cardholderEmail: string; // base address; +<label>-<ts> is appended
+  /** Approval page link; "{id}" is replaced with the approval id. */
+  approvalUrl?: string;
   config?: EngineConfig;
 }
 
@@ -160,7 +162,13 @@ export class CardService {
     const pending = newPendingApproval(label, amount, cur, purpose ? `${d.reason} · ${purpose}` : d.reason, policy.approver);
     await this.store.putApproval({ ...pending, sig: await signApproval(this.opts.approvalSecret, pending) });
     await this.store.addEvent(label, { at: Date.now(), kind: "escalated", detail: pending.reason, amount, currency: cur });
-    return { decision: "pending_human", reason: d.reason, approval_id: pending.id, approver: policy.approver };
+    return {
+      decision: "pending_human",
+      reason: d.reason,
+      approval_id: pending.id,
+      approver: policy.approver,
+      ...(this.opts.approvalUrl ? { approval_url: this.opts.approvalUrl.replace("{id}", pending.id) } : {}),
+    };
   }
 
   /** Human decision on an escalated request. Applies exactly the signed name/amount/currency. */

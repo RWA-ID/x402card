@@ -155,7 +155,7 @@ curl -s https://x402card.dmpay.workers.dev/mcp \
 |---|---|---|
 | `issue_card` *(admin)* | `name`, `policy: { limit_tx, limit_monthly, currencies[], mcc_allow[], approver }` | `card`, `agent_token` (shown once) |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
-| `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver` · `denied` + `reason` |
+| `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver`, `approval_url` · `denied` + `reason` |
 | `freeze` | `name?`, `reason?` | `card` (now `frozen`) |
 | `list_transactions` | `name?` | `type`, `status`, `settled`, `amount`, `currency`, `merchant`, `mcc`, `decline_reason`, `at` |
 
@@ -213,6 +213,12 @@ Public, unauthenticated:
 |---|---|---|
 | `GET` | `/public/cards/:name` | The card's public records (same data the gateway signs) |
 | `GET` | `/public/feed` | Recent policy events: issued, funded, escalated, approved, denied, frozen, unfrozen |
+
+**Approval page:** [`demo.x402card.eth.limo/approve.html`](https://demo.x402card.eth.limo/approve.html) is a static UI over these endpoints. It shows pending requests with an allowance preview, Approve/Deny, the fleet with Unfreeze, and decision history. Escalated `request_funding` results include an `approval_url` that deep-links to the request, so the agent can hand it to its human. The admin token is kept in the tab's session storage only. Add `?api=http://127.0.0.1:8787` to point the page at a local Worker.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/cards` | Fleet: every card with records, status and pending approvals (admin) |
 
 Typical platform flows:
 
@@ -334,6 +340,10 @@ Change `PARENT_NAME` in `src/ens/gateway.ts` and `PARENT_ADDR` in `wrangler.json
 ```sh
 npm test                 # policy engine, approvals, MCP protocol + full demo script (fake issuer)
 npm run typecheck
+
+# Full stack locally, no Airwallex: in-memory issuer + throwaway admin token
+npx wrangler dev --var ISSUER:fake --var MCP_ADMIN_TOKEN:local-test
+(cd site/www && python3 -m http.server 8765)   # open /approve.html?api=http://127.0.0.1:8787
 cd contracts && npx hardhat node &          # then, from the repo root:
 node scripts/e2e-resolver.ts                # resolver + gateway end to end on a local chain
 ```
@@ -357,14 +367,13 @@ src/
   airwallex/simulator.ts  every sandbox simulation call behind one interface
 contracts/              OffchainResolver.sol + Hardhat deploy
 scripts/                Airwallex checks, resolver e2e, IPFS pinning
-site/www/               demo site (static; pinned to IPFS)
+site/www/               demo site + approvals page (static; pinned to IPFS)
 ```
 
 ## Roadmap
 
 - **Issuer-agnostic attach:** `attach_card` for cards issued elsewhere, a `card.issuer` record, and adapters beyond Airwallex.
 - **Paid self-serve issuance over x402**: let agents issue their own card name by paying a small fee in USDC, with the payer wallet becoming `card.approver`.
-- Approval page and fleet dashboard (UI over `/api/approvals` and `/public/feed`).
 - Airwallex webhooks for real-time freezes instead of the one-minute cron.
 - Wallet-signed approvals (EIP-191 / SIWE from `card.approver`) instead of the admin token.
 

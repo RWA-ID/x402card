@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approvals · x402·card</title>
+<meta name="description" content="Approve or deny agent funding requests for x402card names.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0a0b0d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='7' width='28' height='18' rx='4' fill='%231c2029' stroke='%235b8cff' stroke-width='1.5'/%3E%3Crect x='6' y='12' width='7' height='5' rx='1.2' fill='%233b404b'/%3E%3Ccircle cx='24' cy='20' r='2' fill='%235b8cff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <div class="nav-left">
+      <a href="index.html" class="wordmark" style="color:var(--text)">x402<i>·</i>card</a>
+      <div class="pill-sandbox">SANDBOX</div>
+    </div>
+    <div class="nav-links">
+      <a href="index.html" class="hide-sm">Overview</a>
+      <a href="approve.html" class="here">Approvals</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap page">
+  <div class="page-head">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="kicker"><span class="n">→</span><span>Human in the loop</span></div>
+      <h1>Approvals</h1>
+    </div>
+    <div class="page-meta" data-meta hidden>
+      <span data-updated>—</span>
+      <button data-refresh>↻ refresh</button>
+      <button data-signout>sign out</button>
+    </div>
+  </div>
+
+  <section class="signin" data-signin hidden>
+    <h2>Sign in</h2>
+    <p>Paste the x402card admin token. It stays in this tab only (session storage) and is sent only to the x402card API.</p>
+    <form class="field" data-signin-form>
+      <input type="password" data-token autocomplete="off" spellcheck="false" placeholder="admin token" aria-label="Admin token">
+      <button class="btn-sm" type="submit" style="cursor:pointer">Connect</button>
+    </form>
+    <div class="err" data-signin-err></div>
+    <p style="font-size:12.5px;color:var(--dim)">Sandbox demo. Next step: <span class="mono">card.approver</span> approves by signing with their wallet instead of an admin token.</p>
+  </section>
+
+  <section class="block" data-app hidden>
+    <div class="block-head"><h2>Waiting for you</h2><span class="count" data-pending-count></span></div>
+    <div class="req-list" data-pending></div>
+  </section>
+
+  <section class="block" data-app hidden>
+    <div class="block-head"><h2>Fleet</h2><span class="count" data-fleet-count></span></div>
+    <div data-fleet></div>
+  </section>
+
+  <section class="block" data-app hidden>
+    <div class="block-head"><h2>History</h2><span class="count" data-history-count></span></div>
+    <div data-history></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="wordmark">x402<i>·</i>card</div>
+    <div class="foot-links"><span>Sandbox demo, no real money.</span></div>
+  </div>
+</footer>
+
+<script src="approve.js" defer></script>
+</body>
+</html>

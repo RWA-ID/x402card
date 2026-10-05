@@ -13,7 +13,11 @@ function setup() {
   const kv = new MemoryKV();
   const store = new Store(kv.asKV());
   const issuer = new FakeIssuer();
-  const svc = new CardService(store, issuer, { approvalSecret: "test-secret", cardholderEmail: "agents@x402card.dev" });
+  const svc = new CardService(store, issuer, {
+    approvalSecret: "test-secret",
+    cardholderEmail: "agents@x402card.dev",
+    approvalUrl: "https://demo.x402card.eth.limo/approve.html#{id}",
+  });
   let id = 0;
   async function call(token: string, method: string, params: Record<string, unknown> = {}) {
     const req = new Request("https://x/mcp", {
@@ -85,6 +89,7 @@ test("demo script through MCP", async () => {
   assert.equal(big.decision, "pending_human");
   assert.equal(big.approver, "alice.eth");
   assert.match(big.reason, /card\.limit\.tx/);
+  assert.equal(big.approval_url, `https://demo.x402card.eth.limo/approve.html#${big.approval_id}`);
   const pending = (await tool(agent, "get_card")).structuredContent.card.pending_approvals;
   assert.equal(pending.length, 1);
 
