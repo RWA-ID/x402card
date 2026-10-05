@@ -1,6 +1,7 @@
 // Card operations behind the MCP tools and the approval endpoints. Agents get
 // policy, status and transactions back; never card numbers or Airwallex IDs.
 import { AirwallexClient, AirwallexError } from "./airwallex/client.ts";
+import { AirwallexSandboxSimulator } from "./airwallex/simulator.ts";
 import * as issuing from "./airwallex/issuing.ts";
 import type { AuthorizationControls, IssuingTransaction } from "./airwallex/issuing.ts";
 import { PARENT_NAME, RESERVED_LABELS } from "./ens/gateway.ts";
@@ -17,6 +18,20 @@ export interface Issuer {
   updateCard(cardId: string, input: { status?: "ACTIVE" | "INACTIVE"; controls?: Partial<AuthorizationControls> }): Promise<void>;
   listTransactions(cardId: string): Promise<IssuingTransaction[]>;
   walletAvailable(currency: string): Promise<number>;
+  /** Sandbox only: a merchant charge (authorize + clear in one step). */
+  simulateCharge(cardId: string, c: SimulatedCharge): Promise<ChargeResult>;
+}
+
+export interface SimulatedCharge {
+  amount: number;
+  currency: string;
+  mcc: string;
+  merchant?: string;
+}
+
+export interface ChargeResult {
+  approved: boolean;
+  decline_reason?: string;
 }
 
 export class AirwallexIssuer implements Issuer {
@@ -39,6 +54,18 @@ export class AirwallexIssuer implements Issuer {
   async walletAvailable(currency: string) {
     const b = (await this.awx.getCurrentBalances()).find((x) => x.currency === currency);
     return b?.available_amount ?? 0;
+  }
+  async simulateCharge(cardId: string, c: SimulatedCharge): Promise<ChargeResult> {
+    try {
+      const ev = await new AirwallexSandboxSimulator(this.awx).charge({ cardId, ...c });
+      return ev.process_result === "DECLINED" || ev.failure_reason
+        ? { approved: false, decline_reason: ev.failure_reason ?? "DECLINED" }
+        : { approved: true };
+    } catch (e) {
+      // Some sandbox declines come back as 4xx instead of a DECLINED event.
+      if (e instanceof AirwallexError && e.status < 500) return { approved: false, decline_reason: e.code ?? "DECLINED" };
+      throw e;
+    }
   }
 }
 
@@ -225,6 +252,18 @@ export class CardService {
     const { ref } = await this.load(name);
     const txs = await this.issuer.listTransactions(ref.cardId);
     return txs.map(toSafe);
+  }
+
+  /** Sandbox demo: run a merchant charge on the card and log it for the feed. */
+  async simulateCharge(name: string, c: SimulatedCharge): Promise<ChargeResult> {
+    const { label, ref } = await this.load(name);
+    if (!(c.amount > 0) || !/^\d{4}$/.test(c.mcc)) throw new ServiceError("bad_input", "amount > 0 and a 4-digit mcc are required");
+    const r = await this.issuer.simulateCharge(ref.cardId, { ...c, currency: c.currency.toUpperCase() });
+    const merchant = `${c.merchant ?? "Merchant"} · MCC ${c.mcc}`;
+    await this.store.addEvent(label, r.approved
+      ? { at: Date.now(), kind: "charged", detail: merchant, amount: c.amount, currency: c.currency }
+      : { at: Date.now(), kind: "declined", detail: `${merchant} · ${r.decline_reason}`, amount: c.amount, currency: c.currency });
+    return r;
   }
 
   /** Run the anomaly rules for one card and freeze it if they fire. */

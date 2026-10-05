@@ -31,6 +31,7 @@ Fund an agent by name. Never hand it a card number.
 - [Gateway protocol](#gateway-protocol-for-verifiers)
 - [Security model](#security-model)
 - [Self-hosting](#self-hosting)
+- [Demo runner](#demo-runner)
 - [Development](#development)
 - [Repository layout](#repository-layout)
 - [Roadmap](#roadmap)
@@ -334,6 +335,28 @@ GATEWAY_SIGNER=<address of GATEWAY_SIGNER_KEY> \
 ```
 
 Change `PARENT_NAME` in `src/ens/gateway.ts` and `PARENT_ADDR` in `wrangler.jsonc` for your own name. If the parent name has records today (an address, a contenthash), serve them from the gateway before switching resolvers, as `PARENT_ADDR` does.
+
+## Demo runner
+
+[`scripts/demo.ts`](scripts/demo.ts) runs the six-step demo against a live Worker: as the **agent** over MCP (with the scoped token it gets at issuance), and as the **operator** over the admin API (sandbox charges and, optionally, the approval).
+
+| Step | What happens |
+|---|---|
+| 01 | `issue_card("researcher", tx ≤ $50, month ≤ $500, MCC 5734,7372)` → card + agent token; records read back over ENS |
+| 02 | $42 at MCC 5734 → approved |
+| 03 | $18 at MCC 7995 → `MERCHANT_CATEGORY_NOT_ALLOWED`, visible to the agent in `list_transactions` |
+| 04 | agent requests $300 → paused (`300 > card.limit.tx`); a human approves on the approval page → `card.limit.monthly` 500 → 800 |
+| 05 | second MCC 7995 attempt → anomaly rule fires → card frozen, `card.status = frozen` over ENS |
+| 06 | $5 at an allowed merchant → `CARD_INACTIVE` |
+
+```sh
+npm run demo                              # production; waits for you to approve on the page
+npm run demo -- --auto-approve            # unattended
+npm run demo -- --name researcher2        # each run needs a fresh name (or --reuse)
+npm run demo -- --api http://127.0.0.1:8787 --admin-token local-test   # local, with ISSUER=fake
+```
+
+Options: `--pace <ms>` between beats (default 1400, for screen recording), `--no-ens` to read records from the gateway instead of mainnet ENS. Charges use the admin-only sandbox endpoint `POST /api/cards/:name/simulate`; `POST /api/cards/:name/check` runs the anomaly rules immediately instead of waiting for the cron.
 
 ## Development
 

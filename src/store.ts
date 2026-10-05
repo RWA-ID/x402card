@@ -20,7 +20,7 @@ export interface CardRef {
 
 export interface CardEvent {
   at: number;
-  kind: "issued" | "funded" | "escalated" | "approved" | "denied" | "frozen" | "unfrozen";
+  kind: "issued" | "charged" | "declined" | "funded" | "escalated" | "approved" | "denied" | "frozen" | "unfrozen";
   detail: string;
   amount?: number;
   currency?: string;

@@ -1,7 +1,7 @@
 // In-memory fakes for tests: a KVNamespace subset and a fake Airwallex
 // issuer that enforces card controls the way Airwallex does.
 import type { AuthorizationControls, IssuingTransaction } from "./airwallex/issuing.ts";
-import type { Issuer } from "./service.ts";
+import type { ChargeResult, Issuer, SimulatedCharge } from "./service.ts";
 
 export class MemoryKV {
   private m = new Map<string, string>();
@@ -46,6 +46,11 @@ export class FakeIssuer implements Issuer {
   }
   async listTransactions(cardId: string) { return [...this.card(cardId).txs].reverse(); }
   async walletAvailable(_currency: string) { return this.wallet; }
+
+  async simulateCharge(cardId: string, c: SimulatedCharge): Promise<ChargeResult> {
+    const t = this.charge(cardId, c.amount, c.currency, c.mcc, c.merchant);
+    return t.failure_reason ? { approved: false, decline_reason: t.failure_reason } : { approved: true };
+  }
 
   /** Sandbox-style single-phase charge, declined by the card's controls. */
   charge(cardId: string, amount: number, currency: string, mcc: string, merchant = "Merchant"): IssuingTransaction {

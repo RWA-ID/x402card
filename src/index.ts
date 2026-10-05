@@ -4,6 +4,8 @@
 //   /api/approvals[/:id]   list / decide escalated funding (admin token)
 //   /api/cards             fleet: every card with records + pending count (admin token)
 //   /api/cards/:name/unfreeze   human-only unfreeze (admin token)
+//   /api/cards/:name/simulate   sandbox merchant charge {amount,currency,mcc,merchant} (admin token)
+//   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
 //   /public/feed           recent policy events across cards, for the demo site
 //   cron (every minute)    anomaly check -> freeze
@@ -128,8 +130,20 @@ export default {
           const labels = await store.listLabels();
           return json({ cards: await Promise.all(labels.map((l) => svc.getCard(l))) });
         }
-        const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/unfreeze$/);
-        if (u && req.method === "POST") return json({ card: await svc.unfreeze(u[1], "admin") });
+        const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/(unfreeze|simulate|check)$/);
+        if (u && req.method === "POST") {
+          const [, name, action] = u;
+          if (action === "unfreeze") return json({ card: await svc.unfreeze(name, "admin") });
+          if (action === "check") return json({ ...(await svc.checkActivity(name)), card: await svc.getCard(name) });
+          const b = (await req.json().catch(() => ({}))) as { amount?: number; currency?: string; mcc?: string; merchant?: string };
+          const result = await svc.simulateCharge(name, {
+            amount: Number(b.amount),
+            currency: String(b.currency ?? "USD"),
+            mcc: String(b.mcc ?? ""),
+            merchant: typeof b.merchant === "string" ? b.merchant.slice(0, 43) : undefined,
+          });
+          return json({ result });
+        }
         return json({ error: "not found" }, 404);
       } catch (e) {
         const err = describeError(e);

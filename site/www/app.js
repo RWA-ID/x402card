@@ -337,6 +337,7 @@
     issued: { st: "ISSUED", c: "oklch(0.86 0.1 258)", bg: "oklch(0.74 0.19 258 / 0.14)" },
     denied: { st: "DENIED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
     active: { st: "UNFROZEN", c: "oklch(0.8 0.16 155)", bg: "oklch(0.8 0.16 155 / 0.1)" },
+    declined: { st: "DECLINED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
   };
   const SAMPLE = [
     ["researcher", "ModelHub API · inference", "$4.12", "ok"],
@@ -351,7 +352,9 @@
     ["travel-bot", "GeoTile · maps API", "$6.50", "ok"],
     ["pricing-bot", "LuxeGoods · retail", "$129.00", "mcc"],
   ];
-  const EVENT_KIND = { issued: "issued", funded: "fund", escalated: "hold", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active" };
+  const EVENT_KIND = { issued: "issued", charged: "ok", funded: "fund", escalated: "hold", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active" };
+  // Declines show their rule: MCC declines get the MCC pill, the rest a generic DECLINED.
+  const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined") : EVENT_KIND[e.kind] || "ok");
   const hhmmss = (d) => d.toTimeString().slice(0, 8);
 
   function rowEl(r) {
@@ -409,7 +412,7 @@
         for (const e of fresh) {
           seen.add(e.at + e.name + e.kind);
           const amt = e.amount != null ? (e.kind === "funded" || e.kind === "approved" ? "+" : "") + "$" + Number(e.amount).toFixed(2) : "—";
-          add(rowEl({ t: hhmmss(new Date(e.at)), agent: e.name, merch: e.detail, amt, kind: EVENT_KIND[e.kind] || "ok" }), seen.size > fresh.length);
+          add(rowEl({ t: hhmmss(new Date(e.at)), agent: e.name, merch: e.detail.replace(/ · [A-Z_]{6,}$/, ""), amt, kind: eventKind(e) }), seen.size > fresh.length);
         }
       } catch { /* offline: sample stream keeps running */ }
     };
