@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseRecords, toRecords, PolicyError } from "./records.ts";
-import { decideFunding, evaluateActivity, toAuthorizationControls, DEFAULT_CONFIG } from "./engine.ts";
+import { decideFunding, evaluateActivity, precheckPayment, toAuthorizationControls, DEFAULT_CONFIG } from "./engine.ts";
 import { newPendingApproval, signApproval, verifyApproval } from "./approvals.ts";
 import type { IssuingTransaction } from "../airwallex/issuing.ts";
 
@@ -54,6 +54,28 @@ test("activity: one bad MCC declines, the second freezes", () => {
   assert.equal(evaluateActivity(policy, [tx("7995", "MERCHANT_CATEGORY_NOT_ALLOWED")], now).action, "none");
   const v = evaluateActivity(policy, [tx("7995", "MERCHANT_CATEGORY_NOT_ALLOWED"), tx("7995")], now);
   assert.equal(v.action, "freeze");
+
+  // Attempts the pre-check blocked count too; old ones fall out of the window.
+  const mccBlock = { at: now, code: "MERCHANT_CATEGORY_NOT_ALLOWED" };
+  assert.equal(evaluateActivity(policy, [], now, DEFAULT_CONFIG, [mccBlock]).action, "none");
+  assert.equal(evaluateActivity(policy, [tx("7995", "MERCHANT_CATEGORY_NOT_ALLOWED")], now, DEFAULT_CONFIG, [mccBlock]).action, "freeze");
+  const stale = { at: now - DEFAULT_CONFIG.windowMs - 1, code: "MERCHANT_CATEGORY_NOT_ALLOWED" };
+  assert.equal(evaluateActivity(policy, [], now, DEFAULT_CONFIG, [mccBlock, stale]).action, "none");
+  const burst = Array.from({ length: DEFAULT_CONFIG.velocityMax + 1 }, () => ({ at: now, code: "LIMIT_EXCEEDED" }));
+  assert.equal(evaluateActivity(policy, [], now, DEFAULT_CONFIG, burst).action, "freeze");
+});
+
+test("payment pre-check: same codes as the issuer", () => {
+  const ok = { amount: 100, currency: "usd", mcc: "5734" };
+  assert.deepEqual(precheckPayment(policy, ok), { ok: true });
+  const code = (r: ReturnType<typeof precheckPayment>) => (r.ok ? "OK" : r.code);
+  assert.equal(code(precheckPayment(policy, { ...ok, amount: 100.01 })), "LIMIT_EXCEEDED");
+  assert.equal(code(precheckPayment(policy, { ...ok, mcc: "7995" })), "MERCHANT_CATEGORY_NOT_ALLOWED");
+  assert.equal(code(precheckPayment(policy, { ...ok, currency: "EUR" })), "CURRENCY_NOT_ALLOWED");
+  assert.equal(code(precheckPayment(policy, { ...ok, amount: 0 })), "INVALID_AMOUNT");
+  assert.equal(code(precheckPayment(policy, { ...ok, mcc: "abc" })), "INVALID_MCC");
+  assert.equal(code(precheckPayment({ ...policy, status: "frozen" }, ok)), "CARD_FROZEN");
+  assert.equal(code(precheckPayment({ ...policy, mccAllow: [] }, { ...ok, mcc: "7995" })), "OK", "empty card.mcc.allow means any");
 });
 
 test("approval binds to exact name, amount, currency", async () => {

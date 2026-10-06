@@ -128,18 +128,26 @@ const mcc = await record("card.mcc.allow");
 effect(`${via}: card.limit.tx = ${tx} · card.mcc.allow = ${mcc} · card.status = ${await record("card.status")}`);
 await beat();
 
-// 02 Allowed charge
-step("In-policy charge clears", "$42.00 · ModelHub API · MCC 5734 (software)");
-const ok = (await admin(`/api/cards/${LABEL}/simulate`, { amount: 42, currency: "USD", mcc: "5734", merchant: "ModelHub API" })).result;
-effect(ok.approved ? green("✓ APPROVED · $42 ≤ card.limit.tx") : red(`✕ ${ok.decline_reason}`));
+// The agent pays over MCP; x402card pre-checks the ENS policy, then the issuer authorizes.
+const pay = (amount: number, mcc: string, merchant: string) =>
+  mcp(agent, "pay", { ...(REUSE ? { name: LABEL } : {}), amount, currency: "USD", mcc, merchant });
+const outcome = (r: any) =>
+  r.decision === "approved" ? green(`✓ APPROVED · $${r.amount}`)
+  : r.decision === "blocked" ? red(`✕ BLOCKED by x402card · ${r.code} · ${r.reason}`)
+  : red(`✕ DECLINED by the issuer · ${r.code}`);
+
+// 02 Allowed payment
+step("The agent pays in policy", 'pay($42.00, "ModelHub API", MCC 5734 software)');
+const ok = await pay(42, "5734", "ModelHub API");
+effect(outcome(ok));
+note("pre-checked against the ENS policy, then authorized by the issuer; the agent never held the card number");
 await beat();
 
 // 03 Disallowed merchant
-step("Out-of-policy merchant bounces", "$18.00 · SpinPalace · MCC 7995 (gambling)");
-const bad = (await admin(`/api/cards/${LABEL}/simulate`, { amount: 18, currency: "USD", mcc: "7995", merchant: "SpinPalace" })).result;
-effect(bad.approved ? amber("approved (unexpected: check card.mcc.allow)") : red(`✕ ${bad.decline_reason} · 7995 ∉ card.mcc.allow`));
-const txs = (await mcp(agent, "list_transactions", REUSE ? { name: LABEL } : {})).transactions as any[];
-note(`agent sees ${txs.length} transactions; declines carry their rule: ${txs.filter((t) => t.decline_reason).map((t) => t.decline_reason).join(", ") || "none"}`);
+step("Out-of-policy merchant is stopped", 'pay($18.00, "SpinPalace", MCC 7995 gambling)');
+const bad = await pay(18, "7995", "SpinPalace");
+effect(bad.decision === "approved" ? amber("approved (unexpected: check card.mcc.allow)") : outcome(bad));
+note("blocked before it reached the card network; the agent gets the rule it hit and can adapt");
 await beat();
 
 // 04 Funding escalates, human approves
@@ -172,18 +180,18 @@ await beat();
 
 // 05 Anomaly → freeze
 step("Anomaly in. Card frozen.", "a second disallowed-merchant attempt within 10 minutes");
-const again = (await admin(`/api/cards/${LABEL}/simulate`, { amount: 18, currency: "USD", mcc: "7995", merchant: "SpinPalace" })).result;
-note(`charge: ${again.approved ? "approved" : again.decline_reason}`);
-const check = await admin(`/api/cards/${LABEL}/check`, {});
-effect(check.frozen ? ice(`FROZEN · ${check.reason}`) : amber("anomaly rules did not fire"));
+const again = await pay(18, "7995", "SpinPalace");
+note(`payment: ${again.decision} · ${again.code ?? ""}`);
+effect(again.card_frozen ? ice(`FROZEN · ${again.card_frozen}`) : amber("anomaly rules did not fire"));
 await beat();
 effect(`${via}: card.status = ${ice(await record("card.status"))}`);
 await beat();
 
-// 06 Next charge
-step("Frozen means frozen", "$5.00 · ModelHub API · MCC 5734 (normally allowed)");
-const after = (await admin(`/api/cards/${LABEL}/simulate`, { amount: 5, currency: "USD", mcc: "5734", merchant: "ModelHub API" })).result;
-effect(after.approved ? red("approved (unexpected)") : ice(`✕ ${after.decline_reason}`));
+// 06 Next payment
+step("Frozen means frozen", 'pay($5.00, "ModelHub API", MCC 5734, normally allowed)');
+const after = await pay(5, "5734", "ModelHub API");
+effect(after.decision === "approved" ? red("approved (unexpected)") : ice(`✕ ${after.code}`));
+note("the issuer card is INACTIVE too, so a charge that bypassed x402card would also be declined");
 note("only a human can unfreeze: Unfreeze on the approval page, or POST /api/cards/:name/unfreeze");
 
 console.log(`\n${green("✓")} ${bold("demo complete")} ${dim(`· feed: ${LOCAL ? "http://127.0.0.1:8765/#feed" : "https://demo.x402card.eth.limo/#feed"}`)}\n`);

@@ -4,7 +4,7 @@
 //   /api/approvals[/:id]   list / decide escalated funding (admin token)
 //   /api/cards             fleet: every card with records + pending count (admin token)
 //   /api/cards/:name/unfreeze   human-only unfreeze (admin token)
-//   /api/cards/:name/simulate   sandbox merchant charge {amount,currency,mcc,merchant} (admin token)
+//   /api/cards/:name/simulate   sandbox: a merchant charges the card directly, skipping the pre-check (admin token)
 //   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
 //   /public/feed           recent policy events across cards, for the demo site

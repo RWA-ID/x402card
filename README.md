@@ -58,8 +58,8 @@ The policy is enforced twice: by x402card before anything is sent, and by the ca
                        └──────────────────────────────────────────────┘  │
                                                                          ▼
   AI agent ──MCP──▶ ┌────────────────────────────── Cloudflare Worker ──────────┐
-  (Claude, any     │  /mcp       tools: issue_card, get_card, request_funding,  │
-   MCP client)     │             freeze, list_transactions                      │
+  (Claude, any     │  /mcp       tools: issue_card, get_card, pay,              │
+   MCP client)     │             request_funding, freeze, list_transactions     │
                    │  /gateway   signed answers to text()/addr() lookups        │
   human / platform │  /api       approvals, unfreeze (admin)                     │
   ──REST────────▶  │  cron       anomaly check every minute → freeze            │
@@ -74,7 +74,7 @@ The policy is enforced twice: by x402card before anything is sent, and by the ca
 ```
 
 1. **Register.** `issue_card("researcher", policy)` creates a DELEGATE cardholder and a non-personalized virtual card on Airwallex, with the policy mapped to Airwallex `authorization_controls`. It publishes the policy as ENS text records and returns an **agent token** scoped to that one name.
-2. **Spend.** Airwallex checks every authorization against the card's controls: per-transaction limit, monthly limit, currencies and MCC allow-list. A decline carries the rule it hit (`MERCHANT_CATEGORY_NOT_ALLOWED`, `LIMIT_EXCEEDED`, …), so the agent can adapt instead of retrying.
+2. **Pay.** `pay(amount, currency, mcc, merchant)` is checked against the ENS policy first and refused before it reaches the card network if it breaks a rule. Airwallex then checks the authorization against the card's controls again: per-transaction limit, monthly limit, currencies and MCC allow-list. Either way a refusal carries the rule it hit (`MERCHANT_CATEGORY_NOT_ALLOWED`, `LIMIT_EXCEEDED`, …), so the agent can adapt instead of retrying. See [How an agent pays](#how-an-agent-pays-without-the-card-number).
 3. **Fund.** `request_funding(amount, currency)` either raises the monthly allowance right away (within `card.limit.tx` and above the wallet reserve floor) or creates a **pending approval** for the human in `card.approver`. The approval is HMAC-bound to the exact name, amount and currency.
 4. **Freeze.** A cron job checks each card's recent activity. Two disallowed-merchant attempts within 10 minutes, or a burst of authorizations, freezes the card on Airwallex and sets `card.status=frozen` in ENS. Agents can freeze their own card; only a human can unfreeze.
 
@@ -100,7 +100,17 @@ The agent never holds a payment credential. It asks x402card to pay, and the cre
 
 In production, step 2 uses whatever the card program offers for agent checkout: an agent-scoped **network token** (as in Visa Intelligent Commerce or Mastercard Agent Pay), or a **vault** that swaps the real card number into the merchant's checkout on the server side. Either way the agent's MCP token can't be turned into a card number, and the card number can't be used outside its authorization controls.
 
-**What runs today:** the sandbox has no real merchants, so charges are created with Airwallex's simulation endpoints through the operator-only `POST /api/cards/:name/simulate`. An agent-facing `pay` MCP tool with the step 1 pre-check is next on the [roadmap](#roadmap).
+**What runs today:** steps 1 and 3 run as described: the agent calls the `pay` MCP tool, x402card pre-checks it, and the issuer authorizes it against the card's controls. Step 2 is simulated because the sandbox has no real merchants: the adapter uses Airwallex's simulation endpoint, which runs a real authorization against the card's controls. A production adapter swaps in network-token or vaulted checkout behind the same `Issuer` interface.
+
+`pay` answers with one of three decisions, so the agent knows which layer stopped it:
+
+| `decision` | Meaning |
+|---|---|
+| `approved` | Pre-check passed and the issuer authorized the charge |
+| `blocked` | Refused by x402card (`stage: "x402card"`); nothing reached the card network |
+| `declined` | Passed the pre-check, refused by the issuer (`stage: "issuer"`), e.g. the monthly allowance is spent |
+
+Codes are the same at both layers (`MERCHANT_CATEGORY_NOT_ALLOWED`, `LIMIT_EXCEEDED`, `CURRENCY_NOT_ALLOWED`, `CARD_FROZEN`, …). Blocked and declined attempts both count toward the anomaly rules, and a refusal runs them right away, so the second disallowed-merchant attempt freezes the card in the same call. Passing the same `request_id` on a retry replays the first result instead of charging again.
 
 ## Governance
 
@@ -128,12 +138,12 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 |---|---|
 | ENS OffchainResolver on mainnet, `x402card.eth` pointed at it | ✅ live, source verified |
 | CCIP-Read gateway (signed records) | ✅ live |
-| MCP server (5 tools, scoped tokens) | ✅ live |
+| MCP server (6 tools, scoped tokens) | ✅ live |
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
 | Demo site on IPFS (`demo.x402card.eth`) | ✅ live |
 | Airwallex card creation | ⏳ waiting on Airwallex to enable a card program on the sandbox account. Cardholders, config and balances work; `cards/create` returns `Invalid issuance details`. Until then the full flow runs against `FakeIssuer`, which enforces controls the way the sandbox does. |
 | Root governance: name + resolver owned by a 2-of-3 Safe | ⏳ Safe deployed; ownership transfer next |
-| Agent `pay` tool with policy pre-check | ⏳ next |
+| Agent `pay` tool with policy pre-check | ✅ live; tested end to end against a fake issuer |
 | Wallet-signed approvals (EIP-712 / ERC-1271) | ⏳ planned |
 
 ## ENS records (the policy)
@@ -161,7 +171,8 @@ Plain, deterministic TypeScript with no LLM ([`src/policy/engine.ts`](src/policy
 | Funding request | card frozen, currency not allowed, bad decimals | **deny** |
 | Funding request | amount > `card.limit.tx`, or > global ceiling ($250), or wallet would drop below reserve floor ($1,000) | **escalate** to `card.approver` |
 | Funding request | otherwise | **approve**: raise `card.limit.monthly` and the Airwallex `MONTHLY` limit together |
-| Activity (cron) | ≥ 2 disallowed-MCC attempts in 10 min, or > 10 authorizations in 10 min | **freeze**: card `INACTIVE` + `card.status=frozen` |
+| Payment (`pay`) | card frozen, bad amount or MCC, currency not allowed, MCC not in `card.mcc.allow`, amount > `card.limit.tx` | **block** before the card network; otherwise pass to the issuer, which also enforces `MONTHLY` |
+| Activity (cron, and after every refused payment) | ≥ 2 disallowed-MCC attempts in 10 min, or > 10 payment attempts in 10 min (issuer authorizations + pre-check blocks) | **freeze**: card `INACTIVE` + `card.status=frozen`. A human unfreeze starts a clean window. |
 
 Amounts are major units (`300` = $300), rounded to the currency's decimals. A charge counts as successful only once it reaches `CLEARING`; declines carry `failure_reason`.
 
@@ -212,6 +223,7 @@ curl -s https://x402card.dmpay.workers.dev/mcp \
 |---|---|---|
 | `issue_card` *(admin)* | `name`, `policy: { limit_tx, limit_monthly, currencies[], mcc_allow[], approver }` | `card`, `agent_token` (shown once) |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
+| `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (x402card pre-check) · `declined` + `code` (issuer); `card_frozen` if this attempt froze the card |
 | `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver`, `approval_url` · `denied` + `reason` |
 | `freeze` | `name?`, `reason?` | `card` (now `frozen`) |
 | `list_transactions` | `name?` | `type`, `status`, `settled`, `amount`, `currency`, `merchant`, `mcc`, `decline_reason`, `at` |
@@ -394,16 +406,16 @@ Change `PARENT_NAME` in `src/ens/gateway.ts` and `PARENT_ADDR` in `wrangler.json
 
 ## Demo runner
 
-[`scripts/demo.ts`](scripts/demo.ts) runs the six-step demo against a live Worker: as the **agent** over MCP (with the scoped token it gets at issuance), and as the **operator** over the admin API (sandbox charges and, optionally, the approval).
+[`scripts/demo.ts`](scripts/demo.ts) runs the six-step demo against a live Worker: as the **agent** over MCP (with the scoped token it gets at issuance), and as the **operator** over the admin API (optionally, the approval).
 
 | Step | What happens |
 |---|---|
 | 01 | `issue_card("researcher", tx ≤ $50, month ≤ $500, MCC 5734,7372)` → card + agent token; records read back over ENS |
-| 02 | $42 at MCC 5734 → approved |
-| 03 | $18 at MCC 7995 → `MERCHANT_CATEGORY_NOT_ALLOWED`, visible to the agent in `list_transactions` |
+| 02 | agent `pay`s $42 at MCC 5734 → approved |
+| 03 | agent `pay`s $18 at MCC 7995 → blocked by x402card, `MERCHANT_CATEGORY_NOT_ALLOWED`, never reaches the network |
 | 04 | agent requests $300 → paused (`300 > card.limit.tx`); a human approves on the approval page → `card.limit.monthly` 500 → 800 |
-| 05 | second MCC 7995 attempt → anomaly rule fires → card frozen, `card.status = frozen` over ENS |
-| 06 | $5 at an allowed merchant → `CARD_INACTIVE` |
+| 05 | second MCC 7995 attempt → anomaly rule fires in the same call → card frozen, `card.status = frozen` over ENS |
+| 06 | $5 at an allowed merchant → `CARD_FROZEN` (the issuer card is `INACTIVE` too) |
 
 ```sh
 npm run demo                              # production; waits for you to approve on the page
@@ -412,7 +424,7 @@ npm run demo -- --name researcher2        # each run needs a fresh name (or --re
 npm run demo -- --api http://127.0.0.1:8787 --admin-token local-test   # local, with ISSUER=fake
 ```
 
-Options: `--pace <ms>` between beats (default 1400, for screen recording), `--no-ens` to read records from the gateway instead of mainnet ENS. Charges use the admin-only sandbox endpoint `POST /api/cards/:name/simulate`; `POST /api/cards/:name/check` runs the anomaly rules immediately instead of waiting for the cron.
+Options: `--pace <ms>` between beats (default 1400, for screen recording), `--no-ens` to read records from the gateway instead of mainnet ENS. Operator-side tools: `POST /api/cards/:name/simulate` has a merchant charge the card directly, skipping the pre-check, to show the issuer layer on its own; `POST /api/cards/:name/check` runs the anomaly rules immediately instead of waiting for the cron.
 
 ## Development
 
@@ -427,7 +439,7 @@ cd contracts && npx hardhat node &          # then, from the repo root:
 node scripts/e2e-resolver.ts                # resolver + gateway end to end on a local chain
 ```
 
-The test suite runs the whole demo against `FakeIssuer` ([`src/testing.ts`](src/testing.ts)), which enforces card controls the way the sandbox does: issue `researcher`, an allowed charge clears, a disallowed MCC declines, a $25 top-up auto-approves, a $300 request escalates and is approved, and a second disallowed MCC attempt freezes the card.
+The test suite runs the whole demo against `FakeIssuer` ([`src/testing.ts`](src/testing.ts)), which enforces card controls the way the sandbox does: issue `researcher`, an allowed `pay` clears, a disallowed MCC is blocked before the issuer, a $25 top-up auto-approves, a $300 request escalates and is approved, and a second disallowed MCC attempt freezes the card.
 
 ## Repository layout
 
@@ -451,7 +463,7 @@ site/www/               demo site + approvals page (static; pinned to IPFS)
 
 ## Roadmap
 
-- **Agent `pay` tool:** the agent initiates a charge over MCP; x402card pre-checks it against the ENS policy and hands it to the issuer adapter (network token or vaulted checkout in production).
+- **Production checkout behind `pay`:** network-token (Visa Intelligent Commerce / Mastercard Agent Pay) or vaulted-PAN checkout in the issuer adapter, replacing the sandbox simulation.
 - **Root under a 2-of-3 Safe:** transfer `x402card.eth` and the resolver ownership to the Safe (see [Governance](#governance)).
 - **Wallet-signed approvals** (EIP-712 from `card.approver`, ERC-1271 for Safes) replacing the admin token for approvals and unfreezes.
 - **Issuer-agnostic attach:** `attach_card` for cards issued elsewhere, a `card.issuer` record, and adapters beyond Airwallex.

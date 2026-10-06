@@ -6,6 +6,7 @@
 //   appr:<id>         funding approvals
 //   tok:<sha256>      agent token -> label it may act for
 //   evt:<label>       recent policy events (escalations, freezes) for the feed
+//   pay:<label>:<id>  result of a pay call, replayed when the agent retries with the same request_id (24h)
 //   awx:token         cached Airwallex token (see airwallex/client.ts)
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
@@ -20,10 +21,13 @@ export interface CardRef {
 
 export interface CardEvent {
   at: number;
-  kind: "issued" | "charged" | "declined" | "funded" | "escalated" | "approved" | "denied" | "frozen" | "unfrozen";
+  /** "blocked" = refused by x402card's pre-check; "declined" = refused by the issuer. */
+  kind: "issued" | "charged" | "blocked" | "declined" | "funded" | "escalated" | "approved" | "denied" | "frozen" | "unfrozen";
   detail: string;
   amount?: number;
   currency?: string;
+  /** Decline/block code, e.g. MERCHANT_CATEGORY_NOT_ALLOWED. */
+  code?: string;
 }
 
 const MAX_EVENTS = 50;
@@ -72,5 +76,10 @@ export class Store implements RecordSource {
   async addEvent(label: string, e: CardEvent) {
     const events = [e, ...(await this.getEvents(label))].slice(0, MAX_EVENTS);
     await this.kv.put(`evt:${label}`, JSON.stringify(events));
+  }
+
+  getPayment<T>(label: string, requestId: string) { return this.kv.get<T>(`pay:${label}:${requestId}`, "json"); }
+  putPayment(label: string, requestId: string, result: unknown) {
+    return this.kv.put(`pay:${label}:${requestId}`, JSON.stringify(result), { expirationTtl: 24 * 3600 });
   }
 }

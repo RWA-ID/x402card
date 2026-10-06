@@ -338,6 +338,7 @@
     denied: { st: "DENIED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
     active: { st: "UNFROZEN", c: "oklch(0.8 0.16 155)", bg: "oklch(0.8 0.16 155 / 0.1)" },
     declined: { st: "DECLINED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
+    blocked: { st: "BLOCKED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
   };
   const SAMPLE = [
     ["researcher", "ModelHub API · inference", "$4.12", "ok"],
@@ -354,7 +355,8 @@
   ];
   const EVENT_KIND = { issued: "issued", charged: "ok", funded: "fund", escalated: "hold", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active" };
   // Declines show their rule: MCC declines get the MCC pill, the rest a generic DECLINED.
-  const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined") : EVENT_KIND[e.kind] || "ok");
+  // "blocked" = stopped by x402card's pre-check before reaching the card network.
+  const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined") : e.kind === "blocked" ? "blocked" : EVENT_KIND[e.kind] || "ok");
   const hhmmss = (d) => d.toTimeString().slice(0, 8);
 
   function rowEl(r) {

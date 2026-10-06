@@ -7,7 +7,7 @@ import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
-const SERVER_INFO = { name: "x402card", version: "0.1.0" };
+const SERVER_INFO = { name: "x402card", version: "0.2.0" };
 
 export type Caller = { kind: "admin" } | { kind: "agent"; label: string };
 
@@ -54,6 +54,26 @@ export const TOOLS = [
     description: "Card status, policy records and pending approvals. Never returns the card number.",
     inputSchema: { type: "object", properties: { name: nameProp } },
     annotations: { readOnlyHint: true },
+  },
+  {
+    name: "pay",
+    title: "Pay a merchant",
+    description:
+      "Pay a merchant with this card. x402card checks the ENS policy first (status, card.limit.tx, card.currencies, card.mcc.allow) and refuses before anything reaches the card network (decision: blocked); the issuer then enforces the same limits plus the monthly allowance (decision: declined). You never handle the card number. Pass the same request_id when retrying so a payment can't go through twice.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: nameProp,
+        amount: { type: "number", exclusiveMinimum: 0, description: "Major units, e.g. 42 for $42" },
+        currency: { type: "string", description: "ISO code, must be in card.currencies" },
+        mcc: { type: "string", pattern: "^\\d{4}$", description: "Merchant category code, e.g. 5734 (software)" },
+        merchant: { type: "string", description: "Merchant name" },
+        purpose: { type: "string", description: "What this is for (kept in the card's activity log)" },
+        request_id: { type: "string", description: "Idempotency key; reuse it on retry" },
+      },
+      required: ["amount", "currency", "mcc", "merchant"],
+    },
+    annotations: { openWorldHint: true },
   },
   {
     name: "request_funding",
@@ -144,7 +164,7 @@ export class McpServer {
             capabilities: { tools: { listChanged: false } },
             serverInfo: SERVER_INFO,
             instructions:
-              "x402card: virtual spend cards for AI agents, addressed by ENS name (<name>.x402card.eth). Policy lives in ENS text records. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. You never see card numbers.",
+              "x402card: the name and policy layer for AI agent cards (<name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. You never see card numbers.",
           });
         }
         case "ping":
@@ -187,6 +207,20 @@ export class McpServer {
       }
       case "get_card":
         return { card: await this.svc.getCard(this.target(a)) };
+      case "pay": {
+        const amount = Number(a.amount);
+        if (!Number.isFinite(amount) || amount <= 0) throw toolError("bad_amount", "amount must be a positive number");
+        return {
+          ...(await this.svc.pay(this.target(a), {
+            amount,
+            currency: str(a.currency, "currency"),
+            mcc: str(a.mcc, "mcc"),
+            merchant: str(a.merchant, "merchant").slice(0, 43),
+            purpose: optStr(a.purpose),
+            requestId: optStr(a.request_id) || undefined,
+          })),
+        };
+      }
       case "request_funding": {
         const amount = Number(a.amount);
         if (!Number.isFinite(amount) || amount <= 0) throw toolError("bad_amount", "amount must be a positive number");

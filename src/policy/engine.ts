@@ -93,31 +93,76 @@ export function decideFunding(
   return { decision: "approve", reason: "within policy and above reserve floor" };
 }
 
+export interface PaymentRequest {
+  amount: number;
+  currency: string;
+  mcc: string;
+}
+
+/** Codes match the issuer's decline reasons, so an agent handles both layers the same way. */
+export type PaymentCheck = { ok: true } | { ok: false; code: string; reason: string };
+
+/**
+ * x402card's own check before a payment reaches the card network. The issuer
+ * enforces the same controls again at authorization; the monthly allowance is
+ * left to the issuer, which knows what has already been spent.
+ */
+export function precheckPayment(p: CardPolicy, req: PaymentRequest): PaymentCheck {
+  const currency = req.currency.toUpperCase();
+  if (p.status === "frozen") return { ok: false, code: "CARD_FROZEN", reason: "card.status is frozen" };
+  if (!(req.amount > 0) || roundMajor(req.amount, currency) !== req.amount) {
+    return { ok: false, code: "INVALID_AMOUNT", reason: `amount must be positive with at most ${decimalsFor(currency)} decimals` };
+  }
+  if (!/^\d{4}$/.test(req.mcc)) return { ok: false, code: "INVALID_MCC", reason: "mcc must be a 4-digit merchant category code" };
+  if (!p.currencies.includes(currency)) {
+    return { ok: false, code: "CURRENCY_NOT_ALLOWED", reason: `${currency} not in card.currencies (${p.currencies.join(",")})` };
+  }
+  if (p.mccAllow.length > 0 && !p.mccAllow.includes(req.mcc)) {
+    return { ok: false, code: "MERCHANT_CATEGORY_NOT_ALLOWED", reason: `${req.mcc} not in card.mcc.allow (${p.mccAllow.join(",")})` };
+  }
+  if (req.amount > p.limitTx) {
+    return { ok: false, code: "LIMIT_EXCEEDED", reason: `${req.amount} > card.limit.tx (${p.limitTx}); use request_funding for larger amounts` };
+  }
+  return { ok: true };
+}
+
+/** A payment x402card refused before it reached the network (so the issuer never saw it). */
+export interface BlockedAttempt {
+  at: number;
+  code: string;
+}
+
 export type TxVerdict = { action: "none" } | { action: "freeze"; reason: string };
 
 /**
  * Looks at recent card activity (newest included) and decides whether to
  * freeze. Airwallex already declines a disallowed MCC; repeated attempts or
- * a burst of activity is treated as an anomaly.
+ * a burst of activity is treated as an anomaly. Attempts blocked by the
+ * pre-check count the same as issuer authorizations.
  */
 export function evaluateActivity(
   p: CardPolicy,
   recent: IssuingTransaction[],
   now: number = Date.now(),
   cfg: EngineConfig = DEFAULT_CONFIG,
+  blocked: BlockedAttempt[] = [],
 ): TxVerdict {
   if (p.status === "frozen") return { action: "none" };
   const inWindow = recent.filter((t) => {
     const at = t.transaction_date ? Date.parse(t.transaction_date) : now;
     return now - at <= cfg.windowMs && t.transaction_type === "AUTHORIZATION";
   });
+  const blockedInWindow = blocked.filter((b) => now - b.at <= cfg.windowMs);
 
-  const strikes = inWindow.filter((t) => isMccViolation(p, t)).length;
+  const strikes =
+    inWindow.filter((t) => isMccViolation(p, t)).length +
+    blockedInWindow.filter((b) => b.code === "MERCHANT_CATEGORY_NOT_ALLOWED").length;
   if (strikes >= cfg.mccStrikesToFreeze) {
     return { action: "freeze", reason: `${strikes} disallowed merchant-category attempts` };
   }
-  if (inWindow.length > cfg.velocityMax) {
-    return { action: "freeze", reason: `${inWindow.length} authorizations in ${cfg.windowMs / 60000} min` };
+  const attempts = inWindow.length + blockedInWindow.length;
+  if (attempts > cfg.velocityMax) {
+    return { action: "freeze", reason: `${attempts} payment attempts in ${cfg.windowMs / 60000} min` };
   }
   return { action: "none" };
 }

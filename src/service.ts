@@ -5,7 +5,7 @@ import { AirwallexSandboxSimulator } from "./airwallex/simulator.ts";
 import * as issuing from "./airwallex/issuing.ts";
 import type { AuthorizationControls, IssuingTransaction } from "./airwallex/issuing.ts";
 import { PARENT_NAME, RESERVED_LABELS } from "./ens/gateway.ts";
-import { DEFAULT_CONFIG, type EngineConfig, decideFunding, evaluateActivity, roundMajor, toAuthorizationControls } from "./policy/engine.ts";
+import { DEFAULT_CONFIG, type EngineConfig, decideFunding, evaluateActivity, precheckPayment, roundMajor, toAuthorizationControls } from "./policy/engine.ts";
 import { newPendingApproval, signApproval, verifyApproval, type PendingApproval } from "./policy/approvals.ts";
 import { type CardPolicy, PolicyError, type TextRecords, parseRecords, toRecords } from "./policy/records.ts";
 import type { Store } from "./store.ts";
@@ -18,7 +18,11 @@ export interface Issuer {
   updateCard(cardId: string, input: { status?: "ACTIVE" | "INACTIVE"; controls?: Partial<AuthorizationControls> }): Promise<void>;
   listTransactions(cardId: string): Promise<IssuingTransaction[]>;
   walletAvailable(currency: string): Promise<number>;
-  /** Sandbox only: a merchant charge (authorize + clear in one step). */
+  /**
+   * A merchant charge (authorize + clear in one step). On the sandbox this is
+   * Airwallex's simulation endpoint; a production adapter hands the merchant a
+   * network token or a vaulted card number here, never the agent.
+   */
   simulateCharge(cardId: string, c: SimulatedCharge): Promise<ChargeResult>;
 }
 
@@ -108,6 +112,26 @@ export interface SafeTransaction {
   decline_reason?: string;
   at?: string;
 }
+
+export interface PaymentInput {
+  amount: number;
+  currency: string;
+  mcc: string;
+  merchant: string;
+  purpose?: string;
+  /** Same id on retry replays the first result instead of charging again. */
+  requestId?: string;
+}
+
+/**
+ * blocked  = refused by x402card's pre-check; nothing reached the card network.
+ * declined = passed the pre-check, refused by the issuer at authorization.
+ */
+export type PaymentResult = (
+  | { decision: "approved"; amount: number; currency: string; merchant: string }
+  | { decision: "blocked"; stage: "x402card"; code: string; reason: string }
+  | { decision: "declined"; stage: "issuer"; code: string }
+) & { card_frozen?: string; replayed?: boolean };
 
 export type FundingResult =
   | { decision: "approved"; reason: string; new_monthly_limit: number }
@@ -254,23 +278,72 @@ export class CardService {
     return txs.map(toSafe);
   }
 
-  /** Sandbox demo: run a merchant charge on the card and log it for the feed. */
+  /**
+   * The agent's payment path: pre-check against the ENS policy, then hand the
+   * charge to the issuer, which enforces the same controls again. A refusal
+   * at either layer runs the anomaly rules right away.
+   */
+  async pay(name: string, p: PaymentInput): Promise<PaymentResult> {
+    const { label, policy, ref } = await this.load(name);
+    if (p.requestId) {
+      const prior = await this.store.getPayment<PaymentResult>(label, p.requestId);
+      if (prior) return { ...prior, replayed: true };
+    }
+    const currency = p.currency.toUpperCase();
+    const detail = `${p.merchant} · MCC ${p.mcc}${p.purpose ? ` · ${p.purpose}` : ""}`;
+
+    let result: PaymentResult;
+    const check = precheckPayment(policy, { amount: p.amount, currency, mcc: p.mcc });
+    if (!check.ok) {
+      await this.store.addEvent(label, { at: Date.now(), kind: "blocked", detail: `${detail} · ${check.code}`, amount: p.amount, currency, code: check.code });
+      result = { decision: "blocked", stage: "x402card", code: check.code, reason: check.reason };
+    } else {
+      const r = await this.issuer.simulateCharge(ref.cardId, { amount: p.amount, currency, mcc: p.mcc, merchant: p.merchant });
+      await this.logCharge(label, r, detail, p.amount, currency);
+      result = r.approved
+        ? { decision: "approved", amount: p.amount, currency, merchant: p.merchant }
+        : { decision: "declined", stage: "issuer", code: r.decline_reason ?? "DECLINED" };
+    }
+
+    // A frozen card is refused anyway; don't count those toward a new freeze.
+    if (result.decision !== "approved" && policy.status !== "frozen") {
+      const v = await this.checkActivity(label);
+      if (v.frozen) result.card_frozen = v.reason;
+    }
+    if (p.requestId) await this.store.putPayment(label, p.requestId, result);
+    return result;
+  }
+
+  /** Sandbox demo: a merchant charges the card directly (no x402card pre-check), logged for the feed. */
   async simulateCharge(name: string, c: SimulatedCharge): Promise<ChargeResult> {
     const { label, ref } = await this.load(name);
     if (!(c.amount > 0) || !/^\d{4}$/.test(c.mcc)) throw new ServiceError("bad_input", "amount > 0 and a 4-digit mcc are required");
-    const r = await this.issuer.simulateCharge(ref.cardId, { ...c, currency: c.currency.toUpperCase() });
-    const merchant = `${c.merchant ?? "Merchant"} · MCC ${c.mcc}`;
-    await this.store.addEvent(label, r.approved
-      ? { at: Date.now(), kind: "charged", detail: merchant, amount: c.amount, currency: c.currency }
-      : { at: Date.now(), kind: "declined", detail: `${merchant} · ${r.decline_reason}`, amount: c.amount, currency: c.currency });
+    const currency = c.currency.toUpperCase();
+    const r = await this.issuer.simulateCharge(ref.cardId, { ...c, currency });
+    await this.logCharge(label, r, `${c.merchant ?? "Merchant"} · MCC ${c.mcc}`, c.amount, currency);
     return r;
+  }
+
+  private logCharge(label: string, r: ChargeResult, detail: string, amount: number, currency: string) {
+    return this.store.addEvent(label, r.approved
+      ? { at: Date.now(), kind: "charged", detail, amount, currency }
+      : { at: Date.now(), kind: "declined", detail: `${detail} · ${r.decline_reason}`, amount, currency, code: r.decline_reason });
   }
 
   /** Run the anomaly rules for one card and freeze it if they fire. */
   async checkActivity(name: string): Promise<{ frozen: boolean; reason?: string }> {
     const { label, policy, ref } = await this.load(name);
     if (policy.status === "frozen") return { frozen: false };
-    const verdict = evaluateActivity(policy, await this.issuer.listTransactions(ref.cardId), Date.now(), this.cfg);
+    const events = await this.store.getEvents(label);
+    // A human unfreeze starts a clean window; otherwise the strikes that froze
+    // the card would freeze it again on the next check.
+    const since = events.find((e) => e.kind === "unfrozen")?.at ?? 0;
+    const blocked = events
+      .filter((e) => e.kind === "blocked" && e.code && e.code !== "CARD_FROZEN" && e.at > since)
+      .map((e) => ({ at: e.at, code: e.code! }));
+    const txs = (await this.issuer.listTransactions(ref.cardId))
+      .filter((t) => !t.transaction_date || Date.parse(t.transaction_date) > since);
+    const verdict = evaluateActivity(policy, txs, Date.now(), this.cfg, blocked);
     if (verdict.action !== "freeze") return { frozen: false };
     await this.freeze(label, `anomaly: ${verdict.reason}`);
     return { frozen: true, reason: verdict.reason };
