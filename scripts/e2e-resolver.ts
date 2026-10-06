@@ -107,7 +107,7 @@ await assert.rejects(lookup("researcher.x402card.eth", "card.status", signerKey,
 console.log("ok: tampered result rejected");
 
 {
-  const parentAddr = "0x5f11a48230f7CdaB91A2361576239091E4b1165b";
+  const parentAddr = "0x5A578eDdD28Bac066464BB2462ff052a65103602";
   const addrAbi = parseAbi(["function addr(bytes32 node) view returns (address)"]);
   const inner = encodeFunctionData({ abi: addrAbi, functionName: "addr", args: [namehash("x402card.eth")] });
   const req = encodeFunctionData({ abi: resolverAbi, functionName: "resolve", args: [encodeDnsName("x402card.eth"), inner] });

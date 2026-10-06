@@ -5,7 +5,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     // x402card.eth's ETH address before the resolver switch; served by the gateway.
-    "PARENT_ADDR": "0x5f11a48230f7CdaB91A2361576239091E4b1165b",
+    "PARENT_ADDR": "0x5A578eDdD28Bac066464BB2462ff052a65103602",
     // Base address for DELEGATE cardholders; +<label>-<ts> is appended.
     "CARDHOLDER_EMAIL": "agents@x402card.dev",
     // Returned to agents with escalated funding requests.
