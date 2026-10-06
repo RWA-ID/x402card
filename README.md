@@ -1,9 +1,16 @@
 # x402·card
 
-**Spend cards for AI agents, addressed by ENS name.**
-Fund an agent by name. Never hand it a card number.
+**The name and policy layer for AI agent cards.**
+Give an agent a name, not a card number.
 
-`researcher.x402card.eth` is a virtual card. Its spend policy (limits, currencies, allowed merchant categories, status, approver) lives in ENS text records that anyone can read. Agents use the card through an MCP server and never see the 16-digit number, the card ID or an API key. Charges within policy go through. Funding requests above policy wait for a human, and an anomaly freezes the card and flips `card.status` to `frozen` in ENS.
+x402card is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). x402card sits on top of them and adds the parts an AI agent needs before anyone should let it spend:
+
+- **A name.** Each agent card gets a human-readable ENS name, `researcher.x402card.eth`, that stays the same when the card underneath is reissued, rotated or moved to another program.
+- **A public policy.** Limits, currencies, allowed merchant categories, status and approver are ENS text records. Anyone (a merchant, another agent, an auditor) can check them with any ENS client, and every answer is signed and verified on-chain.
+- **No credentials in the agent.** The agent works through an MCP server with a token scoped to its own card. It never sees the card number, CVC, card ID or an issuer API key.
+- **A human in the loop.** Spending inside policy goes through. Funding requests above policy wait for the named approver. An anomaly freezes the card, flips `card.status` to `frozen` in ENS, and only a human can unfreeze it.
+
+The policy is enforced twice: by x402card before anything is sent, and by the card program's own authorization controls when the charge reaches the network.
 
 | | |
 |---|---|
@@ -20,6 +27,8 @@ Fund an agent by name. Never hand it a card number.
 ## Contents
 
 - [How it works](#how-it-works)
+- [How an agent pays](#how-an-agent-pays-without-the-card-number)
+- [Governance](#governance)
 - [Status](#status)
 - [ENS records](#ens-records-the-policy)
 - [Policy engine](#policy-engine)
@@ -64,10 +73,54 @@ Fund an agent by name. Never hand it a card number.
                        authorization controls, transactions, simulation
 ```
 
-1. **Issue.** `issue_card("researcher", policy)` creates a DELEGATE cardholder and a non-personalized virtual card on Airwallex, with the policy mapped to Airwallex `authorization_controls`. It publishes the policy as ENS text records and returns an **agent token** scoped to that one name.
+1. **Register.** `issue_card("researcher", policy)` creates a DELEGATE cardholder and a non-personalized virtual card on Airwallex, with the policy mapped to Airwallex `authorization_controls`. It publishes the policy as ENS text records and returns an **agent token** scoped to that one name.
 2. **Spend.** Airwallex checks every authorization against the card's controls: per-transaction limit, monthly limit, currencies and MCC allow-list. A decline carries the rule it hit (`MERCHANT_CATEGORY_NOT_ALLOWED`, `LIMIT_EXCEEDED`, …), so the agent can adapt instead of retrying.
 3. **Fund.** `request_funding(amount, currency)` either raises the monthly allowance right away (within `card.limit.tx` and above the wallet reserve floor) or creates a **pending approval** for the human in `card.approver`. The approval is HMAC-bound to the exact name, amount and currency.
 4. **Freeze.** A cron job checks each card's recent activity. Two disallowed-merchant attempts within 10 minutes, or a burst of authorizations, freezes the card on Airwallex and sets `card.status=frozen` in ENS. Agents can freeze their own card; only a human can unfreeze.
+
+## How an agent pays without the card number
+
+The agent never holds a payment credential. It asks x402card to pay, and the credential travels from the card program to the merchant without passing through the agent:
+
+```
+  agent ──pay(merchant, amount, currency, mcc)──▶ x402card
+                                                  │ 1. pre-check against the ENS policy:
+                                                  │    status, card.limit.tx, currency, card.mcc.allow
+                                                  │    → refuse here, before anything reaches the network
+                                                  ▼
+                                           card program (issuer adapter)
+                                                  │ 2. credential goes to the merchant:
+                                                  │    network token, or vaulted PAN at checkout
+                                                  ▼
+                                    card network authorization
+                                                  │ 3. issuer enforces the same limits again
+                                                  ▼
+                                    approved · or declined with the rule it hit
+```
+
+In production, step 2 uses whatever the card program offers for agent checkout: an agent-scoped **network token** (as in Visa Intelligent Commerce or Mastercard Agent Pay), or a **vault** that swaps the real card number into the merchant's checkout on the server side. Either way the agent's MCP token can't be turned into a card number, and the card number can't be used outside its authorization controls.
+
+**What runs today:** the sandbox has no real merchants, so charges are created with Airwallex's simulation endpoints through the operator-only `POST /api/cards/:name/simulate`. An agent-facing `pay` MCP tool with the step 1 pre-check is next on the [roadmap](#roadmap).
+
+## Governance
+
+Who can change what, and what it takes:
+
+| Control | What it can do | Held by |
+|---|---|---|
+| `x402card.eth` (registrant + ENS registry owner) | point every card name at a different resolver | single key `0x5f11…165b` → moving to Safe |
+| `OffchainResolver` owner | change the gateway URL (`setUrl`) and trusted signers (`setSigner`), i.e. decide which answers count as valid | single key `0x5f11…165b` → moving to Safe |
+| Gateway signing key | sign record answers, valid 5 minutes each | Worker secret; separate from the owner key, revocable by the owner |
+| Approvals, unfreeze, policy edits | raise limits, unfreeze cards, publish records | Worker admin token → moving to wallet-signed approvals |
+| Agent token | its own card only: read, request funding, freeze | the agent |
+
+**Target model**
+
+- **A 2-of-3 Safe owns the root.** The name and the resolver move to Safe [`0x5A578eDdD28Bac066464BB2462ff052a65103602`](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) (Safe v1.5.0, threshold 2, three owners). Re-pointing the names, swapping the gateway or trusting a new signer then needs two independent signatures, and a single leaked key can't make a frozen card read as `active`.
+- **Approvals are signed by the approver.** `card.approver` names a wallet or a Safe. A funding request above policy, or an unfreeze, applies only with an EIP-712 signature from that approver (ERC-1271 for a Safe), bound to the exact card, amount, currency and request ID. The admin token stops being able to approve on its own.
+- **Everything is visible.** Policy lives in public, signed ENS records, policy events are published at `/public/feed`, and the root's changes are on-chain Safe transactions.
+
+What's already in place: agents hold only scoped tokens, approvals are HMAC-bound to their exact terms and apply once, an agent can freeze but never unfreeze, and the signing key is separate from the owner key. See [Security model](#security-model).
 
 ## Status
 
@@ -78,7 +131,10 @@ Fund an agent by name. Never hand it a card number.
 | MCP server (5 tools, scoped tokens) | ✅ live |
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
 | Demo site on IPFS (`demo.x402card.eth`) | ✅ live |
-| Airwallex card creation | ⏳ waiting on Airwallex to enable a card program on the sandbox account. Cardholders, config and balances work; `cards/create` returns `Invalid issuance details`. |
+| Airwallex card creation | ⏳ waiting on Airwallex to enable a card program on the sandbox account. Cardholders, config and balances work; `cards/create` returns `Invalid issuance details`. Until then the full flow runs against `FakeIssuer`, which enforces controls the way the sandbox does. |
+| Root governance: name + resolver owned by a 2-of-3 Safe | ⏳ Safe deployed; ownership transfer next |
+| Agent `pay` tool with policy pre-check | ⏳ next |
+| Wallet-signed approvals (EIP-712 / ERC-1271) | ⏳ planned |
 
 ## ENS records (the policy)
 
@@ -229,7 +285,7 @@ Typical platform flows:
 
 ## Integrate: bring your own card issuer
 
-x402card doesn't have to issue the card. It's a **naming and policy layer**: a portable, human-readable identity (`<agent>.x402card.eth`) with public spend policy, scoped agent access, human approvals and a kill switch. A card from any program can sit behind that name. Agent-card programs from card networks, issuing platforms and wallet/crypto card providers can all attach their cards to an x402card name instead of building naming, policy publication and approval flows themselves.
+x402card never issues the card itself. It's a **naming and policy layer**: a portable, human-readable identity (`<agent>.x402card.eth`) with public spend policy, scoped agent access, human approvals and a kill switch. A card from any program can sit behind that name. Agent-card programs from card networks, issuing platforms and wallet/crypto card providers can all attach their cards to an x402card name instead of building naming, policy publication and approval flows themselves.
 
 What an issuer gets by attaching to a name:
 
@@ -395,10 +451,13 @@ site/www/               demo site + approvals page (static; pinned to IPFS)
 
 ## Roadmap
 
+- **Agent `pay` tool:** the agent initiates a charge over MCP; x402card pre-checks it against the ENS policy and hands it to the issuer adapter (network token or vaulted checkout in production).
+- **Root under a 2-of-3 Safe:** transfer `x402card.eth` and the resolver ownership to the Safe (see [Governance](#governance)).
+- **Wallet-signed approvals** (EIP-712 from `card.approver`, ERC-1271 for Safes) replacing the admin token for approvals and unfreezes.
 - **Issuer-agnostic attach:** `attach_card` for cards issued elsewhere, a `card.issuer` record, and adapters beyond Airwallex.
 - **Paid self-serve issuance over x402**: let agents issue their own card name by paying a small fee in USDC, with the payer wallet becoming `card.approver`.
+- **The same policy for x402 payments:** apply a name's ENS policy to x402 / USDC payments on Base, so one name governs both card and stablecoin spending.
 - Airwallex webhooks for real-time freezes instead of the one-minute cron.
-- Wallet-signed approvals (EIP-191 / SIWE from `card.approver`) instead of the admin token.
 
 ## License
 
