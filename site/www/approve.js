@@ -68,11 +68,12 @@
 
   // ---------- sign in ----------
   function showSignin(msg = "") {
+    document.querySelector("main").classList.remove("signed-in");
     $("[data-signin]").hidden = false;
     $("[data-meta]").hidden = true;
     document.querySelectorAll("[data-app]").forEach((n) => (n.hidden = true));
     $("[data-signin-err]").textContent = msg;
-    $("[data-token]").focus();
+    if (msg) $("[data-token]").focus();
   }
   function signOut(msg) {
     token = ""; save(""); clearTimeout(timer); showSignin(msg);
@@ -266,6 +267,8 @@
   }
 
   function start() {
+    // Signed in: the console comes first, the walkthrough moves below it.
+    document.querySelector("main").classList.add("signed-in");
     $("[data-signin]").hidden = true;
     $("[data-meta]").hidden = false;
     document.querySelectorAll("[data-app]").forEach((n) => (n.hidden = false));

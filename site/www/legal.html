@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Legal · x402·card</title>
+<meta name="description" content="Disclaimer, privacy notice and terms of use for the x402card sandbox demo.">
+<meta name="theme-color" content="#0a0b0d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='7' width='28' height='18' rx='4' fill='%231c2029' stroke='%235b8cff' stroke-width='1.5'/%3E%3Crect x='6' y='12' width='7' height='5' rx='1.2' fill='%233b404b'/%3E%3Ccircle cx='24' cy='20' r='2' fill='%235b8cff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <div class="nav-left">
+      <a href="index.html" class="wordmark" style="color:var(--text)">x402<i>·</i>card</a>
+      <div class="pill-sandbox">SANDBOX</div>
+    </div>
+    <div class="nav-links">
+      <a href="index.html" class="hide-sm">Overview</a>
+      <a href="approve.html" class="hide-sm">Approvals</a>
+      <a href="legal.html" class="here">Legal</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap page legal">
+  <div class="page-head">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="kicker"><span class="n">→</span><span>Last updated 5 October 2026</span></div>
+      <h1>Legal</h1>
+    </div>
+    <div class="legal-toc">
+      <a href="#disclaimer">Disclaimer</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#terms">Terms</a>
+    </div>
+  </div>
+
+  <section id="disclaimer" class="legal-sec">
+    <h2>Disclaimer</h2>
+    <p class="lead">x402card is an open-source hackathon project running in a sandbox. No real money moves, and nothing here is a financial product.</p>
+    <ul>
+      <li><b>Sandbox only.</b> Cards, balances, payments and approvals run on a card program's test environment. Amounts shown are not real funds and can't be withdrawn, spent or redeemed.</li>
+      <li><b>Not a card issuer, bank or payment provider.</b> x402card is a naming and policy layer. It doesn't issue cards, hold funds, transmit money or extend credit. Any real card would be issued by a licensed card program under that program's own terms.</li>
+      <li><b>ENS records are public.</b> Names under <span class="mono">x402card.eth</span> resolve on Ethereum mainnet, and anyone can read their spend-policy records. They never contain card numbers, CVCs or card IDs.</li>
+      <li><b>Not advice.</b> Nothing on this site is financial, legal, tax or security advice.</li>
+      <li><b>No affiliation.</b> x402card isn't affiliated with, endorsed by or sponsored by Airwallex, ENS Labs, Safe, Cloudflare, Visa, Mastercard, Coinbase, Anthropic or any other company mentioned on this site or in its code. Their names and marks belong to their owners and are used only to describe compatibility.</li>
+      <li><b>Software as is.</b> The code is provided under the MIT License, without warranty. Smart contracts and gateways can have bugs; review the source before relying on it.</li>
+    </ul>
+  </section>
+
+  <section id="privacy" class="legal-sec">
+    <h2>Privacy</h2>
+    <p class="lead">This site has no accounts, cookies, analytics or ad trackers. Here is everything that touches data.</p>
+
+    <h3>When you visit this site</h3>
+    <ul>
+      <li><b>Hosting.</b> The site is static files on IPFS, usually served through a gateway such as eth.limo. The gateway you use receives your IP address and request details under its own policy.</li>
+      <li><b>Fonts.</b> Pages load the Geist fonts from Google Fonts, so Google receives your IP address and browser details.</li>
+      <li><b>Live data.</b> The home page asks the x402card API (a Cloudflare Worker at <span class="mono">x402card.dmpay.workers.dev</span>) for public card records and the public activity feed. Cloudflare processes these requests, including your IP address, under its own policy. We don't store your IP address or build a profile of you.</li>
+      <li><b>Approvals page.</b> If you sign in, your admin token is kept only in this browser tab's session storage, is sent only to the x402card API, and is cleared when you close the tab or sign out.</li>
+    </ul>
+
+    <h3>What the x402card service stores</h3>
+    <ul>
+      <li><b>Public policy records</b> for each name (limits, currencies, merchant categories, status, approver). These are public by design and can be read by anyone over ENS.</li>
+      <li><b>Activity events</b> for the public feed: payments, blocks, top-ups, escalations, approvals and freezes, with the merchant name, amount and the name of the person who decided an approval. The most recent 50 per card are kept.</li>
+      <li><b>Approval requests</b>, including the purpose an agent gave.</li>
+      <li><b>Private card references</b> (card program IDs, last four digits), never served publicly.</li>
+      <li><b>Agent tokens</b>, stored only as one-way hashes.</li>
+    </ul>
+    <p>Don't put personal information in a card's approver field, a funding purpose or a merchant name: some of it appears in the public feed or in public ENS records, and anything written to a blockchain can't be deleted.</p>
+
+    <h3>Card programs</h3>
+    <p>Cards are created through a card program (in this demo, the Airwallex sandbox). The cardholder details x402card sends are placeholders, not personal data. A real deployment would share cardholder data with the card program, which processes it under its own privacy policy.</p>
+
+    <h3>Questions and requests</h3>
+    <p>Open an issue on <a href="https://github.com/RWA-ID/x402card/issues" target="_blank" rel="noopener">GitHub</a> to ask what is stored about a name, or to have off-chain records or feed events removed. On-chain data can't be removed.</p>
+  </section>
+
+  <section id="terms" class="legal-sec">
+    <h2>Terms of use</h2>
+    <p class="lead">By using this site, the x402card API or the MCP server, you agree to these terms.</p>
+    <ol>
+      <li><b>What this is.</b> A demonstration of a naming and policy layer for AI agent cards, provided for evaluation, testing and development. It runs in a sandbox and may change, reset or go offline at any time without notice.</li>
+      <li><b>No real payments.</b> Don't use the service to make or receive real payments, or connect real card numbers, bank accounts or funds to it.</li>
+      <li><b>Acceptable use.</b> Don't attack, overload or scrape the service; try to get around authentication, token scopes or spend policies; impersonate others; or use it for anything unlawful. We may revoke tokens or remove names that are misused.</li>
+      <li><b>Tokens.</b> You're responsible for keeping admin and agent tokens secret. Anyone holding a token can act within its scope.</li>
+      <li><b>Names.</b> Names under <span class="mono">x402card.eth</span> are subnames controlled by the project. Using one doesn't give you ownership of it, and names may be reassigned or removed.</li>
+      <li><b>Open source.</b> The code is licensed under the <a href="https://github.com/RWA-ID/x402card/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>. These terms cover the hosted demo, not your own deployments of the code.</li>
+      <li><b>No warranty.</b> The service is provided "as is" and "as available", without warranties of any kind, express or implied, including fitness for a particular purpose and non-infringement.</li>
+      <li><b>Limitation of liability.</b> To the fullest extent the law allows, the project and its contributors aren't liable for any indirect, incidental, special, consequential or punitive damages, or for any loss of data, funds or profits, arising from your use of the service.</li>
+      <li><b>Third parties.</b> Gateways, RPC providers, card programs, wallets and other third-party services are governed by their own terms.</li>
+      <li><b>Changes.</b> We may update these terms; the date at the top of this page shows the latest version. Continuing to use the service means you accept the update.</li>
+    </ol>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-main">
+      <a href="index.html" class="wordmark">x402<i>·</i>card</a>
+      <a class="gh" href="https://github.com/RWA-ID/x402card" target="_blank" rel="noopener" aria-label="x402card on GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>RWA-ID/x402card</span></a>
+    </div>
+    <div class="foot-links">
+      <a href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">resolver ↗</a>
+      <a href="legal.html#disclaimer">Disclaimer</a>
+      <a href="legal.html#privacy">Privacy</a>
+      <a href="legal.html#terms">Terms</a>
+      <span>Sandbox demo, no real money.</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

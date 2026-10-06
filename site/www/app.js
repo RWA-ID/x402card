@@ -407,7 +407,7 @@
         if (!liveMode) {
           liveMode = true; clearInterval(sampleTimer); box.textContent = "";
           dot.classList.remove("sample"); label.textContent = "Live · sandbox stream";
-          note.textContent = "Real policy events from the x402card sandbox: issues, top-ups, escalations, approvals and freezes.";
+          note.textContent = "Real policy events from the x402card sandbox: payments, blocks, top-ups, escalations, approvals and freezes.";
           if (!R) dotAnim = dot.animate([{ opacity: 1 }, { opacity: 0.25 }, { opacity: 1 }], { duration: 1600, iterations: Infinity });
         }
         const fresh = events.filter((e) => !seen.has(e.at + e.name + e.kind)).reverse();
