@@ -118,15 +118,15 @@ Who can change what, and what it takes:
 
 | Control | What it can do | Held by |
 |---|---|---|
-| `x402card.eth` (registrant + ENS registry owner) | point every card name at a different resolver | single key `0x5f11…165b` → moving to Safe |
-| `OffchainResolver` owner | change the gateway URL (`setUrl`) and trusted signers (`setSigner`), i.e. decide which answers count as valid | single key `0x5f11…165b` → moving to Safe |
+| `x402card.eth` (registrant + ENS registry owner) | point every card name at a different resolver | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([registry](https://etherscan.io/tx/0x394c41ea2ca7993d428bb64ce8f524a944b1693d4d586a0e25037d69a73e050f), [registrant](https://etherscan.io/tx/0x85d92ef888c2d74f4d7763052dc388ec715cbce388a158b55670a93526b6fb84)) |
+| `OffchainResolver` owner | change the gateway URL (`setUrl`) and trusted signers (`setSigner`), i.e. decide which answers count as valid | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([tx](https://etherscan.io/tx/0x054742a8579fdb91d8ab7a9ad43199b5338934b0cb9c76483dc6e5375c033d30)) |
 | Gateway signing key | sign record answers, valid 5 minutes each | Worker secret; separate from the owner key, revocable by the owner |
 | Approvals, unfreeze, policy edits | raise limits, unfreeze cards, publish records | Worker admin token → moving to wallet-signed approvals |
 | Agent token | its own card only: read, request funding, freeze | the agent |
 
 **Target model**
 
-- **A 2-of-3 Safe owns the root.** The name and the resolver move to Safe [`0x5A578eDdD28Bac066464BB2462ff052a65103602`](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) (Safe v1.5.0, threshold 2, three owners). Re-pointing the names, swapping the gateway or trusting a new signer then needs two independent signatures, and a single leaked key can't make a frozen card read as `active`.
+- **A 2-of-3 Safe owns the root** (done). The name and the resolver are owned by Safe [`0x5A578eDdD28Bac066464BB2462ff052a65103602`](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) (Safe v1.5.0, threshold 2, three owners). Re-pointing the names, swapping the gateway or trusting a new signer needs two independent signatures, and a single leaked key can't make a frozen card read as `active`.
 - **Approvals are signed by the approver.** `card.approver` names a wallet or a Safe. A funding request above policy, or an unfreeze, applies only with an EIP-712 signature from that approver (ERC-1271 for a Safe), bound to the exact card, amount, currency and request ID. The admin token stops being able to approve on its own.
 - **Everything is visible.** Policy lives in public, signed ENS records, policy events are published at `/public/feed`, and the root's changes are on-chain Safe transactions.
 
@@ -142,7 +142,7 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
 | Demo site on IPFS (`demo.x402card.eth`) | ✅ live |
 | Airwallex card creation | ⏳ waiting on Airwallex to enable a card program on the sandbox account. Cardholders, config and balances work; `cards/create` returns `Invalid issuance details`. Until then the full flow runs against `FakeIssuer`, which enforces controls the way the sandbox does. |
-| Root governance: name + resolver owned by a 2-of-3 Safe | ⏳ Safe deployed; ownership transfer next |
+| Root governance: name + resolver owned by a 2-of-3 Safe | ✅ done; registrant, registry owner and resolver owner are the Safe |
 | Agent `pay` tool with policy pre-check | ✅ live; tested end to end against a fake issuer |
 | Wallet-signed approvals (EIP-712 / ERC-1271) | ⏳ planned |
 
@@ -464,7 +464,6 @@ site/www/               demo site + approvals page (static; pinned to IPFS)
 ## Roadmap
 
 - **Production checkout behind `pay`:** network-token (Visa Intelligent Commerce / Mastercard Agent Pay) or vaulted-PAN checkout in the issuer adapter, replacing the sandbox simulation.
-- **Root under a 2-of-3 Safe:** transfer `x402card.eth` and the resolver ownership to the Safe (see [Governance](#governance)).
 - **Wallet-signed approvals** (EIP-712 from `card.approver`, ERC-1271 for Safes) replacing the admin token for approvals and unfreezes.
 - **Issuer-agnostic attach:** `attach_card` for cards issued elsewhere, a `card.issuer` record, and adapters beyond Airwallex.
 - **Paid self-serve issuance over x402**: let agents issue their own card name by paying a small fee in USDC, with the payer wallet becoming `card.approver`.
