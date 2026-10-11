@@ -99,6 +99,37 @@
   </section>
 
   <section class="block" data-app hidden>
+    <div class="block-head"><h2>Issue a card</h2><span class="count">operator</span></div>
+    <form class="issue" data-issue-form novalidate>
+      <div class="issue-row">
+        <label class="issue-f issue-name">
+          <span>Name</span>
+          <div class="field">
+            <input data-issue-label required maxlength="63" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="scout" aria-label="Label">
+            <div class="ns-switch" role="radiogroup" aria-label="Namespace" data-ns-switch>
+              <button type="button" role="radio" data-ns="xcard.eth" aria-checked="true">.xcard.eth</button>
+              <button type="button" role="radio" data-ns="x402card.eth" aria-checked="false">.x402card.eth</button>
+            </div>
+          </div>
+        </label>
+      </div>
+      <div class="issue-grid">
+        <label class="issue-f"><span>Per transaction</span><div class="field"><input data-issue="limit_tx" type="number" min="0" step="any" value="50" required></div></label>
+        <label class="issue-f"><span>Monthly allowance</span><div class="field"><input data-issue="limit_monthly" type="number" min="0" step="any" value="500" required></div></label>
+        <label class="issue-f"><span>Currencies</span><div class="field"><input data-issue="currencies" value="USD" spellcheck="false" required></div></label>
+        <label class="issue-f"><span>Allowed MCCs <i>empty = any</i></span><div class="field"><input data-issue="mcc_allow" value="5734,7372" spellcheck="false"></div></label>
+        <label class="issue-f"><span>Approver</span><div class="field"><input data-issue="approver" placeholder="alice.eth" spellcheck="false" required></div></label>
+      </div>
+      <div class="issue-foot">
+        <div class="issue-preview mono" data-issue-preview aria-live="polite"></div>
+        <button class="btn-sm" type="submit" data-issue-submit disabled>Issue card</button>
+      </div>
+      <div class="err" data-issue-err></div>
+    </form>
+    <div class="issued" data-issued hidden></div>
+  </section>
+
+  <section class="block" data-app hidden>
     <div class="block-head"><h2>Fleet</h2><span class="count" data-fleet-count></span></div>
     <div data-fleet></div>
   </section>

@@ -101,7 +101,37 @@
         res.textContent = v ? "resolving…" : "";
       }
     };
-    q.addEventListener("input", () => { heroStop = true; update(q.value.trim()); });
+    // Namespace switch: swaps the suffix of whatever is typed; typing a full name moves the switch.
+    const radios = $$("[data-ns-switch] [data-ns]");
+    const showNs = (ns) => radios.forEach((r) => {
+      const on = r.dataset.ns === ns;
+      r.setAttribute("aria-checked", String(on)); r.tabIndex = on ? 0 : -1;
+    });
+    const nsOf = (v) => ROOTS.find((r) => v.toLowerCase().endsWith("." + r));
+    const pickNs = (ns) => {
+      heroStop = true;
+      const v = q.value.trim(), cur = nsOf(v);
+      const label = cur ? v.slice(0, -(cur.length + 1)) : v.replace(/\.+$/, "");
+      q.value = (label || "researcher") + "." + ns;
+      q.placeholder = "yourbot." + ns;
+      showNs(ns); update(q.value);
+    };
+    radios.forEach((r, i) => {
+      r.addEventListener("click", () => pickNs(r.dataset.ns));
+      r.addEventListener("keydown", (e) => {
+        const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        const next = radios[(i + d + radios.length) % radios.length];
+        pickNs(next.dataset.ns); next.focus();
+      });
+    });
+    q.addEventListener("input", () => {
+      heroStop = true;
+      const ns = nsOf(q.value.trim());
+      if (ns) showNs(ns);
+      update(q.value.trim());
+    });
     q.addEventListener("focus", () => { heroStop = true; });
     if (R) { q.value = target; update(target); return; }
     let i = 0;

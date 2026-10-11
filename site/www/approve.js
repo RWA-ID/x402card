@@ -199,7 +199,7 @@
     const box = $("[data-fleet]");
     $("[data-fleet-count]").textContent = cards.length ? `${cards.length} card${cards.length === 1 ? "" : "s"}` : "";
     box.textContent = "";
-    if (!cards.length) { box.append(el("div", { class: "empty", text: "No cards yet. Issue one with the issue_card MCP tool." })); return; }
+    if (!cards.length) { box.append(el("div", { class: "empty", text: "No cards yet. Issue one above, or with the issue_card MCP tool." })); return; }
     const tbody = el("tbody");
     for (const c of cards) {
       const r = c.records || {};
@@ -277,6 +277,109 @@
     load();
   }
 
+  // ---------- issue a card ----------
+  // The namespace is picked here; the Worker gets the full name.
+  const NS_KEY = "xcard.ns";
+  const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+  const RESERVED = new Set(["demo", "ai", "www", "app", "api", "gateway"]);
+  const MCP_URL = API + "/mcp";
+
+  function initIssue() {
+    const form = $("[data-issue-form]"), labelIn = $("[data-issue-label]"), preview = $("[data-issue-preview]");
+    const submit = $("[data-issue-submit]"), err = $("[data-issue-err]"), out = $("[data-issued]");
+    const radios = [...document.querySelectorAll("[data-ns-switch] [data-ns]")];
+    let ns = "xcard.eth";
+    try { const saved = localStorage.getItem(NS_KEY); if (radios.some((r) => r.dataset.ns === saved)) ns = saved; } catch { /* private mode */ }
+
+    const setNs = (v, focus) => {
+      ns = v;
+      for (const r of radios) {
+        const on = r.dataset.ns === v;
+        r.setAttribute("aria-checked", String(on));
+        r.tabIndex = on ? 0 : -1;
+        if (on && focus) r.focus();
+      }
+      try { localStorage.setItem(NS_KEY, v); } catch { /* private mode */ }
+      refresh();
+    };
+    // Pasting a full name picks its namespace.
+    const label = () => {
+      let v = labelIn.value.trim().toLowerCase();
+      for (const r of radios) {
+        if (!v.endsWith("." + r.dataset.ns)) continue;
+        v = v.slice(0, -(r.dataset.ns.length + 1));
+        labelIn.value = v;
+        if (ns !== r.dataset.ns) setNs(r.dataset.ns);
+      }
+      return v;
+    };
+    const problem = (v) =>
+      !v ? "" : !LABEL_RE.test(v) ? "Use lowercase letters, digits and hyphens (not at the start or end)."
+        : RESERVED.has(v) ? `${v} is reserved for the hosted sites.` : "";
+    function refresh() {
+      const v = label();
+      const p = problem(v);
+      preview.textContent = v ? (p ? "" : `→ ${v}.${ns}`) : `→ <label>.${ns}`;
+      err.textContent = p;
+      submit.disabled = !v || !!p;
+    }
+
+    radios.forEach((r, i) => {
+      r.addEventListener("click", () => setNs(r.dataset.ns));
+      r.addEventListener("keydown", (e) => {
+        const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        setNs(radios[(i + d + radios.length) % radios.length].dataset.ns, true);
+      });
+    });
+    labelIn.addEventListener("input", refresh);
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const v = label();
+      if (!v || problem(v)) return refresh();
+      const f = (k) => $(`[data-issue="${k}"]`).value.trim();
+      const list = (s) => s.split(/[\s,]+/).filter(Boolean);
+      if (!f("approver")) { err.textContent = "Name an approver, e.g. alice.eth."; return; }
+      const name = `${v}.${ns}`;
+      submit.disabled = true; submit.textContent = "Issuing…"; err.textContent = "";
+      try {
+        const r = await api("/api/cards", { method: "POST", body: JSON.stringify({ name, policy: {
+          limit_tx: Number(f("limit_tx")), limit_monthly: Number(f("limit_monthly")),
+          currencies: list(f("currencies").toUpperCase()), mcc_allow: list(f("mcc_allow")), approver: f("approver"),
+        } }) });
+        showIssued(r.card.name, r.agent_token);
+        labelIn.value = "";
+        lastSig = ""; load();
+      } catch (ex) {
+        if (ex.message !== "unauthorized") err.textContent = ex.message;
+      } finally {
+        submit.textContent = "Issue card"; refresh();
+      }
+    });
+
+    function showIssued(name, tok) {
+      const cmd = `claude mcp add --transport http ${name.split(".")[0]} ${MCP_URL} \\\n  --header "Authorization: Bearer ${tok}"`;
+      const copy = (text) => el("button", { type: "button", class: "btn-xs", text: "Copy", onclick: async (e) => {
+        try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; } catch { e.target.textContent = "Select and copy"; }
+      } });
+      out.textContent = "";
+      out.append(
+        el("div", { class: "issued-head" }, pill("active"), el("span", { class: "mono issued-name", text: name }),
+          el("button", { type: "button", class: "issued-x", "aria-label": "Dismiss", text: "×", onclick: () => { out.hidden = true; out.textContent = ""; } })),
+        el("p", { text: "Agent token: shown once. It only works for this card. Store it now." }),
+        el("div", { class: "issued-line" }, el("code", { class: "mono", text: tok }), copy(tok)),
+        el("p", { text: "Give the agent this card over MCP:" }),
+        el("div", { class: "issued-line" }, el("pre", { class: "code", text: cmd }), copy(cmd.replace("\\\n  ", ""))));
+      out.hidden = false;
+      out.scrollIntoView({ block: "nearest", behavior: R ? "auto" : "smooth" });
+    }
+
+    setNs(ns);
+  }
+
   window.addEventListener("hashchange", () => { focusId = location.hash.slice(1); lastSig = ""; load(); });
+  initIssue();
   token ? start() : showSignin();
 })();

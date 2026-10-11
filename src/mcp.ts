@@ -199,11 +199,7 @@ export class McpServer {
     switch (tool) {
       case "issue_card": {
         if (this.caller.kind !== "admin") throw toolError("forbidden", "issue_card needs the admin token");
-        const label = normalizeLabel(str(a.name, "name"));
-        const card = await this.svc.issueCard(label, policyToRecords(a.policy));
-        const token = randomToken();
-        await this.store.putToken(await sha256Hex(token), label);
-        return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
+        return { ...(await issueWithToken(this.svc, this.store, str(a.name, "name"), a.policy)) };
       }
       case "get_card":
         return { card: await this.svc.getCard(this.target(a)) };
@@ -247,6 +243,18 @@ export class McpServer {
     if (!given) throw toolError("bad_name", "name is required");
     return given;
   }
+}
+
+/**
+ * Issue a card and mint its agent token (shown once). Shared by the issue_card
+ * tool and the admin issue form (POST /api/cards).
+ */
+export async function issueWithToken(svc: CardService, store: Store, name: string, policy: unknown) {
+  const label = normalizeLabel(name);
+  const card = await svc.issueCard(label, policyToRecords(policy));
+  const token = randomToken();
+  await store.putToken(await sha256Hex(token), label);
+  return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
 }
 
 function policyToRecords(p: unknown): TextRecords {

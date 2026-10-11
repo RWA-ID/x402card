@@ -2,7 +2,7 @@
 //   /gateway/...           CCIP-Read gateway for *.x402card.eth and *.xcard.eth (public)
 //   /mcp                   MCP server for agents (bearer token)
 //   /api/approvals[/:id]   list / decide escalated funding (admin token)
-//   /api/cards             fleet: every card with records + pending count (admin token)
+//   /api/cards             GET fleet: every card with records + pending count; POST issue a card {name, policy} (admin token)
 //   /api/cards/:name/unfreeze   human-only unfreeze (admin token)
 //   /api/cards/:name/simulate   sandbox: a merchant charges the card directly, skipping the pre-check (admin token)
 //   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
@@ -12,7 +12,7 @@
 import type { Address, Hex } from "viem";
 import { AirwallexClient, KvTokenStore } from "./airwallex/client.ts";
 import { gatewayResponse } from "./ens/gateway.ts";
-import { McpServer, authenticate } from "./mcp.ts";
+import { McpServer, authenticate, issueWithToken } from "./mcp.ts";
 import { AirwallexIssuer, CardService, describeError, fullName, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer } from "./testing.ts";
@@ -129,6 +129,11 @@ export default {
         if (path === "/api/cards" && req.method === "GET") {
           const labels = await store.listLabels();
           return json({ cards: await Promise.all(labels.map((l) => svc.getCard(l))) });
+        }
+        if (path === "/api/cards" && req.method === "POST") {
+          const b = (await req.json().catch(() => ({}))) as { name?: unknown; policy?: unknown };
+          if (typeof b.name !== "string" || !b.name.trim()) return json({ error: { code: "bad_input", message: "name is required" } }, 400);
+          return json(await issueWithToken(svc, store, b.name, b.policy), 201);
         }
         const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/(unfreeze|simulate|check)$/);
         if (u && req.method === "POST") {

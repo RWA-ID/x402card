@@ -377,3 +377,40 @@ td.name { color: var(--text); }
 .legal-sec ul, .legal-sec ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
 .legal-sec b { color: var(--text-2); font-weight: 500; }
 @media (max-width: 480px) { .wiz-seal span:last-child { display: none; } }
+
+/* Namespace switch: shared by the home lookup and the issue form. */
+.ns-switch { flex: none; display: inline-flex; padding: 3px; gap: 2px; border-radius: 9px; background: rgba(255,255,255,0.04); border: 1px solid var(--line-2); }
+.ns-switch button { font-family: var(--mono); font-size: 11.5px; color: var(--muted); background: transparent; border: none; border-radius: 6px; padding: 5px 8px; cursor: pointer; white-space: nowrap; transition: color .2s ease, background .2s ease; }
+.ns-switch button:hover { color: var(--text-2); }
+.ns-switch button[aria-checked="true"] { color: var(--accent-tag); background: var(--accent-soft); }
+.ns-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.ns-row { display: flex; align-items: center; gap: 10px; margin-top: -12px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+
+/* Issue form (approvals page). */
+.issue { border-radius: 20px; background: var(--surface); border: 1px solid rgba(255,255,255,0.08); padding: clamp(18px, 3vw, 24px); display: flex; flex-direction: column; gap: 16px; }
+.issue-f { display: flex; flex-direction: column; justify-content: flex-end; gap: 7px; min-width: 0; }
+.issue-f > span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.issue-f > span i { font-style: normal; text-transform: none; letter-spacing: 0; color: var(--dim); }
+.issue-f .field { padding: 5px 5px 5px 12px; }
+.issue-f .field input { padding: 7px 0; }
+.issue-name { max-width: 560px; }
+.issue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.issue-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.issue-preview { font-size: 13px; color: var(--accent-light); min-width: 0; overflow-wrap: anywhere; }
+.btn-sm { cursor: pointer; }
+.btn-sm:disabled { opacity: 0.45; cursor: default; }
+.issued { border-radius: 20px; background: var(--surface); border: 1px solid oklch(0.8 0.16 155 / 0.35); padding: clamp(18px, 3vw, 24px); display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.issued p { margin: 0; font-size: 13.5px; color: var(--muted); }
+.issued-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.issued-name { font-size: 15px; color: var(--text); overflow-wrap: anywhere; }
+.issued-x { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 6px; }
+.issued-line { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.issued-line > code { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text); background: var(--inset); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; overflow-wrap: anywhere; }
+.issued-line > pre.code { flex: 1; min-width: 0; max-width: 100%; }
+@media (max-width: 520px) {
+  .issue-name .field { flex-wrap: wrap; padding: 5px; }
+  .issue-name .field input { flex-basis: 100%; padding: 7px 7px; }
+  .issued-line { flex-direction: column; }
+  .issued-line > code, .issued-line > pre.code { align-self: stretch; }
+}
