@@ -1,11 +1,12 @@
-// x402·card demo site. Ported from the design reference's Component class
+// x·card demo site. Ported from the design reference's Component class
 // (site/design/x402 Card.dc.html); timings and easings match it. Adds live
 // lookups against the gateway Worker where real data exists.
 (() => {
   "use strict";
 
   const API = "https://x402card.dmpay.workers.dev";
-  const ROOT = "x402card.eth";
+  const ROOT = "xcard.eth";
+  const ROOTS = [ROOT, "x402card.eth"];
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -58,11 +59,11 @@
       card.style.transform = `translateY(${(18 * (1 - p)).toFixed(1)}px) scale(${(0.94 + 0.03 * p).toFixed(3)})`;
     };
 
-    // Names under x402card.eth that have a real card: show their live records.
+    // Names under xcard.eth or x402card.eth that have a real card: show their live records.
     const live = (v) => {
       clearTimeout(lookupTimer);
       st.textContent = "RESOLVED"; st.classList.remove("live");
-      if (!v.toLowerCase().endsWith("." + ROOT)) return;
+      if (!ROOTS.some((r) => v.toLowerCase().endsWith("." + r))) return;
       const seq = ++lookupSeq;
       lookupTimer = setTimeout(async () => {
         try {
@@ -218,13 +219,13 @@
       await c.wait(350);
       c.to(a("ph"), [{ opacity: 1 }, { opacity: 0 }], { d: 150 });
       c.to(a("caret"), [{ opacity: 1 }, { opacity: 1, offset: 0.5 }, { opacity: 0, offset: 0.51 }, { opacity: 0 }], { d: 1000, it: Infinity, e: "linear" });
-      await c.type(a("in"), "scout.x402card.eth", 55);
+      await c.type(a("in"), "scout.xcard.eth", 55);
       await c.wait(250);
       c.to(a("btn"), [{ transform: "scale(1)" }, { transform: "scale(0.93)" }, { transform: "scale(1)" }], { d: 260 });
       await c.to(a("btn"), [{ boxShadow: "0 0 0 0 oklch(0.74 0.19 258 / 0.6)" }, { boxShadow: "0 0 0 14px oklch(0.74 0.19 258 / 0)" }], { d: 450 });
       await c.to(a("card"), [{ opacity: 0, transform: "translateY(28px) scale(0.96)" }, { opacity: 1, transform: "translateY(0) scale(1)" }], { d: 700 });
       await c.scramble(a("num"), "5880");
-      await c.type(a("name"), "scout.x402card.eth", 26);
+      await c.type(a("name"), "scout.xcard.eth", 26);
       await c.to(a("cap"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 500 });
     },
 
@@ -355,7 +356,7 @@
   ];
   const EVENT_KIND = { issued: "issued", charged: "ok", funded: "fund", escalated: "hold", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active" };
   // Declines show their rule: MCC declines get the MCC pill, the rest a generic DECLINED.
-  // "blocked" = stopped by x402card's pre-check before reaching the card network.
+  // "blocked" = stopped by xcard's pre-check before reaching the card network.
   const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined") : e.kind === "blocked" ? "blocked" : EVENT_KIND[e.kind] || "ok");
   const hhmmss = (d) => d.toTimeString().slice(0, 8);
 
@@ -407,7 +408,7 @@
         if (!liveMode) {
           liveMode = true; clearInterval(sampleTimer); box.textContent = "";
           dot.classList.remove("sample"); label.textContent = "Live · sandbox stream";
-          note.textContent = "Real policy events from the x402card sandbox: payments, blocks, top-ups, escalations, approvals and freezes.";
+          note.textContent = "Real policy events from the xcard sandbox: payments, blocks, top-ups, escalations, approvals and freezes.";
           if (!R) dotAnim = dot.animate([{ opacity: 1 }, { opacity: 0.25 }, { opacity: 1 }], { duration: 1600, iterations: Infinity });
         }
         const fresh = events.filter((e) => !seen.has(e.at + e.name + e.kind)).reverse();

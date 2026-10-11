@@ -1,5 +1,5 @@
 // Pin site/www to IPFS via Pinata (same JWT as x402-identity-hub; read from
-// its .env.local rather than copied). Prints the CID for demo.x402card.eth.
+// its .env.local rather than copied). Prints the CID for ai.xcard.eth.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -22,8 +22,8 @@ const files = (function walk(dir) {
 })(SITE);
 
 const form = new FormData();
-for (const { full, rel } of files) form.append("file", new Blob([readFileSync(full)]), `x402card-demo/${rel}`);
-form.append("pinataMetadata", JSON.stringify({ name: "x402card-demo" }));
+for (const { full, rel } of files) form.append("file", new Blob([readFileSync(full)]), `xcard-demo/${rel}`);
+form.append("pinataMetadata", JSON.stringify({ name: "xcard-demo" }));
 form.append("pinataOptions", JSON.stringify({ cidVersion: 1 }));
 
 console.log(`Pinning ${files.length} files: ${files.map((f) => f.rel).join(", ")}`);
@@ -39,4 +39,4 @@ if (!res.ok || !data.IpfsHash) {
 }
 console.log(`CID: ${data.IpfsHash}`);
 console.log(`Preview: https://ipfs.io/ipfs/${data.IpfsHash}/`);
-console.log(`Set demo.x402card.eth contenthash to: ipfs://${data.IpfsHash}`);
+console.log(`Set ai.xcard.eth contenthash to: ipfs://${data.IpfsHash}`);

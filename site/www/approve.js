@@ -1,4 +1,4 @@
-// x402·card approvals: pending funding requests, fleet and history, over the
+// x·card approvals: pending funding requests, fleet and history, over the
 // admin API. The token lives in sessionStorage for this tab only.
 // ?api=http://127.0.0.1:8787 points the page at a local Worker.
 (() => {
@@ -6,6 +6,8 @@
 
   const API = new URLSearchParams(location.search).get("api") || "https://x402card.dmpay.workers.dev";
   const TOKEN_KEY = "x402card.admin";
+  // Approvals carry the card key: a bare label for x402card.eth, the full name for xcard.eth.
+  const fullName = (key) => (key.includes(".") ? key : key + ".x402card.eth");
   const POLL_MS = 5000;
   const $ = (s, el = document) => el.querySelector(s);
   const R = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -104,7 +106,7 @@
       box.append(el("div", { class: "empty", style: "grid-column:1/-1", text: "Nothing waiting. Escalated funding requests from agents show up here." }));
       return;
     }
-    for (const a of pending) box.append(requestCard(a, cards.find((c) => c.name === a.name + ".x402card.eth")));
+    for (const a of pending) box.append(requestCard(a, cards.find((c) => c.name === fullName(a.name))));
     if (focusId) {
       const f = box.querySelector(`[data-id="${CSS.escape(focusId)}"]`);
       if (f) { f.classList.add("focus"); f.scrollIntoView({ block: "center", behavior: R ? "auto" : "smooth" }); }
@@ -159,7 +161,7 @@
     return el("article", { class: "req-card", "data-id": a.id },
       el("div", { class: "req-top" },
         el("div", { style: "min-width:0" },
-          el("div", { class: "req-name", text: a.name + ".x402card.eth" }),
+          el("div", { class: "req-name", text: fullName(a.name) }),
           el("div", { class: "req-purpose", text: "requests funds" + (purpose ? " · " + purpose : "") })),
         el("div", { class: "req-amt" }, "+" + money(a.amount, cur), el("small", { text: cur }))),
       whyRow,
@@ -236,7 +238,7 @@
       panel.append(el("div", { class: "feed-row" },
         el("div", { class: "feed-t", text: new Date(a.createdAt).toTimeString().slice(0, 8) }),
         el("div", { style: "min-width:0" },
-          el("div", { class: "feed-agent", text: a.name + ".x402card.eth" }),
+          el("div", { class: "feed-agent", text: fullName(a.name) }),
           el("div", { class: "feed-merch", text: a.reason })),
         el("div", { class: "feed-right" }, el("div", { class: "feed-amt", text: "+" + money(a.amount, a.currency) }), pill(status))));
     }

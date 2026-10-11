@@ -1,4 +1,4 @@
-// x402·card approvals walkthrough: six steps of one escalated funding request,
+// x·card approvals walkthrough: six steps of one escalated funding request,
 // with the floating card showing the state at each step. Illustrative only;
 // it calls no API. Mirrors service.requestFunding / decide in src/service.ts.
 (() => {
@@ -18,7 +18,7 @@
   const STEPS = [
     {
       title: "The agent asks",
-      body: "researcher.x402card.eth needs $300 for a dataset license, more than it may top up on its own. It calls request_funding over MCP with a token that only works for its own name.",
+      body: "researcher.xcard.eth needs $300 for a dataset license, more than it may top up on its own. It calls request_funding over MCP with a token that only works for its own name.",
       code: 'request_funding({ amount: 300, currency: "USD",\n  purpose: "dataset license" })',
       status: ["REQUESTED", BLUE], req: "request_funding · dataset license", reqTone: "", monthly: 500,
     },
@@ -49,7 +49,7 @@
     {
       title: "Anyone can check",
       body: "Wallets, merchants and other agents read the new limit straight from ENS with any client. The gateway signs each answer and the resolver contract verifies the signature on-chain.",
-      code: 'getEnsText("researcher.x402card.eth",\n  "card.limit.monthly")  → "800"  ✓ signed',
+      code: 'getEnsText("researcher.xcard.eth",\n  "card.limit.monthly")  → "800"  ✓ signed',
       status: ["ACTIVE", GREEN], monthly: 800, ens: true,
     },
   ];

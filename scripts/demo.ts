@@ -98,7 +98,7 @@ async function record(key: string): Promise<string> {
 const via = ENS ? "ENS (mainnet, CCIP-Read)" : "gateway records";
 
 // ---------- the demo ----------
-console.log(bold(`x402·card demo`) + dim(`  ·  ${NAME}  ·  ${API}${AUTO ? "  ·  auto-approve" : ""}`));
+console.log(bold(`x·card demo`) + dim(`  ·  ${NAME}  ·  ${API}${AUTO ? "  ·  auto-approve" : ""}`));
 console.log(dim("Sandbox: no real money. ENS resolution is real."));
 
 // 01 Issue
@@ -194,4 +194,4 @@ effect(after.decision === "approved" ? red("approved (unexpected)") : ice(`✕ $
 note("the issuer card is INACTIVE too, so a charge that bypassed x402card would also be declined");
 note("only a human can unfreeze: Unfreeze on the approval page, or POST /api/cards/:name/unfreeze");
 
-console.log(`\n${green("✓")} ${bold("demo complete")} ${dim(`· feed: ${LOCAL ? "http://127.0.0.1:8765/#feed" : "https://demo.x402card.eth.limo/#feed"}`)}\n`);
+console.log(`\n${green("✓")} ${bold("demo complete")} ${dim(`· feed: ${LOCAL ? "http://127.0.0.1:8765/#feed" : "https://ai.xcard.eth.limo/#feed"}`)}\n`);

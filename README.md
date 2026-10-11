@@ -1,20 +1,20 @@
-# x402·card
+# x·card
 
 **The name and policy layer for AI agent cards.**
 Give an agent a name, not a card number.
 
-x402card is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). x402card sits on top of them and adds the parts an AI agent needs before anyone should let it spend:
+xcard is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). xcard sits on top of them and adds the parts an AI agent needs before anyone should let it spend:
 
-- **A name.** Each agent card gets a human-readable ENS name, `researcher.x402card.eth`, that stays the same when the card underneath is reissued, rotated or moved to another program.
+- **A name.** Each agent card gets a human-readable ENS name such as `researcher.xcard.eth` (or `researcher.x402card.eth`: you pick the namespace) that stays the same when the card underneath is reissued, rotated or moved to another program.
 - **A public policy.** Limits, currencies, allowed merchant categories, status and approver are ENS text records. Anyone (a merchant, another agent, an auditor) can check them with any ENS client, and every answer is signed and verified on-chain.
 - **No credentials in the agent.** The agent works through an MCP server with a token scoped to its own card. It never sees the card number, CVC, card ID or an issuer API key.
 - **A human in the loop.** Spending inside policy goes through. Funding requests above policy wait for the named approver. An anomaly freezes the card, flips `card.status` to `frozen` in ENS, and only a human can unfreeze it.
 
-The policy is enforced twice: by x402card before anything is sent, and by the card program's own authorization controls when the charge reaches the network.
+The policy is enforced twice: by xcard before anything is sent, and by the card program's own authorization controls when the charge reaches the network.
 
 | | |
 |---|---|
-| Demo site | https://demo.x402card.eth.limo |
+| Demo site | https://ai.xcard.eth.limo |
 | ENS resolver (mainnet, verified) | [`0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0`](https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code) |
 | CCIP-Read gateway | `https://x402card.dmpay.workers.dev/gateway/{sender}/{data}.json` |
 | MCP endpoint | `https://x402card.dmpay.workers.dev/mcp` |
@@ -52,7 +52,7 @@ The policy is enforced twice: by x402card before anything is sent, and by the ca
 ```
                        ┌──────────────────────────────────────────────┐
   any ENS client       │ Ethereum mainnet                             │
-  (viem, ethers,  ───▶ │ ENS registry: x402card.eth                   │
+  (viem, ethers,  ───▶ │ ENS registry: xcard.eth + x402card.eth       │
    wallets, apps)      │   └─ resolver: OffchainResolver (ENSIP-10)   │
                        │        reverts OffchainLookup(EIP-3668) ─────┼──┐
                        └──────────────────────────────────────────────┘  │
@@ -80,10 +80,10 @@ The policy is enforced twice: by x402card before anything is sent, and by the ca
 
 ## How an agent pays without the card number
 
-The agent never holds a payment credential. It asks x402card to pay, and the credential travels from the card program to the merchant without passing through the agent:
+The agent never holds a payment credential. It asks xcard to pay, and the credential travels from the card program to the merchant without passing through the agent:
 
 ```
-  agent ──pay(merchant, amount, currency, mcc)──▶ x402card
+  agent ──pay(merchant, amount, currency, mcc)──▶ xcard
                                                   │ 1. pre-check against the ENS policy:
                                                   │    status, card.limit.tx, currency, card.mcc.allow
                                                   │    → refuse here, before anything reaches the network
@@ -100,14 +100,14 @@ The agent never holds a payment credential. It asks x402card to pay, and the cre
 
 In production, step 2 uses whatever the card program offers for agent checkout: an agent-scoped **network token** (as in Visa Intelligent Commerce or Mastercard Agent Pay), or a **vault** that swaps the real card number into the merchant's checkout on the server side. Either way the agent's MCP token can't be turned into a card number, and the card number can't be used outside its authorization controls.
 
-**What runs today:** steps 1 and 3 run as described: the agent calls the `pay` MCP tool, x402card pre-checks it, and the issuer authorizes it against the card's controls. Step 2 is simulated because the sandbox has no real merchants: the adapter uses Airwallex's simulation endpoint, which runs a real authorization against the card's controls. A production adapter swaps in network-token or vaulted checkout behind the same `Issuer` interface.
+**What runs today:** steps 1 and 3 run as described: the agent calls the `pay` MCP tool, xcard pre-checks it, and the issuer authorizes it against the card's controls. Step 2 is simulated because the sandbox has no real merchants: the adapter uses Airwallex's simulation endpoint, which runs a real authorization against the card's controls. A production adapter swaps in network-token or vaulted checkout behind the same `Issuer` interface.
 
 `pay` answers with one of three decisions, so the agent knows which layer stopped it:
 
 | `decision` | Meaning |
 |---|---|
 | `approved` | Pre-check passed and the issuer authorized the charge |
-| `blocked` | Refused by x402card (`stage: "x402card"`); nothing reached the card network |
+| `blocked` | Refused by xcard (`stage: "x402card"`); nothing reached the card network |
 | `declined` | Passed the pre-check, refused by the issuer (`stage: "issuer"`), e.g. the monthly allowance is spent |
 
 Codes are the same at both layers (`MERCHANT_CATEGORY_NOT_ALLOWED`, `LIMIT_EXCEEDED`, `CURRENCY_NOT_ALLOWED`, `CARD_FROZEN`, …). Blocked and declined attempts both count toward the anomaly rules, and a refusal runs them right away, so the second disallowed-merchant attempt freezes the card in the same call. Passing the same `request_id` on a retry replays the first result instead of charging again.
@@ -118,7 +118,8 @@ Who can change what, and what it takes:
 
 | Control | What it can do | Held by |
 |---|---|---|
-| `x402card.eth` (registrant + ENS registry owner) | point every card name at a different resolver | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([registry](https://etherscan.io/tx/0x394c41ea2ca7993d428bb64ce8f524a944b1693d4d586a0e25037d69a73e050f), [registrant](https://etherscan.io/tx/0x85d92ef888c2d74f4d7763052dc388ec715cbce388a158b55670a93526b6fb84)) |
+| `xcard.eth` (wrapped; NameWrapper owner) | point every `*.xcard.eth` card name at a different resolver | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([resolver](https://etherscan.io/tx/0xdff8b9bdbc5c6ac4d6772f31d57d9cb00ea1082fd474eaa3a2b39f2c70b6439a), [transfer](https://etherscan.io/tx/0x5e0679de420376f941fe51f290221cb264fd65e35fadefb61ca32f5e37e7c329)) |
+| `x402card.eth` (registrant + ENS registry owner) | point every `*.x402card.eth` card name at a different resolver | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([registry](https://etherscan.io/tx/0x394c41ea2ca7993d428bb64ce8f524a944b1693d4d586a0e25037d69a73e050f), [registrant](https://etherscan.io/tx/0x85d92ef888c2d74f4d7763052dc388ec715cbce388a158b55670a93526b6fb84)) |
 | `OffchainResolver` owner | change the gateway URL (`setUrl`) and trusted signers (`setSigner`), i.e. decide which answers count as valid | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([tx](https://etherscan.io/tx/0x054742a8579fdb91d8ab7a9ad43199b5338934b0cb9c76483dc6e5375c033d30)) |
 | Gateway signing key | sign record answers, valid 5 minutes each | Worker secret; separate from the owner key, revocable by the owner |
 | Approvals, unfreeze, policy edits | raise limits, unfreeze cards, publish records | Worker admin token → moving to wallet-signed approvals |
@@ -136,19 +137,19 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 
 | Component | State |
 |---|---|
-| ENS OffchainResolver on mainnet, `x402card.eth` pointed at it | ✅ live, source verified |
+| ENS OffchainResolver on mainnet, `xcard.eth` and `x402card.eth` pointed at it | ✅ live, source verified |
 | CCIP-Read gateway (signed records) | ✅ live |
 | MCP server (6 tools, scoped tokens) | ✅ live |
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
-| Demo site on IPFS (`demo.x402card.eth`) | ✅ live |
+| Demo site on IPFS (`ai.xcard.eth`) | ✅ live |
 | Airwallex card creation | ⏳ waiting on Airwallex to enable a card program on the sandbox account. Cardholders, config and balances work; `cards/create` returns `Invalid issuance details`. Until then the full flow runs against `FakeIssuer`, which enforces controls the way the sandbox does. |
-| Root governance: name + resolver owned by a 2-of-3 Safe | ✅ done; registrant, registry owner and resolver owner are the Safe |
+| Root governance: names + resolver owned by a 2-of-3 Safe | ✅ done; both parent names and the resolver are owned by the Safe |
 | Agent `pay` tool with policy pre-check | ✅ live; tested end to end against a fake issuer |
 | Wallet-signed approvals (EIP-712 / ERC-1271) | ⏳ planned |
 
 ## ENS records (the policy)
 
-Every card name `<label>.x402card.eth` exposes these text records. They're public, so they hold **policy only**: never the card number, CVC or card ID.
+Every card name, `<label>.xcard.eth` or `<label>.x402card.eth`, exposes these text records. They're public, so they hold **policy only**: never the card number, CVC or card ID.
 
 | Key | Example | Meaning |
 |---|---|---|
@@ -159,7 +160,9 @@ Every card name `<label>.x402card.eth` exposes these text records. They're publi
 | `card.status` | `active` \| `frozen` | Mirrors the Airwallex card state. |
 | `card.approver` | `alice.eth` | Who approves escalations. |
 
-Reserved labels that can't be issued: `demo`, `www`, `app`, `api`, `gateway`. `demo.x402card.eth` has its own on-chain resolver and hosts the site.
+**Namespaces.** Both parents resolve through the same resolver and gateway. The same label under each is a separate card with its own policy and token. Pass the full name to choose; a bare label (`researcher`) means `x402card.eth`, the original namespace.
+
+Reserved labels that can't be issued: `ai`, `demo`, `www`, `app`, `api`, `gateway`. `ai.xcard.eth` and `demo.x402card.eth` have their own on-chain resolver and host the site.
 
 ## Policy engine
 
@@ -188,7 +191,7 @@ The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol ve
 ### Claude Code
 
 ```sh
-claude mcp add --transport http x402card https://x402card.dmpay.workers.dev/mcp \
+claude mcp add --transport http xcard https://x402card.dmpay.workers.dev/mcp \
   --header "Authorization: Bearer x4c_your_agent_token"
 ```
 
@@ -197,7 +200,7 @@ claude mcp add --transport http x402card https://x402card.dmpay.workers.dev/mcp 
 ```json
 {
   "mcpServers": {
-    "x402card": {
+    "xcard": {
       "type": "http",
       "url": "https://x402card.dmpay.workers.dev/mcp",
       "headers": { "Authorization": "Bearer x4c_your_agent_token" }
@@ -223,7 +226,7 @@ curl -s https://x402card.dmpay.workers.dev/mcp \
 |---|---|---|
 | `issue_card` *(admin)* | `name`, `policy: { limit_tx, limit_monthly, currencies[], mcc_allow[], approver }` | `card`, `agent_token` (shown once) |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
-| `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (x402card pre-check) · `declined` + `code` (issuer); `card_frozen` if this attempt froze the card |
+| `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (xcard pre-check) · `declined` + `code` (issuer); `card_frozen` if this attempt froze the card |
 | `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver`, `approval_url` · `denied` + `reason` |
 | `freeze` | `name?`, `reason?` | `card` (now `frozen`) |
 | `list_transactions` | `name?` | `type`, `status`, `settled`, `amount`, `currency`, `merchant`, `mcc`, `decline_reason`, `at` |
@@ -283,7 +286,7 @@ Public, unauthenticated:
 | `GET` | `/public/cards/:name` | The card's public records (same data the gateway signs) |
 | `GET` | `/public/feed` | Recent policy events: issued, funded, escalated, approved, denied, frozen, unfrozen |
 
-**Approval page:** [`demo.x402card.eth.limo/approve.html`](https://demo.x402card.eth.limo/approve.html) is a static UI over these endpoints. It shows pending requests with an allowance preview, Approve/Deny, the fleet with Unfreeze, and decision history. Escalated `request_funding` results include an `approval_url` that deep-links to the request, so the agent can hand it to its human. The admin token is kept in the tab's session storage only. Add `?api=http://127.0.0.1:8787` to point the page at a local Worker.
+**Approval page:** [`ai.xcard.eth.limo/approve.html`](https://ai.xcard.eth.limo/approve.html) is a static UI over these endpoints. It shows pending requests with an allowance preview, Approve/Deny, the fleet with Unfreeze, and decision history. Escalated `request_funding` results include an `approval_url` that deep-links to the request, so the agent can hand it to its human. The admin token is kept in the tab's session storage only. Add `?api=http://127.0.0.1:8787` to point the page at a local Worker.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -297,14 +300,14 @@ Typical platform flows:
 
 ## Integrate: bring your own card issuer
 
-x402card never issues the card itself. It's a **naming and policy layer**: a portable, human-readable identity (`<agent>.x402card.eth`) with public spend policy, scoped agent access, human approvals and a kill switch. A card from any program can sit behind that name. Agent-card programs from card networks, issuing platforms and wallet/crypto card providers can all attach their cards to an x402card name instead of building naming, policy publication and approval flows themselves.
+xcard never issues the card itself. It's a **naming and policy layer**: a portable, human-readable identity (`<agent>.xcard.eth`) with public spend policy, scoped agent access, human approvals and a kill switch. A card from any program can sit behind that name. Agent-card programs from card networks, issuing platforms and wallet/crypto card providers can all attach their cards to an xcard name instead of building naming, policy publication and approval flows themselves.
 
 What an issuer gets by attaching to a name:
 
-- **A stable handle that outlives card numbers.** Reissue, rotate or swap the underlying card; agents, merchants and dashboards keep using `researcher.x402card.eth`.
+- **A stable handle that outlives card numbers.** Reissue, rotate or swap the underlying card; agents, merchants and dashboards keep using `researcher.xcard.eth`.
 - **Policy anyone can read.** Merchants and counterparties check `card.status` and limits over ENS before accepting an order, with no integration with the issuer's API.
 - **Approvals and freezes in one place,** applied consistently whatever rails the card runs on.
-- **Agents never hold credentials.** The agent talks MCP to x402card; the issuer's API keys and PANs stay server-side.
+- **Agents never hold credentials.** The agent talks MCP to xcard; the issuer's API keys and PANs stay server-side.
 
 Airwallex is the first adapter. Card operations go through one interface ([`src/service.ts`](src/service.ts)):
 
@@ -322,7 +325,7 @@ export interface Issuer {
 
 An adapter for another program maps each record to whatever control that program supports:
 
-| x402card record | What the adapter needs from the issuer |
+| xcard record | What the adapter needs from the issuer |
 |---|---|
 | `card.limit.tx` | per-authorization amount limit |
 | `card.limit.monthly` | rolling or calendar-month spend limit, updatable after issuance |
@@ -334,7 +337,7 @@ An adapter for another program maps each record to whatever control that program
 If a program can't enforce one of these at authorization time (for example, no MCC controls), the adapter should leave it to the policy engine's after-the-fact anomaly checks and say so in the card's records. Two ways to integrate:
 
 1. **Adapter in this repo:** implement `Issuer` for your API and select it per card. Each card's issuer is recorded privately, never in public records.
-2. **Attach an existing card:** keep issuing on your own platform, and register the card under a name with your policy. x402card publishes the records, runs approvals and calls your freeze/limit endpoints. *(Planned: `attach_card` tool and a `card.issuer` record naming the program.)*
+2. **Attach an existing card:** keep issuing on your own platform, and register the card under a name with your policy. xcard publishes the records, runs approvals and calls your freeze/limit endpoints. *(Planned: `attach_card` tool and a `card.issuer` record naming the program.)*
 
 ## Compatibility
 
@@ -412,7 +415,7 @@ Change `PARENT_NAME` in `src/ens/gateway.ts` and `PARENT_ADDR` in `wrangler.json
 |---|---|
 | 01 | `issue_card("researcher", tx ≤ $50, month ≤ $500, MCC 5734,7372)` → card + agent token; records read back over ENS |
 | 02 | agent `pay`s $42 at MCC 5734 → approved |
-| 03 | agent `pay`s $18 at MCC 7995 → blocked by x402card, `MERCHANT_CATEGORY_NOT_ALLOWED`, never reaches the network |
+| 03 | agent `pay`s $18 at MCC 7995 → blocked by xcard, `MERCHANT_CATEGORY_NOT_ALLOWED`, never reaches the network |
 | 04 | agent requests $300 → paused (`300 > card.limit.tx`); a human approves on the approval page → `card.limit.monthly` 500 → 800 |
 | 05 | second MCC 7995 attempt → anomaly rule fires in the same call → card frozen, `card.status = frozen` over ENS |
 | 06 | $5 at an allowed merchant → `CARD_FROZEN` (the issuer card is `INACTIVE` too) |
