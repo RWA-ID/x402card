@@ -4,7 +4,7 @@ import { AirwallexClient, AirwallexError } from "./airwallex/client.ts";
 import { AirwallexSandboxSimulator } from "./airwallex/simulator.ts";
 import * as issuing from "./airwallex/issuing.ts";
 import type { AuthorizationControls, IssuingTransaction } from "./airwallex/issuing.ts";
-import { PARENT_NAME, RESERVED_LABELS } from "./ens/gateway.ts";
+import { LEGACY_PARENT, PARENT_NAMES, RESERVED_LABELS, cardKeyOf, nameOfKey } from "./ens/gateway.ts";
 import { DEFAULT_CONFIG, type EngineConfig, decideFunding, evaluateActivity, precheckPayment, roundMajor, toAuthorizationControls } from "./policy/engine.ts";
 import { newPendingApproval, signApproval, verifyApproval, type PendingApproval } from "./policy/approvals.ts";
 import { type CardPolicy, PolicyError, type TextRecords, parseRecords, toRecords } from "./policy/records.ts";
@@ -81,17 +81,27 @@ export class ServiceError extends Error {
   }
 }
 
-/** "researcher" or "researcher.x402card.eth" -> "researcher". */
+/**
+ * Any accepted card name -> its storage key (see cardKeyOf). A bare label
+ * means x402card.eth, as it did before xcard.eth was added:
+ * "researcher" / "researcher.x402card.eth" -> "researcher";
+ * "researcher.xcard.eth" -> "researcher.xcard.eth".
+ */
 export function normalizeLabel(name: string): string {
-  let n = name.trim().toLowerCase();
-  if (n.endsWith("." + PARENT_NAME)) n = n.slice(0, -(PARENT_NAME.length + 1));
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(n)) {
-    throw new ServiceError("bad_name", `"${name}" is not a valid name under ${PARENT_NAME}`);
+  const n = name.trim().toLowerCase();
+  const full = n.includes(".") ? n : `${n}.${LEGACY_PARENT}`;
+  const key = cardKeyOf(full);
+  const label = full.slice(0, full.indexOf("."));
+  if (!key || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) {
+    throw new ServiceError("bad_name", `"${name}" is not a valid name under ${PARENT_NAMES.join(" or ")}`);
   }
-  return n;
+  return key;
 }
 
-export const fullName = (label: string) => `${label}.${PARENT_NAME}`;
+/** First label of a card key: "researcher.xcard.eth" -> "researcher". */
+export const labelOfKey = (key: string) => key.split(".")[0];
+
+export const fullName = nameOfKey;
 
 export interface CardView {
   name: string;
@@ -161,7 +171,7 @@ export class CardService {
 
   async issueCard(name: string, records: TextRecords): Promise<CardView> {
     const label = normalizeLabel(name);
-    if (RESERVED_LABELS.has(label)) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
+    if (RESERVED_LABELS.has(labelOfKey(label))) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
     if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
 
     const policy = parseRecords({ "card.status": "active", ...records });

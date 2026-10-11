@@ -1,4 +1,4 @@
-// CCIP-Read gateway (EIP-3668 / ENSIP-10) for *.x402card.eth.
+// CCIP-Read gateway (EIP-3668 / ENSIP-10) for *.x402card.eth and *.xcard.eth.
 // The OffchainResolver reverts with OffchainLookup(sender, urls, callData, ...);
 // clients then call this gateway with {sender, data=callData}. We answer the
 // inner resolver call from KV and sign it the way the ENS reference
@@ -23,9 +23,12 @@ import {
 import { sign, serializeSignature } from "viem/accounts";
 import type { TextRecords } from "../policy/records.ts";
 
-export const PARENT_NAME = "x402card.eth";
-/** Subnames with their own on-chain resolver (e.g. demo = hosted demo site); never issue cards under these. */
-export const RESERVED_LABELS = new Set(["demo", "www", "app", "api", "gateway"]);
+/** The first namespace; its cards are stored under the bare label. */
+export const LEGACY_PARENT = "x402card.eth";
+/** Namespaces this gateway answers for. The same label under each is a separate card. */
+export const PARENT_NAMES = [LEGACY_PARENT, "xcard.eth"];
+/** Subnames with their own on-chain resolver (demo.x402card.eth, ai.xcard.eth = hosted sites); never issue cards under these. */
+export const RESERVED_LABELS = new Set(["demo", "ai", "www", "app", "api", "gateway"]);
 const TTL_SECONDS = 300;
 
 const RESOLVER_ABI = parseAbi(["function resolve(bytes name, bytes data) view returns (bytes)"]);
@@ -37,12 +40,12 @@ const PROFILE_ABI = parseAbi([
 ]);
 
 export interface RecordSource {
-  /** Records for a label under PARENT_NAME, or null if the name doesn't exist. */
-  getRecords(label: string): Promise<TextRecords | null>;
+  /** Records for a card key (see cardKeyOf), or null if the name doesn't exist. */
+  getRecords(key: string): Promise<TextRecords | null>;
 }
 
 export interface GatewayOptions {
-  /** ETH address for PARENT_NAME itself (kept from its previous resolver). */
+  /** ETH address for each parent name itself. */
   parentAddr?: Address;
 }
 
@@ -80,19 +83,28 @@ export function decodeDnsName(bytes: Uint8Array): string {
   throw new GatewayError(400, "malformed DNS name");
 }
 
-/** "researcher.x402card.eth" -> "researcher"; parent itself -> "". */
-export function labelOf(name: string): string | null {
+/**
+ * Card storage key for a full name: "researcher.x402card.eth" -> "researcher"
+ * (stored that way before xcard.eth existed), "researcher.xcard.eth" ->
+ * "researcher.xcard.eth". A parent itself -> "". Anything else -> null.
+ */
+export function cardKeyOf(name: string): string | null {
   const n = name.toLowerCase();
-  if (n === PARENT_NAME) return "";
-  if (!n.endsWith("." + PARENT_NAME)) return null;
-  const label = n.slice(0, -(PARENT_NAME.length + 1));
-  return /^[a-z0-9-]{1,63}$/.test(label) ? label : null;
+  if (PARENT_NAMES.includes(n)) return "";
+  const parent = PARENT_NAMES.find((p) => n.endsWith("." + p));
+  if (!parent) return null;
+  const label = n.slice(0, -(parent.length + 1));
+  if (!/^[a-z0-9-]{1,63}$/.test(label)) return null;
+  return parent === LEGACY_PARENT ? label : n;
 }
+
+/** Card key -> full ENS name. */
+export const nameOfKey = (key: string) => (key.includes(".") ? key : `${key}.${LEGACY_PARENT}`);
 
 /** Answer the inner resolver call (text/addr/contenthash) as ABI-encoded result bytes. */
 export async function answer(name: string, inner: Hex, source: RecordSource, opts: GatewayOptions = {}): Promise<Hex> {
-  const label = labelOf(name);
-  const records = label === null ? null : label === "" ? {} : await source.getRecords(label);
+  const key = cardKeyOf(name);
+  const records = key === null ? null : key === "" ? {} : await source.getRecords(key);
 
   const call = decodeFunctionData({ abi: PROFILE_ABI, data: inner });
   if (call.args[0] !== namehash(name)) throw new GatewayError(400, "node does not match name");
@@ -105,7 +117,7 @@ export async function answer(name: string, inner: Hex, source: RecordSource, opt
     }
     case "addr": {
       // Only the parent has an address; card names have none ("not set").
-      const a = label === "" ? opts.parentAddr : undefined;
+      const a = key === "" ? opts.parentAddr : undefined;
       if (call.args.length === 1) {
         return encodeAbiParameters([{ type: "address" }], [a ?? zeroAddress]);
       }

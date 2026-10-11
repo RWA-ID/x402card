@@ -1,5 +1,7 @@
 // KV layout. Public records and private Airwallex IDs live under separate
 // prefixes; only rec:* is ever served by the gateway.
+// <label> is the card key: the bare label for x402card.eth, the full name for
+// xcard.eth (see cardKeyOf in ens/gateway.ts).
 //   rec:<label>       public ENS text records (TextRecords JSON)
 //   card:<label>      private { cardholderId, cardId, last4, ... }
 //   op:<kind>:<key>   request_id reserved for an in-flight write (reused on retry)

@@ -1,5 +1,5 @@
 // Worker entry.
-//   /gateway/...           CCIP-Read gateway for *.x402card.eth (public)
+//   /gateway/...           CCIP-Read gateway for *.x402card.eth and *.xcard.eth (public)
 //   /mcp                   MCP server for agents (bearer token)
 //   /api/approvals[/:id]   list / decide escalated funding (admin token)
 //   /api/cards             fleet: every card with records + pending count (admin token)

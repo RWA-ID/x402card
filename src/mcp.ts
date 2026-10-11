@@ -20,7 +20,7 @@ interface JsonRpcRequest {
 
 const nameProp = {
   type: "string",
-  description: "Card name, e.g. researcher.x402card.eth (or just researcher). Agent tokens may omit it.",
+  description: "Card name, e.g. researcher.xcard.eth or researcher.x402card.eth (a bare label means x402card.eth). Agent tokens may omit it.",
 };
 
 export const TOOLS = [
@@ -28,7 +28,7 @@ export const TOOLS = [
     name: "issue_card",
     title: "Issue an agent card",
     description:
-      "Issue a virtual card addressed by <name>.x402card.eth with the given spend policy. The policy is published as ENS text records. Returns an agent token scoped to this card (shown once). Admin only.",
+      "Issue a virtual card addressed by <name>.xcard.eth or <name>.x402card.eth (pick the namespace with the full name) with the given spend policy. The policy is published as ENS text records. Returns an agent token scoped to this card (shown once). Admin only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -164,7 +164,7 @@ export class McpServer {
             capabilities: { tools: { listChanged: false } },
             serverInfo: SERVER_INFO,
             instructions:
-              "x402card: the name and policy layer for AI agent cards (<name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. You never see card numbers.",
+              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. You never see card numbers.",
           });
         }
         case "ping":

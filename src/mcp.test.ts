@@ -185,3 +185,28 @@ test("agent tokens are stored hashed", async () => {
   const keys = (await kv.list({ prefix: "tok:" })).keys.map((k) => k.name);
   assert.deepEqual(keys, [`tok:${await sha256Hex(token)}`]);
 });
+
+test("namespaces: the same label under x402card.eth and xcard.eth are separate cards", async () => {
+  const { tool, store } = setup();
+  const policy = { limit_tx: 50, limit_monthly: 500, currencies: ["USD"], mcc_allow: ["5734"], approver: "alice.eth" };
+
+  const legacy = await tool(ADMIN, "issue_card", { name: "scout", policy: { ...policy, limit_tx: 10 } });
+  assert.equal(legacy.structuredContent.card.name, "scout.x402card.eth", "a bare label stays on x402card.eth");
+  const x = await tool(ADMIN, "issue_card", { name: "Scout.XCard.eth", policy });
+  assert.ok(!x.isError, x.content?.[0]?.text);
+  assert.equal(x.structuredContent.card.name, "scout.xcard.eth");
+
+  assert.ok(await store.getCard("scout"), "x402card.eth keeps the bare-label key");
+  assert.equal((await store.getRecords("scout.xcard.eth"))!["card.limit.tx"], "50");
+  assert.equal((await store.getRecords("scout"))!["card.limit.tx"], "10");
+
+  // Each token is scoped to its own namespace.
+  const xAgent = x.structuredContent.agent_token as string;
+  assert.equal((await tool(xAgent, "get_card")).structuredContent.card.name, "scout.xcard.eth");
+  assert.match((await tool(xAgent, "get_card", { name: "scout.x402card.eth" })).content[0].text, /forbidden/);
+
+  for (const name of ["ai.xcard.eth", "demo.x402card.eth"]) {
+    assert.match((await tool(ADMIN, "issue_card", { name, policy })).content[0].text, /reserved/);
+  }
+  assert.match((await tool(ADMIN, "issue_card", { name: "scout.other.eth", policy })).content[0].text, /bad_name/);
+});
