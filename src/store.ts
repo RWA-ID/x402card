@@ -11,6 +11,7 @@
 //   pay:<label>:<id>  result of a pay call, replayed when the agent retries with the same request_id (24h)
 //   tapok:<label>:<origin>  a payment to this merchant was approved, so a TAP checkout signature may be issued (15 min)
 //   tapn:<nonce>      TAP nonce seen by the demo merchant (8 min)
+//   authz:<handle>    an MCP client sign-in in progress on /authorize (10 min; see oauth/authorize.ts)
 //   awx:token         cached Airwallex token (see airwallex/client.ts)
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
@@ -92,6 +93,10 @@ export class Store implements RecordSource {
     return this.kv.put(`tapok:${label}:${origin}`, String(Date.now()), { expirationTtl: 15 * 60 });
   }
   async tapCheckoutAllowed(label: string, origin: string) { return (await this.kv.get(`tapok:${label}:${origin}`)) !== null; }
+
+  getAuthz<T>(handle: string) { return this.kv.get<T>(`authz:${handle}`, "json"); }
+  putAuthz(handle: string, v: unknown) { return this.kv.put(`authz:${handle}`, JSON.stringify(v), { expirationTtl: 10 * 60 }); }
+  deleteAuthz(handle: string) { return this.kv.delete(`authz:${handle}`); }
 
   /**
    * TAP replay check for the demo merchant. KV is eventually consistent, so two

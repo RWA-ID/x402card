@@ -1,8 +1,10 @@
 {
   "name": "x402card",
-  "main": "src/index.ts",
+  // OAuth for MCP clients around the app (src/index.ts).
+  "main": "src/worker.ts",
   "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public: OAuth client metadata documents are fetched from public hosts only.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "vars": {
     // x402card.eth's ETH address before the resolver switch; served by the gateway.
     "PARENT_ADDR": "0x5A578eDdD28Bac066464BB2462ff052a65103602",
@@ -15,7 +17,10 @@
   "triggers": { "crons": ["* * * * *"] },
   "kv_namespaces": [
     // Filled in by `wrangler kv namespace create KV`.
-    { "binding": "KV", "id": "a12b4e0315d446bfafc6c61a811f0bca" }
+    { "binding": "KV", "id": "a12b4e0315d446bfafc6c61a811f0bca" },
+    // OAuth clients, grants and tokens (hashed; props encrypted) for MCP clients.
+    { "binding": "OAUTH_KV", "id": "ebfa28d0bffd4d2eb6c438aef68b31c6" }
   ]
-  // Secrets (wrangler secret put): GATEWAY_SIGNER_KEY, AWX_CLIENT_ID, AWX_API_KEY, MCP_ADMIN_TOKEN, APPROVAL_SECRET
+  // Secrets (wrangler secret put): GATEWAY_SIGNER_KEY, AWX_CLIENT_ID, AWX_API_KEY, MCP_ADMIN_TOKEN, APPROVAL_SECRET,
+  // ETH_RPC_URL, TAP_PRIVATE_KEY. Optional var OPERATORS: wallets that may connect an MCP client to every card.
 }

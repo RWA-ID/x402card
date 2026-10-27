@@ -7,7 +7,7 @@ import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
-const SERVER_INFO = { name: "x402card", version: "0.3.0" };
+const SERVER_INFO = { name: "x402card", title: "X Card", version: "0.4.0" };
 
 export type Caller = { kind: "admin" } | { kind: "agent"; label: string };
 

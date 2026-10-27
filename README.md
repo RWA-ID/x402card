@@ -386,8 +386,13 @@ Amounts are major units (`300` = $300), rounded to the currency's decimals. A ch
 
 ## Integrate: agents over MCP
 
-The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol versions `2025-06-18`, `2025-03-26`, `2024-11-05`) and authenticates with a bearer token.
+The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol versions `2025-06-18`, `2025-03-26`, `2024-11-05`) and takes a bearer token: an OAuth access token from signing in with your wallet, or one of the static tokens.
 
+- **OAuth, for Claude.ai, ChatGPT and other apps that add a connector by URL.** Add `https://x402card.dmpay.workers.dev/mcp` as a custom connector. The app finds the sign-in on its own (RFC 9728 metadata on the `401`, then dynamic client registration or a client ID metadata document, PKCE). You sign in with your wallet (Sign-In with Ethereum) and pick what to connect:
+  - **a card whose `card.approver` resolves to your wallet.** The app acts as that card's agent, with the same tools and limits as its agent token.
+  - **every card**, if your wallet is listed in the Worker's `OPERATORS`. Same as the admin token.
+
+  Connecting never lets the app approve anything: requests over the policy still need your signature on the approval page. A connection ends if the card's `card.approver` changes. Tokens last an hour and refresh for up to 30 days.
 - **Admin token**: can call every tool, including `issue_card`. Keep it on the operator side.
 - **Agent token** (`x4c_…`): returned once by `issue_card`. It only works for its own card, and `issue_card` is hidden from it. Give this to the agent.
 

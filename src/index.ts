@@ -1,4 +1,4 @@
-// Worker entry.
+// The app: every route except OAuth (worker.ts wraps it and owns /mcp in production).
 //   /gateway/...           CCIP-Read gateway for *.x402card.eth and *.xcard.eth (public)
 //   /mcp                   MCP server for agents (bearer token)
 //   /api/approvals[/:id]   list / decide escalated funding (admin token)
@@ -44,6 +44,10 @@ export interface Env {
   TAP_PRIVATE_KEY?: string;
   /** Local dev only (`wrangler dev --var ISSUER:fake`): in-memory issuer instead of Airwallex. */
   ISSUER?: string;
+  /** OAuth grants, clients and tokens for MCP clients (worker.ts; @cloudflare/workers-oauth-provider). */
+  OAUTH_KV?: KVNamespace;
+  /** Operator wallets, comma-separated: signing in with one grants every card over OAuth. */
+  OPERATORS?: string;
 }
 
 // One fake per isolate, so local dev keeps state between requests.
@@ -60,20 +64,25 @@ function tap(env: Env): (() => Promise<TapSigner>) | undefined {
   };
 }
 
-const CORS = {
+export const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Protocol-Version, Signature-Input, Signature",
 };
 
-function service(env: Env, store: Store, origin?: string): CardService {
+/** Mainnet client for ENS reads and signature checks (payee gate, approvers, sign-in). */
+export function ethClient(env: Env): PublicClient {
+  return createPublicClient({ chain: mainnet, transport: http(env.ETH_RPC_URL) }) as PublicClient;
+}
+
+export function service(env: Env, store: Store, origin?: string): CardService {
   const issuer =
     env.ISSUER === "fake"
       ? (fakeIssuer ??= new FakeIssuer())
       : new AirwallexIssuer(
           new AirwallexClient({ clientId: env.AWX_CLIENT_ID, apiKey: env.AWX_API_KEY, tokenStore: new KvTokenStore(env.KV) }),
         );
-  const eth = createPublicClient({ chain: mainnet, transport: http(env.ETH_RPC_URL) }) as PublicClient;
+  const eth = ethClient(env);
   return new CardService(store, issuer, {
     approvalSecret: env.APPROVAL_SECRET,
     cardholderEmail: env.CARDHOLDER_EMAIL ?? "agents@x402card.dev",
