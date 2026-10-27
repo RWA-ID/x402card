@@ -27,8 +27,18 @@ import type { TextRecords } from "../policy/records.ts";
 export const LEGACY_PARENT = "x402card.eth";
 /** Namespaces this gateway answers for. The same label under each is a separate card. */
 export const PARENT_NAMES = [LEGACY_PARENT, "xcard.eth"];
-/** Subnames with their own on-chain resolver (demo.x402card.eth, ai.xcard.eth = hosted sites); never issue cards under these. */
-export const RESERVED_LABELS = new Set(["demo", "ai", "www", "app", "api", "gateway"]);
+/**
+ * Never issue cards under these: subnames with their own on-chain resolver
+ * (demo.x402card.eth, ai.xcard.eth = hosted sites), and shop.xcard.eth, the
+ * demo merchant's payee name (see DEMO_MERCHANT).
+ */
+export const RESERVED_LABELS = new Set(["demo", "ai", "www", "app", "api", "gateway", "shop"]);
+/**
+ * The demo merchant's ENS name. Its org.x402.origins (x402 payee-name) lists
+ * the gateway's own origin, where /demo-merchant/* runs, so the payee gate
+ * verifies it and a TAP checkout signature for it is accepted there.
+ */
+export const DEMO_MERCHANT = "shop.xcard.eth";
 const TTL_SECONDS = 300;
 
 const RESOLVER_ABI = parseAbi(["function resolve(bytes name, bytes data) view returns (bytes)"]);
@@ -47,6 +57,8 @@ export interface RecordSource {
 export interface GatewayOptions {
   /** ETH address for each parent name itself. */
   parentAddr?: Address;
+  /** This gateway's origin, e.g. https://x402card.dmpay.workers.dev; listed by DEMO_MERCHANT. */
+  selfOrigin?: string;
 }
 
 export class GatewayError extends Error {
@@ -104,7 +116,9 @@ export const nameOfKey = (key: string) => (key.includes(".") ? key : `${key}.${L
 /** Answer the inner resolver call (text/addr/contenthash) as ABI-encoded result bytes. */
 export async function answer(name: string, inner: Hex, source: RecordSource, opts: GatewayOptions = {}): Promise<Hex> {
   const key = cardKeyOf(name);
-  const records = key === null ? null : key === "" ? {} : await source.getRecords(key);
+  const records =
+    name.toLowerCase() === DEMO_MERCHANT ? (opts.selfOrigin ? { "org.x402.origins": opts.selfOrigin } : {})
+    : key === null ? null : key === "" ? {} : await source.getRecords(key);
 
   const call = decodeFunctionData({ abi: PROFILE_ABI, data: inner });
   if (call.args[0] !== namehash(name)) throw new GatewayError(400, "node does not match name");

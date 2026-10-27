@@ -363,7 +363,7 @@ Every card name, `<label>.xcard.eth` or `<label>.x402card.eth`, exposes these te
 
 **Namespaces.** Both parents resolve through the same resolver and gateway. The same label under each is a separate card with its own policy and token. Pass the full name to choose; a bare label (`researcher`) means `x402card.eth`, the original namespace.
 
-Reserved labels that can't be issued: `ai`, `demo`, `www`, `app`, `api`, `gateway`. `ai.xcard.eth` and `demo.x402card.eth` have their own on-chain resolver and host the site.
+Reserved labels that can't be issued: `ai`, `demo`, `www`, `app`, `api`, `gateway`, `shop`. `ai.xcard.eth` and `demo.x402card.eth` have their own on-chain resolver and host the site; `shop.xcard.eth` is the demo merchant's payee name, served by the gateway.
 
 ## Policy engine
 
@@ -622,25 +622,28 @@ Change `PARENT_NAME` in `src/ens/gateway.ts` and `PARENT_ADDR` in `wrangler.json
 
 ## Demo runner
 
-[`scripts/demo.ts`](scripts/demo.ts) runs the six-step demo against a live Worker: as the **agent** over MCP (with the scoped token it gets at issuance), and as the **operator** over the admin API (optionally, the approval).
+[`scripts/demo.ts`](scripts/demo.ts) runs the nine-step demo against a live Worker: as the **agent** over MCP (with the scoped token it gets at issuance), and as the **operator** over the admin API (optionally, the approvals). The merchant is the Worker's own `/demo-merchant/`, whose ENS name `shop.xcard.eth` lists the Worker's origin in `org.x402.origins` (the gateway serves that record), so the payee gate verifies it and its checkout accepts TAP signatures.
 
 | Step | What happens |
 |---|---|
-| 01 | `issue_card("researcher", tx ≤ $50, month ≤ $500, MCC 5734,7372)` → card + agent token; records read back over ENS |
-| 02 | agent `pay`s $42 at MCC 5734 → approved |
+| 01 | `issue_card("researcher", tx ≤ $50, month ≤ $500, MCC 5734,7372, card.payee = verified-or-escalate)` → card + agent token; records read back over ENS |
+| 02 | agent `pay`s $42 at the demo merchant, naming `shop.xcard.eth` → the name lists the checkout's origin on mainnet → approved, payee verified |
 | 03 | agent `pay`s $18 at MCC 7995 → blocked by xcard, `MERCHANT_CATEGORY_NOT_ALLOWED`, never reaches the network |
-| 04 | agent requests $300 → paused (`300 > card.limit.tx`); a human approves on the approval page → `card.limit.monthly` 500 → 800 |
-| 05 | second MCC 7995 attempt → anomaly rule fires in the same call → card frozen, `card.status = frozen` over ENS |
-| 06 | $5 at an allowed merchant → `CARD_FROZEN` (the issuer card is `INACTIVE` too) |
+| 04 | the same $42 from a lookalike checkout claiming `shop.xcard.eth` → blocked, `PAYEE_MISMATCH` |
+| 05 | $15 to a merchant with no name → held for `alice.eth`; a human approves on the page → charged |
+| 06 | `sign_request(checkout)` for the demo merchant → its checkout verifies the Visa TAP signature: trusted agent; the same headers again → `REPLAYED`; a checkout signature for the lookalike → refused (`no_approved_payment`) |
+| 07 | agent requests $300 → paused (`300 > card.limit.tx`); a human approves → `card.limit.monthly` 500 → 800 |
+| 08 | second MCC 7995 attempt → anomaly rule fires in the same call → card frozen, `card.status = frozen` over ENS |
+| 09 | $5 at the verified merchant → `CARD_FROZEN` (the issuer card is `INACTIVE` too) |
 
 ```sh
 npm run demo                              # production; waits for you to approve on the page
 npm run demo -- --auto-approve            # unattended
 npm run demo -- --name researcher2        # each run needs a fresh name (or --reuse)
-npm run demo -- --api http://127.0.0.1:8787 --admin-token local-test   # local, with ISSUER=fake
+npm run demo -- --api http://127.0.0.1:8787 --admin-token local-test   # local, with ISSUER=fake (+ TAP_PRIVATE_KEY in .dev.vars for step 06)
 ```
 
-The runner doesn't yet cover the payee gate or TAP. Those flows run end to end in the test suite, and on the site's sections 04 and 05; adding them to the runner (a verified payee, a lookalike, a held payment approved on the page, then `sign_request` and the demo merchant) is next.
+Against a local Worker, the card is issued with `card.payee = any`: `shop.xcard.eth` lists the production Worker's origin, so a local one can't verify it, and steps 04 and 05 pay instead of blocking or holding (the runner says so).
 
 Options: `--pace <ms>` between beats (default 1400, for screen recording), `--no-ens` to read records from the gateway instead of mainnet ENS. Operator-side tools: `POST /api/cards/:name/simulate` has a merchant charge the card directly, skipping the pre-check, to show the issuer layer on its own; `POST /api/cards/:name/check` runs the anomaly rules immediately instead of waiting for the cron.
 
@@ -689,7 +692,7 @@ site/og/                source of the og.png share card
 
 - **Production checkout behind `pay`:** network-token (Visa Intelligent Commerce / Mastercard Agent Pay) or vaulted-PAN checkout in the issuer adapter, replacing the sandbox simulation.
 - **TAP body objects:** the Agentic Consumer Recognition Object and Payment Container, once Visa Intelligent Commerce credentials are available.
-- **Payee gate in the demo runner and the issue form:** `card.payee` and `card.payee.allow` fields on the approvals page's issue form (today they're set over MCP or the API), and payee/TAP steps in `scripts/demo.ts`.
+- **Payee fields on the issue form:** `card.payee` and `card.payee.allow` on the approvals page's issue form (today they're set over MCP or the API).
 - **An origin-only verifier** exported from `@x402identity/payee`, replacing the placeholder-`payTo` call.
 - **A strongly consistent nonce store** (Durable Object) for the demo merchant.
 - **Wallet-signed approvals** (EIP-712 from `card.approver`, ERC-1271 for Safes) replacing the admin token for approvals and unfreezes.

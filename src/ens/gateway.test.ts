@@ -30,3 +30,16 @@ test("gateway answers both namespaces from their own records", async () => {
     assert.equal(decodeFunctionResult({ abi: ABI, functionName: "addr", data }), SAFE);
   }
 });
+
+test("shop.xcard.eth lists the gateway's own origin as its payee origin", async () => {
+  const origins = async (name: string, selfOrigin?: string) =>
+    decodeFunctionResult({
+      abi: ABI,
+      functionName: "text",
+      data: await answer(name, encodeFunctionData({ abi: ABI, functionName: "text", args: [namehash(name), "org.x402.origins"] }), source, { selfOrigin }),
+    });
+  assert.equal(await origins("shop.xcard.eth", "https://x402card.dmpay.workers.dev"), "https://x402card.dmpay.workers.dev");
+  assert.equal(await origins("Shop.XCard.eth", "https://x402card.dmpay.workers.dev"), "https://x402card.dmpay.workers.dev");
+  assert.equal(await origins("shop.xcard.eth"), "", "no origin known: no record");
+  assert.equal(await origins("shop.x402card.eth", "https://x402card.dmpay.workers.dev"), "", "only the xcard.eth name");
+});

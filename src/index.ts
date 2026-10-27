@@ -97,6 +97,7 @@ export default {
     if (path.startsWith("/gateway")) {
       return gatewayResponse(req, path, store, env.GATEWAY_SIGNER_KEY as Hex, {
         parentAddr: env.PARENT_ADDR as Address | undefined,
+        selfOrigin: url.origin,
       });
     }
 
