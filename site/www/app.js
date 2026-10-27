@@ -299,6 +299,59 @@
       await c.to(m2, [{ transform: `translateY(${d * 0.5}px)` }, { transform: "translateY(-12px)", offset: 0.4 }, { transform: "translate(-9px,0)", offset: 0.55 }, { transform: "translate(8px,0)", offset: 0.68 }, { transform: "translate(-5px,0)", offset: 0.8 }, { transform: "translate(3px,0)", offset: 0.9 }, { transform: "translate(0,0)" }], { d: 800, e: "ease-out" });
     },
 
+    async payee(c) {
+      const { a } = c, red = "oklch(0.7 0.19 25)", amb = "oklch(0.84 0.14 80)";
+      const inRow = [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }];
+      const pill = [{ opacity: 0, transform: "scale(0.9)" }, { opacity: 1, transform: "none" }];
+      await c.wait(300);
+      // 1. The listed origin pays: the record row lights up as it matches.
+      await c.to(a("p1"), inRow, { d: 420 });
+      await c.wait(350);
+      c.to(a("origin"), [{ background: "rgba(0,0,0,0)" }, { background: "oklch(0.8 0.16 155 / 0.14)", offset: 0.4 }, { background: "rgba(0,0,0,0)" }], { d: 1200 });
+      c.to(a("p1"), [{ borderColor: "rgba(255,255,255,0.1)" }, { borderColor: "oklch(0.8 0.16 155 / 0.5)" }], { d: 300 });
+      await c.to(a("s1"), pill, { d: 300, delay: 250 });
+      await c.wait(650);
+      // 2. A lookalike claims the same name: no match, blocked.
+      await c.to(a("p2"), inRow, { d: 420 });
+      await c.wait(350);
+      c.to(a("origin"), [{ background: "rgba(0,0,0,0)" }, { background: "oklch(0.7 0.19 25 / 0.12)", offset: 0.4 }, { background: "rgba(0,0,0,0)" }], { d: 1200 });
+      c.to(a("p2"), [{ borderColor: "rgba(255,255,255,0.1)", background: "#0a0b0d" }, { borderColor: red, background: "oklch(0.7 0.19 25 / 0.08)" }], { d: 250 });
+      c.to(a("p2"), [{ transform: "translateX(0)" }, { transform: "translateX(-8px)", offset: 0.25 }, { transform: "translateX(7px)", offset: 0.5 }, { transform: "translateX(-4px)", offset: 0.75 }, { transform: "translateX(0)" }], { d: 480, e: "ease-out" });
+      await c.to(a("s2"), pill, { d: 300, delay: 200 });
+      await c.wait(650);
+      // 3. No name to check: held for the approver.
+      await c.to(a("p3"), inRow, { d: 420 });
+      await c.wait(350);
+      c.to(a("p3"), [{ borderColor: "rgba(255,255,255,0.1)" }, { borderColor: amb }], { d: 300 });
+      await c.to(a("s3"), pill, { d: 300, delay: 200 });
+      await c.to(a("cap"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 450 });
+    },
+
+    async tap(c) {
+      const { a } = c, grn = "oklch(0.8 0.16 155)";
+      await c.wait(300);
+      await c.to(a("req"), [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }], { d: 450 });
+      await c.to(a("l1"), [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], { d: 300 });
+      await c.to(a("ver"), [{ opacity: 0 }, { opacity: 1 }], { d: 300 });
+      c.text(a("vst"), "verifying…");
+      for (let i = 1; i <= 5; i++) {
+        await c.wait(260);
+        const step = a("v" + i), dot = step.querySelector("i");
+        c.text(dot, "✓");
+        c.to(dot, [{ background: "rgba(0,0,0,0)", borderColor: "rgba(255,255,255,0.18)" }, { background: grn, borderColor: grn }], { d: 200 });
+        c.to(step, [{ color: "#5d626c" }, { color: "#b9bdc6" }], { d: 200 });
+      }
+      c.text(a("vst"), "trusted agent");
+      c.to(a("vst"), [{ color: grn }, { color: grn }], { d: 10 });
+      c.to(a("ver"), [{ borderColor: "rgba(255,255,255,0.08)" }, { borderColor: "oklch(0.8 0.16 155 / 0.5)" }], { d: 300 });
+      await c.to(a("ok"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 400 });
+      await c.wait(1200);
+      // The same headers again: rejected, while the first request stays trusted.
+      c.to(a("req"), [{ transform: "translateY(0)" }, { transform: "translateY(4px)", offset: 0.4 }, { transform: "translateY(0)" }], { d: 360 });
+      await c.wait(300);
+      await c.to(a("err"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 400 });
+    },
+
     async 4(c) {
       const { a } = c;
       const amb = "oklch(0.84 0.14 80)", grn = "oklch(0.8 0.16 155)";
@@ -370,9 +423,10 @@
     active: { st: "UNFROZEN", c: "oklch(0.8 0.16 155)", bg: "oklch(0.8 0.16 155 / 0.1)" },
     declined: { st: "DECLINED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
     blocked: { st: "BLOCKED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
+    payee: { st: "PAYEE_MISMATCH", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
   };
   const SAMPLE = [
-    ["researcher", "ModelHub API · inference", "$4.12", "ok"],
+    ["researcher", "ModelHub API (modelhub.eth ✓) · inference", "$4.12", "ok"],
     ["scout", "Vectorbase · storage", "$11.00", "ok"],
     ["travel-bot", "SkyFare · airline", "$389.00", "hold"],
     ["ops-copilot", "Computa · GPU hours", "$27.40", "ok"],
@@ -380,6 +434,7 @@
     ["researcher", "alice.eth · top-up", "+$300.00", "fund"],
     ["scout", "DataLoom · datasets", "$46.00", "ok"],
     ["ledger-bot", "velocity anomaly", "—", "frz"],
+    ["scout", "modelhub-pay.example · lookalike checkout", "$20.00", "payee"],
     ["ops-copilot", "MailRelay · email API", "$2.80", "ok"],
     ["travel-bot", "GeoTile · maps API", "$6.50", "ok"],
     ["pricing-bot", "LuxeGoods · retail", "$129.00", "mcc"],
@@ -387,7 +442,8 @@
   const EVENT_KIND = { issued: "issued", charged: "ok", funded: "fund", escalated: "hold", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active" };
   // Declines show their rule: MCC declines get the MCC pill, the rest a generic DECLINED.
   // "blocked" = stopped by xcard's pre-check before reaching the card network.
-  const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined") : e.kind === "blocked" ? "blocked" : EVENT_KIND[e.kind] || "ok");
+  const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined")
+    : e.kind === "blocked" ? (e.code === "PAYEE_MISMATCH" ? "payee" : "blocked") : EVENT_KIND[e.kind] || "ok");
   const hhmmss = (d) => d.toTimeString().slice(0, 8);
 
   function rowEl(r) {

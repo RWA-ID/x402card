@@ -1,0 +1,63 @@
+<!doctype html>
+<!-- Source for site/www/og.png (1200x630). Render: see site/og/README.md. -->
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=block">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: #0a0b0d; }
+  body { font-family: Geist, system-ui, sans-serif; color: #eceef1; position: relative; padding: 64px 72px; }
+  .glow { position: absolute; inset: 0; background: radial-gradient(55% 75% at 82% 38%, oklch(0.74 0.19 258 / 0.30), transparent 70%), radial-gradient(40% 50% at 10% 110%, oklch(0.74 0.19 258 / 0.10), transparent 70%); }
+  .top { position: relative; display: flex; align-items: center; justify-content: space-between; }
+  .wm { display: flex; align-items: center; font-weight: 600; font-size: 34px; letter-spacing: -0.02em; }
+  .wm img { width: 44px; height: 44px; margin-right: 14px; }
+  .wm i { font-style: normal; color: oklch(0.74 0.19 258); }
+  .url { font-family: "Geist Mono", monospace; font-size: 20px; color: #8b909a; }
+  .main { position: relative; display: grid; grid-template-columns: 1fr 400px; gap: 40px; align-items: center; margin-top: 54px; }
+  h1 { font-weight: 500; font-size: 60px; line-height: 1.02; letter-spacing: -0.035em; }
+  h1 span { color: #6b707a; }
+  .sub { margin-top: 26px; font-family: "Geist Mono", monospace; font-size: 19px; color: #b9bdc6; line-height: 1.6; }
+  .sub b { color: oklch(0.82 0.12 258); font-weight: 500; }
+  .card { position: relative; width: 400px; aspect-ratio: 1.586; border-radius: 24px; padding: 26px 28px; display: flex; flex-direction: column; justify-content: space-between;
+    background: linear-gradient(140deg, #1d212b 0%, #111318 55%, #0b0c10 100%); border: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 0 40px 80px -30px rgba(0,0,0,0.9), 0 0 0 1px oklch(0.74 0.19 258 / 0.25), 0 0 60px oklch(0.74 0.19 258 / 0.25); }
+  .card-top { display: flex; justify-content: space-between; align-items: center; }
+  .card-top .wm { font-size: 21px; } .card-top .wm img { width: 26px; height: 26px; margin-right: 9px; }
+  .kind { font-family: "Geist Mono", monospace; font-size: 11px; letter-spacing: 0.14em; color: #8b909a; }
+  .chip { width: 46px; height: 34px; border-radius: 7px; background: linear-gradient(135deg, #3b404b, #22252c); border: 1px solid rgba(255,255,255,0.14); }
+  .num { font-family: "Geist Mono", monospace; font-size: 15px; letter-spacing: 0.16em; color: #8b909a; }
+  .name { font-family: "Geist Mono", monospace; font-size: 21px; margin-top: 8px; }
+  .badges { position: absolute; right: 24px; top: 92px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .badge { font-family: "Geist Mono", monospace; font-size: 13px; padding: 5px 10px; border-radius: 7px; }
+  .ok { color: oklch(0.8 0.16 155); background: oklch(0.8 0.16 155 / 0.14); border: 1px solid oklch(0.8 0.16 155 / 0.4); }
+  .tap { color: oklch(0.86 0.1 258); background: oklch(0.74 0.19 258 / 0.16); border: 1px solid oklch(0.74 0.19 258 / 0.45); }
+  .built { position: absolute; left: 72px; right: 72px; bottom: 50px; display: flex; align-items: center; gap: 40px; padding-top: 26px; border-top: 1px solid rgba(255,255,255,0.08); }
+  .built .k { font-family: "Geist Mono", monospace; font-size: 14px; letter-spacing: 0.1em; color: #5d626c; text-transform: uppercase; }
+  .hub { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 20px; letter-spacing: -0.02em; }
+  .hub img { width: 28px; height: 28px; }
+</style></head>
+<body>
+  <div class="glow"></div>
+  <div class="top">
+    <div class="wm"><img src="../www/brand/xcard-mark.svg" alt="">x<i>·</i>card</div>
+    <div class="url">ai.xcard.eth.limo</div>
+  </div>
+  <div class="main">
+    <div>
+      <h1>Pay by name.<br><span>Trust runs both ways.</span></h1>
+      <div class="sub">ENS names · spend policy in records<br><b>verified payees</b> · <b>Visa TAP</b> at checkout</div>
+    </div>
+    <div class="card">
+      <div class="card-top"><div class="wm"><img src="../www/brand/xcard-mark.svg" alt="">x<i>·</i>card</div><div class="kind">AGENT · VIRTUAL</div></div>
+      <div class="chip"></div>
+      <div class="badges"><div class="badge ok">✓ modelhub.eth</div><div class="badge tap">agent-payer-auth</div></div>
+      <div><div class="num">•••• •••• •••• 4021</div><div class="name">researcher.xcard.eth</div></div>
+    </div>
+  </div>
+  <div class="built">
+    <span class="k">Built on</span>
+    <img src="../www/brand/airwallex.svg" alt="Airwallex" style="height:24px">
+    <img src="../www/brand/visa.svg" alt="Visa" style="height:21px">
+    <img src="../www/brand/ens.svg" alt="ENS" style="height:28px">
+    <span class="hub"><img src="../www/brand/x402id-mark.svg" alt="">x402 Identity Hub</span>
+  </div>
+</body></html>
