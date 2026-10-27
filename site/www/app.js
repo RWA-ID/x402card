@@ -1,4 +1,4 @@
-// x·card demo site. Ported from the design reference's Component class
+// X Card demo site. Ported from the design reference's Component class
 // (site/design/x402 Card.dc.html); timings and easings match it. Adds live
 // lookups against the gateway Worker where real data exists.
 (() => {
@@ -441,7 +441,7 @@
   ];
   const EVENT_KIND = { issued: "issued", charged: "ok", funded: "fund", escalated: "hold", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active" };
   // Declines show their rule: MCC declines get the MCC pill, the rest a generic DECLINED.
-  // "blocked" = stopped by xcard's pre-check before reaching the card network.
+  // "blocked" = stopped by X Card's pre-check before reaching the card network.
   const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined")
     : e.kind === "blocked" ? (e.code === "PAYEE_MISMATCH" ? "payee" : "blocked") : EVENT_KIND[e.kind] || "ok");
   const hhmmss = (d) => d.toTimeString().slice(0, 8);
@@ -494,7 +494,7 @@
         if (!liveMode) {
           liveMode = true; clearInterval(sampleTimer); box.textContent = "";
           dot.classList.remove("sample"); label.textContent = "Live · sandbox stream";
-          note.textContent = "Real policy events from the xcard sandbox: payments, blocks, top-ups, escalations, approvals and freezes.";
+          note.textContent = "Real policy events from the X Card sandbox: payments, blocks, top-ups, escalations, approvals and freezes.";
           if (!R) dotAnim = dot.animate([{ opacity: 1 }, { opacity: 0.25 }, { opacity: 1 }], { duration: 1600, iterations: Infinity });
         }
         const fresh = events.filter((e) => !seen.has(e.at + e.name + e.kind)).reverse();

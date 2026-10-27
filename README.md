@@ -1,17 +1,17 @@
-# x·card
+# X Card
 
 **Names, policy and trust for AI agent cards.**
 Pay by name. Trust runs both ways.
 
-xcard is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). xcard sits on top of them and adds the parts an AI agent needs before anyone should let it spend:
+X Card is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). X Card sits on top of them and adds the parts an AI agent needs before anyone should let it spend:
 
 - **A name.** Each agent card gets a human-readable ENS name such as `researcher.xcard.eth` (or `researcher.x402card.eth`: you pick the namespace) that stays the same when the card underneath is reissued, rotated or moved to another program.
 - **A public policy.** Limits, currencies, allowed merchant categories, status and approver are ENS text records. Anyone (a merchant, another agent, an auditor) can check them with any ENS client, and every answer is signed and verified on-chain.
 - **No credentials in the agent.** The agent works through an MCP server with a token scoped to its own card. It never sees the card number, CVC, card ID or an issuer API key.
-- **A human in the loop.** Spending inside policy goes through. Funding requests above policy, and payments to merchants xcard can't verify, wait for the named approver. An anomaly freezes the card, flips `card.status` to `frozen` in ENS, and only a human can unfreeze it.
-- **Trust in both directions.** Before a payment, xcard checks that the checkout really belongs to the merchant the agent means to pay ([verified payee](#verified-payee), using the open x402 `payee-name` records). At checkout, xcard signs the agent's request with [Visa's Trusted Agent Protocol](#visa-trusted-agent-protocol-tap) so the merchant can tell a trusted agent from a bot. Both checks are about the same domain.
+- **A human in the loop.** Spending inside policy goes through. Funding requests above policy, and payments to merchants X Card can't verify, wait for the named approver. An anomaly freezes the card, flips `card.status` to `frozen` in ENS, and only a human can unfreeze it.
+- **Trust in both directions.** Before a payment, X Card checks that the checkout really belongs to the merchant the agent means to pay ([verified payee](#verified-payee), using the open x402 `payee-name` records). At checkout, X Card signs the agent's request with [Visa's Trusted Agent Protocol](#visa-trusted-agent-protocol-tap) so the merchant can tell a trusted agent from a bot. Both checks are about the same domain.
 
-The policy is enforced twice: by xcard before anything is sent, and by the card program's own authorization controls when the charge reaches the network.
+The policy is enforced twice: by X Card before anything is sent, and by the card program's own authorization controls when the charge reaches the network.
 
 | | |
 |---|---|
@@ -86,13 +86,13 @@ The policy is enforced twice: by xcard before anything is sent, and by the card 
 
 1. **Register.** `issue_card("researcher", policy)` creates a DELEGATE cardholder and a non-personalized virtual card on Airwallex, with the policy mapped to Airwallex `authorization_controls`. It publishes the policy as ENS text records and returns an **agent token** scoped to that one name.
 2. **Pay.** `pay(amount, currency, mcc, merchant, merchant_url, payee_name)` is checked against the ENS policy first and refused before it reaches the card network if it breaks a rule. Then the [payee gate](#verified-payee) checks that the checkout's origin belongs to the ENS name the agent says it is paying. Airwallex then checks the authorization against the card's controls again: per-transaction limit, monthly limit, currencies and MCC allow-list. Either way a refusal carries the rule it hit (`MERCHANT_CATEGORY_NOT_ALLOWED`, `PAYEE_MISMATCH`, `LIMIT_EXCEEDED`, …), so the agent can adapt instead of retrying. See [How an agent pays](#how-an-agent-pays-without-the-card-number).
-3. **Sign the checkout.** After an approved payment, `sign_request(url, "checkout")` returns [Visa TAP](#visa-trusted-agent-protocol-tap) headers for the agent's request to that merchant, which the merchant verifies against xcard's published key.
+3. **Sign the checkout.** After an approved payment, `sign_request(url, "checkout")` returns [Visa TAP](#visa-trusted-agent-protocol-tap) headers for the agent's request to that merchant, which the merchant verifies against X Card's published key.
 4. **Fund.** `request_funding(amount, currency)` either raises the monthly allowance right away (within `card.limit.tx` and above the wallet reserve floor) or creates a **pending approval** for the human in `card.approver`. The approval is HMAC-bound to the exact name, amount and currency.
 5. **Freeze.** A cron job checks each card's recent activity. Two disallowed-merchant attempts or two payee mismatches within 10 minutes, or a burst of authorizations, freezes the card on Airwallex and sets `card.status=frozen` in ENS. Agents can freeze their own card; only a human can unfreeze.
 
 ## How an agent pays without the card number
 
-The agent never holds a payment credential. It asks xcard to pay, and the credential travels from the card program to the merchant without passing through the agent:
+The agent never holds a payment credential. It asks X Card to pay, and the credential travels from the card program to the merchant without passing through the agent:
 
 ```
   agent ──pay(merchant, merchant_url, payee_name, amount, currency, mcc)──▶ xcard
@@ -118,29 +118,29 @@ The agent never holds a payment credential. It asks xcard to pay, and the creden
 
 In production, step 2 uses whatever the card program offers for agent checkout: an agent-scoped **network token** (as in Visa Intelligent Commerce or Mastercard Agent Pay), or a **vault** that swaps the real card number into the merchant's checkout on the server side. Either way the agent's MCP token can't be turned into a card number, and the card number can't be used outside its authorization controls.
 
-**What runs today:** steps 1, 2, 4 and 5 run as described: the agent calls the `pay` MCP tool, xcard pre-checks it and reads the payee's ENS records on mainnet, the issuer authorizes it against the card's controls, and `sign_request` returns real TAP signatures. Step 3 is simulated because the sandbox has no real merchants: the adapter uses Airwallex's simulation endpoint, which runs a real authorization against the card's controls. A production adapter swaps in network-token or vaulted checkout behind the same `Issuer` interface.
+**What runs today:** steps 1, 2, 4 and 5 run as described: the agent calls the `pay` MCP tool, X Card pre-checks it and reads the payee's ENS records on mainnet, the issuer authorizes it against the card's controls, and `sign_request` returns real TAP signatures. Step 3 is simulated because the sandbox has no real merchants: the adapter uses Airwallex's simulation endpoint, which runs a real authorization against the card's controls. A production adapter swaps in network-token or vaulted checkout behind the same `Issuer` interface.
 
 `pay` answers with one of four decisions, so the agent knows which layer stopped it:
 
 | `decision` | Meaning |
 |---|---|
 | `approved` | Pre-check and payee gate passed and the issuer authorized the charge |
-| `blocked` | Refused by xcard (`stage: "x402card"`); nothing reached the card network |
-| `declined` | Passed xcard's checks, refused by the issuer (`stage: "issuer"`), e.g. the monthly allowance is spent |
+| `blocked` | Refused by X Card (`stage: "x402card"`); nothing reached the card network |
+| `declined` | Passed X Card's checks, refused by the issuer (`stage: "issuer"`), e.g. the monthly allowance is spent |
 | `pending_human` | The payee gate held it for `card.approver` (`approval_id`, `approval_url`); approving it makes the charge |
 
 Every result carries `payee` (the gate's check) when the payee was evaluated. Codes are the same at both layers where they overlap (`MERCHANT_CATEGORY_NOT_ALLOWED`, `LIMIT_EXCEEDED`, `CURRENCY_NOT_ALLOWED`, `CARD_FROZEN`, …); the payee gate adds `PAYEE_MISMATCH`, `PAYEE_UNVERIFIED` and `PAYEE_NOT_ALLOWED`, and a held payment the approver denied replays as `DENIED_BY_APPROVER`. Blocked and declined attempts both count toward the anomaly rules, and a refusal runs them right away, so the second disallowed-merchant attempt freezes the card in the same call. Passing the same `request_id` on a retry replays the first result instead of charging again.
 
 ## Trust both ways
 
-Card limits answer *how much* and *what kind of merchant*. Two more questions decide whether an agent payment is safe, and xcard answers both:
+Card limits answer *how much* and *what kind of merchant*. Two more questions decide whether an agent payment is safe, and X Card answers both:
 
-| Question | Who asks | How xcard answers | Standard |
+| Question | Who asks | How X Card answers | Standard |
 |---|---|---|---|
-| Is this checkout really the merchant I mean to pay? | the agent (and its card policy) | [Verified payee](#verified-payee): the merchant's ENS name lists the origins it takes payments on; xcard reads them on mainnet before charging | x402 [`payee-name`](https://github.com/x402-foundation/wg-identity/issues/36) records |
-| Is this request from a trusted agent or a bot? | the merchant (or its CDN) | [Visa TAP](#visa-trusted-agent-protocol-tap): xcard signs the agent's request; the merchant verifies against xcard's published key | Visa Trusted Agent Protocol, RFC 9421 |
+| Is this checkout really the merchant I mean to pay? | the agent (and its card policy) | [Verified payee](#verified-payee): the merchant's ENS name lists the origins it takes payments on; X Card reads them on mainnet before charging | x402 [`payee-name`](https://github.com/x402-foundation/wg-identity/issues/36) records |
+| Is this request from a trusted agent or a bot? | the merchant (or its CDN) | [Visa TAP](#visa-trusted-agent-protocol-tap): X Card signs the agent's request; the merchant verifies against X Card's published key | Visa Trusted Agent Protocol, RFC 9421 |
 
-The two are bound to the same domain. The payee gate verifies the checkout's origin, and xcard issues a TAP checkout signature only for an origin it just approved a payment to, so the merchant that receives a trusted-agent signature is the one the agent's policy checked.
+The two are bound to the same domain. The payee gate verifies the checkout's origin, and X Card issues a TAP checkout signature only for an origin it just approved a payment to, so the merchant that receives a trusted-agent signature is the one the agent's policy checked.
 
 ```
   agent                         xcard                               merchant (shop.example)
@@ -169,7 +169,7 @@ A merchant (or any payee) sets one text record on its ENS name, listing the orig
 shop.eth   org.x402.origins = "https://shop.example https://api.shop.example"
 ```
 
-This is the origin half of the x402 [`payee-name`](https://github.com/x402-foundation/wg-identity/issues/36) extension from [x402 Identity Hub](https://x402id.dev). Any ENS manager can set it (the ENS app, a Safe, a script). Nothing else is needed: no registration with xcard, no API key.
+This is the origin half of the x402 [`payee-name`](https://github.com/x402-foundation/wg-identity/issues/36) extension from [x402 Identity Hub](https://x402id.dev). Any ENS manager can set it (the ENS app, a Safe, a script). Nothing else is needed: no registration with X Card, no API key.
 
 ### What the agent passes
 
@@ -181,7 +181,7 @@ This is the origin half of the x402 [`payee-name`](https://github.com/x402-found
   "request_id": "order-1182" }
 ```
 
-xcard takes the origin of `merchant_url` (`https://api.modelhub.example`) and reads `payee_name`'s records on Ethereum mainnet with [`@x402identity/payee`](https://www.npmjs.com/package/@x402identity/payee) ([`src/policy/payee.ts`](src/policy/payee.ts)). The check runs only after the policy pre-check passes, so a payment that breaks a limit never costs a chain read.
+X Card takes the origin of `merchant_url` (`https://api.modelhub.example`) and reads `payee_name`'s records on Ethereum mainnet with [`@x402identity/payee`](https://www.npmjs.com/package/@x402identity/payee) ([`src/policy/payee.ts`](src/policy/payee.ts)). The check runs only after the policy pre-check passes, so a payment that breaks a limit never costs a chain read.
 
 ### Outcomes
 
@@ -220,12 +220,12 @@ What happens next is the card's `card.payee` record:
 ### Limits
 
 - **The origin comes from the agent.** This protects an honest agent from a lookalike checkout, prompt injection or a typo. It doesn't stop an agent that deliberately reports a false URL; the issuer's limits and MCCs still bind that agent, and the TAP signature it gets is only valid on the domain it reported.
-- **Card payments use the origin half only.** A card payment has no `payTo` address (the card network routes the money), so the address-binding half of `payee-name` doesn't apply. The verifier checks origin before `payTo`, so xcard passes a placeholder `payTo` that can never match and reads `payto-not-listed` as "origin verified". A dedicated origin-only export in `@x402identity/payee` is on the roadmap.
+- **Card payments use the origin half only.** A card payment has no `payTo` address (the card network routes the money), so the address-binding half of `payee-name` doesn't apply. The verifier checks origin before `payTo`, so X Card passes a placeholder `payTo` that can never match and reads `payto-not-listed` as "origin verified". A dedicated origin-only export in `@x402identity/payee` is on the roadmap.
 - **Most merchants haven't opted in yet,** so most will read `unverified`. Use `verified-or-escalate` to keep paying them with a human in the loop, and `card.payee.allow` to pin a card to the merchants it should use.
 
 ## Visa Trusted Agent Protocol (TAP)
 
-The payee gate tells the agent who the merchant is. [TAP](https://developer.visa.com/capabilities/trusted-agent-protocol) tells the merchant who the agent is. The agent sends an [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) HTTP message signature over the request's `@authority` and `@path`, tagged `agent-browser-auth` (browsing) or `agent-payer-auth` (checkout). A merchant, or the CDN in front of it, verifies it against the agent's public key and can serve the agent instead of blocking it as a bot. xcard acts as the agent's signing provider: the private key stays in the Worker, and the agent gets per-request headers.
+The payee gate tells the agent who the merchant is. [TAP](https://developer.visa.com/capabilities/trusted-agent-protocol) tells the merchant who the agent is. The agent sends an [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) HTTP message signature over the request's `@authority` and `@path`, tagged `agent-browser-auth` (browsing) or `agent-payer-auth` (checkout). A merchant, or the CDN in front of it, verifies it against the agent's public key and can serve the agent instead of blocking it as a bot. X Card acts as the agent's signing provider: the private key stays in the Worker, and the agent gets per-request headers.
 
 ### Getting signatures
 
@@ -249,7 +249,7 @@ The payee gate tells the agent who the merchant is. [TAP](https://developer.visa
 
 The agent sends both headers, unchanged, on its request to exactly that host and path.
 
-| `purpose` | Tag | When xcard signs |
+| `purpose` | Tag | When X Card signs |
 |---|---|---|
 | `browse` | `agent-browser-auth` | any http(s) URL: product pages, availability, prices |
 | `checkout` | `agent-payer-auth` | only for an origin this card paid with policy approval in the last 15 minutes, directly or after `card.approver` released a held payment. Otherwise `no_approved_payment`. |
@@ -292,16 +292,16 @@ The `keyid` is the key's RFC 7638 JWK thumbprint. To rotate: generate a new key 
 
 ### Compatibility with Visa's spec and reference code
 
-Visa's published spec and its reference implementation disagree in a few places. xcard signs so that both accept it:
+Visa's published spec and its reference implementation disagree in a few places. X Card signs so that both accept it:
 
-| | Published spec | Reference code (`cdn-proxy`) | xcard |
+| | Published spec | Reference code (`cdn-proxy`) | X Card |
 |---|---|---|---|
 | key parameter | `keyid` | reads `keyId` | sends **both**, both inside the signed parameters |
 | `alg` | `Ed25519` | `ed25519` | `ed25519` (the RFC 9421 registered name); the verifier accepts either case |
 | signature base | sample includes `sig2=` in `@signature-params` | `Signature-Input` verbatim minus `sig2=` | RFC 9421 form, the same as the reference code |
 | key lookup | `GET /keys?keyID=` → JWK | `GET {registry}/keys/{keyId}` → `{key_id, algorithm, public_key}` | serves both |
 
-[`src/tap/tap.test.ts`](src/tap/tap.test.ts) runs every xcard signature through a line-for-line port of the reference merchant's verifier, checks the RFC 8037 thumbprint test vector, and covers replay, wrong host or path, expired and future timestamps, unknown keys and other dictionary members.
+[`src/tap/tap.test.ts`](src/tap/tap.test.ts) runs every X Card signature through a line-for-line port of the reference merchant's verifier, checks the RFC 8037 thumbprint test vector, and covers replay, wrong host or path, expired and future timestamps, unknown keys and other dictionary members.
 
 ### Not yet
 
@@ -428,7 +428,7 @@ curl -s https://x402card.dmpay.workers.dev/mcp \
 |---|---|---|
 | `issue_card` *(admin)* | `name`, `policy: { limit_tx, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }` | `card`, `agent_token` (shown once) |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
-| `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `merchant_url?`, `payee_name?`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (xcard pre-check or payee gate) · `declined` + `code` (issuer) · `pending_human` + `approval_id`, `approval_url` (payee held); `payee` check; `card_frozen` if this attempt froze the card |
+| `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `merchant_url?`, `payee_name?`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (X Card pre-check or payee gate) · `declined` + `code` (issuer) · `pending_human` + `approval_id`, `approval_url` (payee held); `payee` check; `card_frozen` if this attempt froze the card |
 | `sign_request` | `name?`, `url`, `purpose: browse \| checkout` | Visa TAP `headers` (`Signature-Input`, `Signature`) for one request to `url`, `tag`, `keyid`, `expires_at`, `keys_url`. `checkout` needs an approved `pay` to that origin in the last 15 min. See [Visa TAP](#visa-trusted-agent-protocol-tap). |
 | `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver`, `approval_url` · `denied` + `reason` |
 | `freeze` | `name?`, `reason?` | `card` (now `frozen`) |
@@ -501,18 +501,18 @@ Typical platform flows:
 
 - **Agent platform / framework:** issue one card per agent with the admin token, and pass the scoped agent token into the agent's MCP config. Your platform never stores card numbers.
 - **Finance / ops console:** poll `/api/approvals`, show the request with its purpose, and post the decision. Watch `/public/feed` or the ENS records for freezes.
-- **Merchant / counterparty:** resolve `card.status` and limits over ENS before accepting an order from an agent; verify the agent's [TAP signature](#verifying-as-a-merchant) at checkout; set `org.x402.origins` on your own ENS name so xcard agents see you as a [verified payee](#how-a-merchant-opts-in).
+- **Merchant / counterparty:** resolve `card.status` and limits over ENS before accepting an order from an agent; verify the agent's [TAP signature](#verifying-as-a-merchant) at checkout; set `org.x402.origins` on your own ENS name so X Card agents see you as a [verified payee](#how-a-merchant-opts-in).
 
 ## Integrate: bring your own card issuer
 
-xcard never issues the card itself. It's a **naming and policy layer**: a portable, human-readable identity (`<agent>.xcard.eth`) with public spend policy, scoped agent access, human approvals and a kill switch. A card from any program can sit behind that name. Agent-card programs from card networks, issuing platforms and wallet/crypto card providers can all attach their cards to an xcard name instead of building naming, policy publication and approval flows themselves.
+X Card never issues the card itself. It's a **naming and policy layer**: a portable, human-readable identity (`<agent>.xcard.eth`) with public spend policy, scoped agent access, human approvals and a kill switch. A card from any program can sit behind that name. Agent-card programs from card networks, issuing platforms and wallet/crypto card providers can all attach their cards to an X Card name instead of building naming, policy publication and approval flows themselves.
 
 What an issuer gets by attaching to a name:
 
 - **A stable handle that outlives card numbers.** Reissue, rotate or swap the underlying card; agents, merchants and dashboards keep using `researcher.xcard.eth`.
 - **Policy anyone can read.** Merchants and counterparties check `card.status` and limits over ENS before accepting an order, with no integration with the issuer's API.
 - **Approvals and freezes in one place,** applied consistently whatever rails the card runs on.
-- **Agents never hold credentials.** The agent talks MCP to xcard; the issuer's API keys and PANs stay server-side.
+- **Agents never hold credentials.** The agent talks MCP to X Card; the issuer's API keys and PANs stay server-side.
 
 Airwallex is the first adapter. Card operations go through one interface ([`src/service.ts`](src/service.ts)):
 
@@ -530,7 +530,7 @@ export interface Issuer {
 
 An adapter for another program maps each record to whatever control that program supports:
 
-| xcard record | What the adapter needs from the issuer |
+| X Card record | What the adapter needs from the issuer |
 |---|---|
 | `card.limit.tx` | per-authorization amount limit |
 | `card.limit.monthly` | rolling or calendar-month spend limit, updatable after issuance |
@@ -542,7 +542,7 @@ An adapter for another program maps each record to whatever control that program
 If a program can't enforce one of these at authorization time (for example, no MCC controls), the adapter should leave it to the policy engine's after-the-fact anomaly checks and say so in the card's records. Two ways to integrate:
 
 1. **Adapter in this repo:** implement `Issuer` for your API and select it per card. Each card's issuer is recorded privately, never in public records.
-2. **Attach an existing card:** keep issuing on your own platform, and register the card under a name with your policy. xcard publishes the records, runs approvals and calls your freeze/limit endpoints. *(Planned: `attach_card` tool and a `card.issuer` record naming the program.)*
+2. **Attach an existing card:** keep issuing on your own platform, and register the card under a name with your policy. X Card publishes the records, runs approvals and calls your freeze/limit endpoints. *(Planned: `attach_card` tool and a `card.issuer` record naming the program.)*
 
 ## Compatibility
 
@@ -628,7 +628,7 @@ Change `PARENT_NAME` in `src/ens/gateway.ts` and `PARENT_ADDR` in `wrangler.json
 |---|---|
 | 01 | `issue_card("researcher", tx ≤ $50, month ≤ $500, MCC 5734,7372, card.payee = verified-or-escalate)` → card + agent token; records read back over ENS |
 | 02 | agent `pay`s $42 at the demo merchant, naming `shop.xcard.eth` → the name lists the checkout's origin on mainnet → approved, payee verified |
-| 03 | agent `pay`s $18 at MCC 7995 → blocked by xcard, `MERCHANT_CATEGORY_NOT_ALLOWED`, never reaches the network |
+| 03 | agent `pay`s $18 at MCC 7995 → blocked by X Card, `MERCHANT_CATEGORY_NOT_ALLOWED`, never reaches the network |
 | 04 | the same $42 from a lookalike checkout claiming `shop.xcard.eth` → blocked, `PAYEE_MISMATCH` |
 | 05 | $15 to a merchant with no name → held for `alice.eth`; a human approves on the page → charged |
 | 06 | `sign_request(checkout)` for the demo merchant → its checkout verifies the Visa TAP signature: trusted agent; the same headers again → `REPLAYED`; a checkout signature for the lookalike → refused (`no_approved_payment`) |
@@ -703,14 +703,14 @@ site/og/                source of the og.png share card
 
 ## Built on
 
-| | Role in xcard |
+| | Role in X Card |
 |---|---|
 | [Airwallex](https://www.airwallex.com/) | Card issuing: the first issuer adapter, and the sandbox the cards run on |
-| [Visa Trusted Agent Protocol](https://developer.visa.com/capabilities/trusted-agent-protocol) | How merchants recognize an xcard agent at checkout |
+| [Visa Trusted Agent Protocol](https://developer.visa.com/capabilities/trusted-agent-protocol) | How merchants recognize an X Card agent at checkout |
 | [ENS](https://ens.domains/) | Every card is a name; its policy is text records on Ethereum mainnet |
 | [x402 Identity Hub](https://x402id.dev) | The open `payee-name` records and verifier behind verified payees |
 
-Logos and names are trademarks of their owners. xcard is an independent open-source project built for the Airwallex Agentic Banking Hackathon. It is not affiliated with or endorsed by Airwallex, Visa, ENS Labs or the ENS DAO.
+Logos and names are trademarks of their owners. X Card is an independent open-source project built for the Airwallex Agentic Banking Hackathon. It is not affiliated with or endorsed by Airwallex, Visa, ENS Labs or the ENS DAO.
 
 ## License
 

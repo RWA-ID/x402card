@@ -273,12 +273,20 @@
         el("td", { text: money(r["card.limit.tx"], cur) }),
         el("td", { text: money(r["card.limit.monthly"], cur) }),
         el("td", { text: r["card.mcc.allow"] || "any" }),
+        el("td", { text: payeeCell(r) }),
         el("td", { text: r["card.approver"] || "—" }),
         el("td", { text: String(c.pending_approvals?.length || 0) }),
         el("td", {}, action)));
     }
-    const head = el("tr", {}, ...["Name", "Status", "Card", "Per tx", "Monthly", "MCC allow", "Approver", "Pending", ""].map((h) => el("th", { text: h })));
+    const head = el("tr", {}, ...["Name", "Status", "Card", "Per tx", "Monthly", "MCC allow", "Payee", "Approver", "Pending", ""].map((h) => el("th", { text: h })));
     box.append(el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, head), tbody)));
+  }
+
+  // "verified-only · modelhub.eth +1"; cards issued before the payee gate read as any.
+  function payeeCell(r) {
+    const mode = r["card.payee"] || "any";
+    const allow = (r["card.payee.allow"] || "").split(",").filter(Boolean);
+    return allow.length ? `${mode} · ${allow[0]}${allow.length > 1 ? ` +${allow.length - 1}` : ""}` : mode;
   }
 
   function renderHistory(approvals) {
@@ -338,6 +346,8 @@
   const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
   const RESERVED = new Set(["demo", "ai", "www", "app", "api", "gateway"]);
   const MCP_URL = API + "/mcp";
+  // Same shape the Worker checks for card.payee.allow (policy/records.ts).
+  const PAYEE_NAME_RE = /^[^\s.,]+(\.[^\s.,]+)*\.eth$/;
 
   function initIssue() {
     const form = $("[data-issue-form]"), labelIn = $("[data-issue-label]"), preview = $("[data-issue-preview]");
@@ -390,6 +400,36 @@
     });
     labelIn.addEventListener("input", refresh);
 
+    // Payee check: new cards default to verified-or-escalate.
+    const PAYEE_HINT = {
+      "verified-or-escalate": "A merchant whose ENS name lists the checkout pays straight through. Any other merchant waits for the approver; a lookalike is blocked.",
+      "verified-only": "Only merchants whose ENS name lists the checkout. Everything else is blocked, with no approval path.",
+      any: "No payee gate: the card pays any merchant its limits allow, and allowed payees are ignored. Fine for testing, not for real money.",
+    };
+    const payeeRadios = [...document.querySelectorAll("[data-payee-switch] [data-payee]")];
+    const payeeHint = $("[data-payee-hint]");
+    let payee = "verified-or-escalate";
+    const setPayee = (v, focus) => {
+      payee = v;
+      for (const r of payeeRadios) {
+        const on = r.dataset.payee === v;
+        r.setAttribute("aria-checked", String(on));
+        r.tabIndex = on ? 0 : -1;
+        if (on && focus) r.focus();
+      }
+      payeeHint.textContent = PAYEE_HINT[v];
+    };
+    payeeRadios.forEach((r, i) => {
+      r.addEventListener("click", () => setPayee(r.dataset.payee));
+      r.addEventListener("keydown", (e) => {
+        const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        setPayee(payeeRadios[(i + d + payeeRadios.length) % payeeRadios.length].dataset.payee, true);
+      });
+    });
+    setPayee(payee);
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const v = label();
@@ -397,12 +437,16 @@
       const f = (k) => $(`[data-issue="${k}"]`).value.trim();
       const list = (s) => s.split(/[\s,]+/).filter(Boolean);
       if (!f("approver")) { err.textContent = "Name an approver, e.g. alice.eth."; return; }
+      const payeeAllow = list(f("payee_allow").toLowerCase());
+      const badPayee = payeeAllow.find((n) => !PAYEE_NAME_RE.test(n));
+      if (badPayee) { err.textContent = `${badPayee} isn't an ENS name. Allowed payees look like modelhub.eth.`; return; }
       const name = `${v}.${ns}`;
       submit.disabled = true; submit.textContent = "Issuing…"; err.textContent = "";
       try {
         const r = await api("/api/cards", { method: "POST", body: JSON.stringify({ name, policy: {
           limit_tx: Number(f("limit_tx")), limit_monthly: Number(f("limit_monthly")),
           currencies: list(f("currencies").toUpperCase()), mcc_allow: list(f("mcc_allow")), approver: f("approver"),
+          payee, payee_allow: payeeAllow,
         } }) });
         showIssued(r.card.name, r.agent_token);
         labelIn.value = "";

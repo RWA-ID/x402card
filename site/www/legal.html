@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Legal · x·card</title>
-<meta name="description" content="Disclaimer, privacy notice and terms of use for the xcard sandbox demo.">
+<title>Legal · X Card</title>
+<meta name="description" content="Disclaimer, privacy notice and terms of use for the X Card sandbox demo.">
 <meta name="theme-color" content="#0a0b0d">
 <link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="brand/favicon-32.png" sizes="32x32" type="image/png">
@@ -19,7 +19,7 @@
 <nav class="nav">
   <div class="wrap">
     <div class="nav-left">
-      <a href="index.html" class="wordmark" style="color:var(--text)" aria-label="x·card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">x<i>·</i>card</a>
+      <a href="index.html" class="wordmark" style="color:var(--text)" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
       <div class="pill-sandbox">SANDBOX</div>
     </div>
     <div class="nav-links">
@@ -45,13 +45,13 @@
 
   <section id="disclaimer" class="legal-sec">
     <h2>Disclaimer</h2>
-    <p class="lead">xcard is an open-source hackathon project running in a sandbox. No real money moves, and nothing here is a financial product.</p>
+    <p class="lead">X Card is an open-source hackathon project running in a sandbox. No real money moves, and nothing here is a financial product.</p>
     <ul>
       <li><b>Sandbox only.</b> Cards, balances, payments and approvals run on a card program's test environment. Amounts shown are not real funds and can't be withdrawn, spent or redeemed.</li>
-      <li><b>Not a card issuer, bank or payment provider.</b> xcard is a naming and policy layer. It doesn't issue cards, hold funds, transmit money or extend credit. Any real card would be issued by a licensed card program under that program's own terms.</li>
+      <li><b>Not a card issuer, bank or payment provider.</b> X Card is a naming and policy layer. It doesn't issue cards, hold funds, transmit money or extend credit. Any real card would be issued by a licensed card program under that program's own terms.</li>
       <li><b>ENS records are public.</b> Names under <span class="mono">xcard.eth</span> or <span class="mono">x402card.eth</span> resolve on Ethereum mainnet, and anyone can read their spend-policy records. They never contain card numbers, CVCs or card IDs.</li>
       <li><b>Not advice.</b> Nothing on this site is financial, legal, tax or security advice.</li>
-      <li><b>No affiliation.</b> xcard isn't affiliated with, endorsed by or sponsored by Airwallex, ENS Labs, Safe, Cloudflare, Visa, Mastercard, Coinbase, Anthropic or any other company mentioned on this site or in its code. Their names and marks belong to their owners and are used only to describe compatibility.</li>
+      <li><b>No affiliation.</b> X Card isn't affiliated with, endorsed by or sponsored by Airwallex, ENS Labs, Safe, Cloudflare, Visa, Mastercard, Coinbase, Anthropic or any other company mentioned on this site or in its code. Their names and marks belong to their owners and are used only to describe compatibility.</li>
       <li><b>Software as is.</b> The code is provided under the MIT License, without warranty. Smart contracts and gateways can have bugs; review the source before relying on it.</li>
     </ul>
   </section>
@@ -64,11 +64,11 @@
     <ul>
       <li><b>Hosting.</b> The site is static files on IPFS, usually served through a gateway such as eth.limo. The gateway you use receives your IP address and request details under its own policy.</li>
       <li><b>Fonts.</b> Pages load the Geist fonts from Google Fonts, so Google receives your IP address and browser details.</li>
-      <li><b>Live data.</b> The home page asks the xcard API (a Cloudflare Worker at <span class="mono">x402card.dmpay.workers.dev</span>) for public card records and the public activity feed. Cloudflare processes these requests, including your IP address, under its own policy. We don't store your IP address or build a profile of you.</li>
-      <li><b>Approvals page.</b> If you sign in, your admin token is kept only in this browser tab's session storage, is sent only to the xcard API, and is cleared when you close the tab or sign out.</li>
+      <li><b>Live data.</b> The home page asks the X Card API (a Cloudflare Worker at <span class="mono">x402card.dmpay.workers.dev</span>) for public card records and the public activity feed. Cloudflare processes these requests, including your IP address, under its own policy. We don't store your IP address or build a profile of you.</li>
+      <li><b>Approvals page.</b> If you sign in, your admin token is kept only in this browser tab's session storage, is sent only to the X Card API, and is cleared when you close the tab or sign out.</li>
     </ul>
 
-    <h3>What the xcard service stores</h3>
+    <h3>What the X Card service stores</h3>
     <ul>
       <li><b>Public policy records</b> for each name (limits, currencies, merchant categories, status, approver). These are public by design and can be read by anyone over ENS.</li>
       <li><b>Activity events</b> for the public feed: payments, blocks, top-ups, escalations, approvals and freezes, with the merchant name, amount and the name of the person who decided an approval. The most recent 50 per card are kept.</li>
@@ -79,7 +79,7 @@
     <p>Don't put personal information in a card's approver field, a funding purpose or a merchant name: some of it appears in the public feed or in public ENS records, and anything written to a blockchain can't be deleted.</p>
 
     <h3>Card programs</h3>
-    <p>Cards are created through a card program (in this demo, the Airwallex sandbox). The cardholder details xcard sends are placeholders, not personal data. A real deployment would share cardholder data with the card program, which processes it under its own privacy policy.</p>
+    <p>Cards are created through a card program (in this demo, the Airwallex sandbox). The cardholder details X Card sends are placeholders, not personal data. A real deployment would share cardholder data with the card program, which processes it under its own privacy policy.</p>
 
     <h3>Questions and requests</h3>
     <p>Open an issue on <a href="https://github.com/RWA-ID/x402card/issues" target="_blank" rel="noopener">GitHub</a> to ask what is stored about a name, or to have off-chain records or feed events removed. On-chain data can't be removed.</p>
@@ -87,7 +87,7 @@
 
   <section id="terms" class="legal-sec">
     <h2>Terms of use</h2>
-    <p class="lead">By using this site, the xcard API or the MCP server, you agree to these terms.</p>
+    <p class="lead">By using this site, the X Card API or the MCP server, you agree to these terms.</p>
     <ol>
       <li><b>What this is.</b> A demonstration of a naming and policy layer for AI agent cards, provided for evaluation, testing and development. It runs in a sandbox and may change, reset or go offline at any time without notice.</li>
       <li><b>No real payments.</b> Don't use the service to make or receive real payments, or connect real card numbers, bank accounts or funds to it.</li>
@@ -106,8 +106,8 @@
 <footer>
   <div class="wrap">
     <div class="foot-main">
-      <a href="index.html" class="wordmark" aria-label="x·card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">x<i>·</i>card</a>
-      <a class="gh" href="https://github.com/RWA-ID/x402card" target="_blank" rel="noopener" aria-label="xcard on GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>RWA-ID/x402card</span></a>
+      <a href="index.html" class="wordmark" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
+      <a class="gh" href="https://github.com/RWA-ID/x402card" target="_blank" rel="noopener" aria-label="X Card on GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>RWA-ID/x402card</span></a>
     </div>
     <div class="foot-links">
       <a href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">resolver ↗</a>

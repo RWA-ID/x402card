@@ -1,4 +1,4 @@
-// x·card approvals walkthrough: six steps of one escalated funding request,
+// X Card approvals walkthrough: six steps of one escalated funding request,
 // with the floating card showing the state at each step. Illustrative only;
 // it calls no API. Mirrors service.requestFunding / decide in src/service.ts.
 (() => {

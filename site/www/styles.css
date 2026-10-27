@@ -434,6 +434,11 @@ td.name { color: var(--text); }
 .issue-f .field input { padding: 7px 0; }
 .issue-name { max-width: 560px; }
 .issue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.issue-payee { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.issue-payee .ns-switch { align-self: flex-start; }
+.issue-payee .ns-switch button { padding: 9px 10px; }
+.issue-allow { flex: 1 1 240px; }
+.issue-hint { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
 .issue-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .issue-preview { font-size: 13px; color: var(--accent-light); min-width: 0; overflow-wrap: anywhere; }
 .btn-sm { cursor: pointer; }
