@@ -318,7 +318,8 @@ Who can change what, and what it takes:
 | `OffchainResolver` owner | change the gateway URL (`setUrl`) and trusted signers (`setSigner`), i.e. decide which answers count as valid | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([tx](https://etherscan.io/tx/0x054742a8579fdb91d8ab7a9ad43199b5338934b0cb9c76483dc6e5375c033d30)) |
 | Gateway signing key | sign record answers, valid 5 minutes each | Worker secret; separate from the owner key, revocable by the owner |
 | TAP signing key | sign agents' requests to merchants (8 minutes, one use) | Worker secret `TAP_PRIVATE_KEY`; separate from every on-chain key; rotated with one secret update |
-| Approvals, unfreeze, policy edits | raise limits, release held payments, unfreeze cards, publish records | Worker admin token → moving to wallet-signed approvals |
+| Approvals | raise limits, release held payments | `card.approver`'s wallet signature (EIP-712; ERC-1271 for a Safe), or the Worker admin token |
+| Unfreeze, policy edits | unfreeze cards, publish records | Worker admin token → moving to wallet signatures |
 | Agent token | its own card only: read, pay, sign requests, request funding, freeze | the agent |
 
 **Target model**
@@ -335,7 +336,7 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 |---|---|
 | ENS OffchainResolver on mainnet, `xcard.eth` and `x402card.eth` pointed at it | ✅ live, source verified |
 | CCIP-Read gateway (signed records) | ✅ live |
-| MCP server (7 tools, scoped tokens) | ✅ live |
+| MCP server (9 tools, scoped tokens) | ✅ live |
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
 | Demo site on IPFS (`ai.xcard.eth`) | ✅ live |
 | Airwallex card creation | ⏳ waiting on Airwallex. The first sandbox account had no card program (`cards/create` returned `Invalid issuance details`); a new account under the US LLC is in review, escalated with Airwallex support. Until then the full flow runs against `FakeIssuer`, which enforces controls the way the sandbox does. |
@@ -344,7 +345,7 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 | Verified payee (payee gate, `card.payee`, held payments) | ✅ live; tested end to end, verifier checked against mainnet ENS. Not yet exercised on a live card (needs Airwallex issuance). |
 | Visa TAP signing (`sign_request`, `/keys`, demo merchant) | ✅ live; signatures verified by a port of Visa's reference merchant |
 | TAP body objects (consumer recognition, payment container) | ⏳ need Visa Intelligent Commerce onboarding |
-| Wallet-signed approvals (EIP-712 / ERC-1271) | ⏳ planned |
+| Wallet-signed approvals (EIP-712 / ERC-1271) | ✅ in the Worker: `get_approval` + `submit_approval` over MCP and `/approvals/:id`; tested with real signatures and checked against mainnet ENS. The approval page still decides with the admin token; wallet signing there is next. Unfreeze still needs the admin token. |
 
 ## ENS records (the policy)
 
@@ -431,6 +432,8 @@ curl -s https://x402card.dmpay.workers.dev/mcp \
 | `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `merchant_url?`, `payee_name?`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (X Card pre-check or payee gate) · `declined` + `code` (issuer) · `pending_human` + `approval_id`, `approval_url` (payee held); `payee` check; `card_frozen` if this attempt froze the card |
 | `sign_request` | `name?`, `url`, `purpose: browse \| checkout` | Visa TAP `headers` (`Signature-Input`, `Signature`) for one request to `url`, `tag`, `keyid`, `expires_at`, `keys_url`. `checkout` needs an approved `pay` to that origin in the last 15 min. See [Visa TAP](#visa-trusted-agent-protocol-tap). |
 | `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver`, `approval_url` · `denied` + `reason` |
+| `get_approval` | `approval_id` | `approval` (status, amount, merchant…), `card`, `signable`, `typed_data: { approve, deny }`: the EIP-712 messages `card.approver` signs. See [Approving with a wallet](#approving-with-a-wallet). |
+| `submit_approval` | `approval_id`, `approve`, `signature` | `approval` (with `charge` for a held payment), `card`. Accepted only from the address `card.approver` resolves to. |
 | `freeze` | `name?`, `reason?` | `card` (now `frozen`) |
 | `list_transactions` | `name?` | `type`, `status`, `settled`, `amount`, `currency`, `merchant`, `mcc`, `decline_reason`, `at` |
 
@@ -488,6 +491,8 @@ Public, unauthenticated:
 |---|---|---|
 | `GET` | `/public/cards/:name` | The card's public records (same data the gateway signs) |
 | `GET` | `/public/feed` | Recent policy events: issued, charged, blocked (with `code`, e.g. `PAYEE_MISMATCH`), declined, funded, escalated, approved, denied, frozen, unfrozen |
+| `GET` | `/approvals/:id` | One approval and the typed data its approver signs (the random approval ID is the link; same shape as `get_approval`) |
+| `POST` | `/approvals/:id` | `{ "approve": true \| false, "signature": "0x…" }`: decide with `card.approver`'s wallet signature. No token: the signature is the authority. `403` for a wrong signer. |
 | `GET` | `/keys`, `/keys/:keyid` | Visa TAP public key (see [Keys](#keys)) |
 | `GET` | `/demo-merchant/*` | A merchant that verifies TAP headers, for demos and integration tests |
 
@@ -502,6 +507,21 @@ Typical platform flows:
 - **Agent platform / framework:** issue one card per agent with the admin token, and pass the scoped agent token into the agent's MCP config. Your platform never stores card numbers.
 - **Finance / ops console:** poll `/api/approvals`, show the request with its purpose, and post the decision. Watch `/public/feed` or the ENS records for freezes.
 - **Merchant / counterparty:** resolve `card.status` and limits over ENS before accepting an order from an agent; verify the agent's [TAP signature](#verifying-as-a-merchant) at checkout; set `org.x402.origins` on your own ENS name so X Card agents see you as a [verified payee](#how-a-merchant-opts-in).
+
+### Approving with a wallet
+
+`card.approver` can decide a request by signing it, with no admin token. The approval is [EIP-712](https://eips.ethereum.org/EIPS/eip-712) typed data, domain `{ name: "X Card", version: "1", chainId: 1 }`, primary type `Approval`:
+
+```
+Approval(string id, string decision, string card, string kind, string amount, string currency,
+         string merchant, string checkout, string payee, string approver, uint256 expires)
+```
+
+`decision` is `approve` or `deny`, and each has its own message, so a denial can't be replayed as an approval. `amount` is a decimal string so no signer rounds it. X Card resolves `card.approver` on mainnet ENS when the signature arrives (a bare `0x` address works too). It accepts the decision only if that address signed this exact message, verified with viem's `verifyTypedData`, so an EOA, a Safe (ERC-1271) and a not-yet-deployed smart wallet (ERC-6492) all work. The approver is the one recorded when the request was made. The HMAC binding and single use from the [Security model](#security-model) still apply. An approver that is free text (not a name or address) can only be decided in the operator console.
+
+**In a chat (PayBox).** The agent gets `pending_human`, calls `get_approval`, and shows the human what they're approving. The human signs `typed_data.approve` (or `.deny`) unchanged with PayBox's `request_wallet_sign` (`op: "typedData"`), and the agent passes the signature to `submit_approval`. The model never holds the approver's key: if the human doesn't sign, nothing happens. An agent token sees only its own card's approvals.
+
+**On a page.** `GET /approvals/:id` returns the same typed data. Any wallet signs it with `eth_signTypedData_v4`, and `POST /approvals/:id` submits the signature.
 
 ## Integrate: bring your own card issuer
 

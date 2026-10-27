@@ -116,6 +116,29 @@ export const TOOLS = [
     },
   },
   {
+    name: "get_approval",
+    title: "Get an approval",
+    description:
+      "A request waiting for card.approver (from pay or request_funding with decision pending_human): what it would do, its status, and typed_data.approve / typed_data.deny, the EIP-712 messages the approver signs. To decide it in this chat, show the human the card, amount, merchant and checkout, have them sign typed_data.approve (or .deny) unchanged with the wallet card.approver resolves to (PayBox: request_wallet_sign with op typedData), then call submit_approval. Never sign for the approver yourself.",
+    inputSchema: { type: "object", properties: { approval_id: { type: "string" } }, required: ["approval_id"] },
+    annotations: { readOnlyHint: true },
+  },
+  {
+    name: "submit_approval",
+    title: "Submit a signed approval",
+    description:
+      "Decide a pending request with card.approver's wallet signature over get_approval's typed_data. approve true + a signature of typed_data.approve releases it (funding raises the allowance; a held payment is charged); approve false + a signature of typed_data.deny refuses it. X Card resolves card.approver on ENS and accepts only a signature from that address for this exact card, amount, merchant and decision.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        approval_id: { type: "string" },
+        approve: { type: "boolean" },
+        signature: { type: "string", description: "0x… signature of typed_data.approve or typed_data.deny" },
+      },
+      required: ["approval_id", "approve", "signature"],
+    },
+  },
+  {
     name: "freeze",
     title: "Freeze card",
     description: "Freeze the card immediately and set card.status=frozen in ENS. Agents may freeze their own card; only a human can unfreeze.",
@@ -188,7 +211,7 @@ export class McpServer {
             capabilities: { tools: { listChanged: false } },
             serverInfo: SERVER_INFO,
             instructions:
-              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. You never see card numbers.",
+              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. A pending_human result is decided by card.approver: either on the approval_url page, or in this chat by having the human sign get_approval's typed data with their wallet (PayBox request_wallet_sign, op typedData) and calling submit_approval. Never sign for the approver. You never see card numbers.",
           });
         }
         case "ping":
@@ -253,6 +276,13 @@ export class McpServer {
         if (!Number.isFinite(amount) || amount <= 0) throw toolError("bad_amount", "amount must be a positive number");
         return { ...(await this.svc.requestFunding(this.target(a), amount, str(a.currency, "currency"), optStr(a.purpose))) };
       }
+      case "get_approval":
+        return { ...(await this.svc.approvalView(str(a.approval_id, "approval_id"), this.scope())) };
+      case "submit_approval": {
+        if (typeof a.approve !== "boolean") throw toolError("bad_input", "approve must be true or false");
+        const approval = await this.svc.decideSigned(str(a.approval_id, "approval_id"), a.approve, str(a.signature, "signature"), this.scope());
+        return { approval, card: await this.svc.getCard(approval.name) };
+      }
       case "freeze": {
         const by = this.caller.kind === "admin" ? "admin" : "agent";
         return { card: await this.svc.freeze(this.target(a), optStr(a.reason) || `frozen by ${by}`) };
@@ -262,6 +292,11 @@ export class McpServer {
       default:
         throw toolError("unknown_tool", `no tool named ${tool}`);
     }
+  }
+
+  /** An agent token only reaches its own card's approvals. */
+  private scope(): string | undefined {
+    return this.caller.kind === "agent" ? this.caller.label : undefined;
   }
 
   /** Agents act on their own card only. */

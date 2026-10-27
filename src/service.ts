@@ -7,6 +7,7 @@ import type { AuthorizationControls, IssuingTransaction } from "./airwallex/issu
 import { LEGACY_PARENT, PARENT_NAMES, RESERVED_LABELS, cardKeyOf, nameOfKey } from "./ens/gateway.ts";
 import { DEFAULT_CONFIG, type EngineConfig, decideFunding, evaluateActivity, precheckPayment, roundMajor, toAuthorizationControls } from "./policy/engine.ts";
 import { newPendingApproval, signApproval, verifyApproval, type HeldPayment, type PendingApproval } from "./policy/approvals.ts";
+import { approvalTypedData, isSignableApprover, type ApprovalTypedData, type ApproverAuth } from "./policy/approver.ts";
 import { decidePayee, toOrigin, type PayeeCheck, type PayeeChecker } from "./policy/payee.ts";
 import type { TapSigner, TapTag } from "./tap/sign.ts";
 import { type CardPolicy, PolicyError, type TextRecords, parseRecords, toRecords } from "./policy/records.ts";
@@ -168,6 +169,17 @@ export interface ServiceOptions {
   tap?: () => Promise<TapSigner>;
   /** Where merchants fetch the TAP public key, e.g. https://…/keys. */
   tapKeysUrl?: string;
+  /** Resolves card.approver and checks its wallet signature (policy/approver.ts). Without it only the admin token decides. */
+  approverAuth?: ApproverAuth;
+}
+
+/** An approval as the approver sees it, with the typed data to sign either way. */
+export interface ApprovalView {
+  approval: PendingApproval;
+  card: string;
+  /** card.approver is an ENS name or an address, so a wallet signature can decide it. */
+  signable: boolean;
+  typed_data?: { approve: ApprovalTypedData; deny: ApprovalTypedData };
 }
 
 export interface SignedRequest {
@@ -303,6 +315,70 @@ export class CardService {
     await this.raiseMonthly(label, policy, a.amount);
     await this.store.addEvent(label, { at: Date.now(), kind: "approved", detail: `approved by ${decidedBy}`, amount: a.amount, currency: a.currency });
     return { ...a, status: "approved" };
+  }
+
+  /**
+   * One approval for its approver. scope = the agent's own card: an agent
+   * token sees only its card's approvals.
+   */
+  async approvalView(approvalId: string, scope?: string): Promise<ApprovalView> {
+    const a = await this.approvalFor(approvalId, scope);
+    const { sig: _sig, ...approval } = a;
+    const card = fullName(a.name);
+    const signable = isSignableApprover(a.approver);
+    return {
+      approval,
+      card,
+      signable,
+      ...(signable ? { typed_data: { approve: approvalTypedData(a, "approve", card), deny: approvalTypedData(a, "deny", card) } } : {}),
+    };
+  }
+
+  /**
+   * A decision signed by card.approver's wallet: the typed data from
+   * approvalView, signed by the address the approver's ENS name resolves to
+   * (read now, so changing the name's address changes who can approve).
+   * The approver is the one recorded when the request was made.
+   */
+  async decideSigned(approvalId: string, approve: boolean, signature: string, scope?: string) {
+    const a = await this.approvalFor(approvalId, scope);
+    if (a.status !== "pending") throw new ServiceError("already_decided", `approval already ${a.status}`);
+    if (!/^0x[0-9a-fA-F]{130,}$/.test(signature)) throw new ServiceError("bad_signature", "signature must be a 0x-prefixed hex signature");
+    const auth = this.opts.approverAuth;
+    if (!auth) throw new ServiceError("signing_unavailable", "this deployment can't check approver signatures");
+    if (!isSignableApprover(a.approver)) {
+      throw new ServiceError("approver_cannot_sign", `card.approver "${a.approver}" is not an ENS name or address, so only the operator console can decide this`);
+    }
+    let address: Awaited<ReturnType<ApproverAuth["resolve"]>>;
+    try {
+      address = await auth.resolve(a.approver);
+    } catch {
+      throw new ServiceError("ens_unavailable", `couldn't read ${a.approver}'s address from ENS; try again`);
+    }
+    if (!address) throw new ServiceError("approver_cannot_sign", `${a.approver} has no ETH address set, so it can't sign`);
+    const td = approvalTypedData(a, approve ? "approve" : "deny", fullName(a.name));
+    let ok: boolean;
+    try {
+      ok = await auth.verify(address, td, signature as `0x${string}`);
+    } catch {
+      ok = false;
+    }
+    if (!ok) throw new ServiceError("bad_signature", `not signed by ${a.approver} (${address}) for this exact ${approve ? "approval" : "denial"}`);
+    // decide() hands back the stored approval, HMAC included; callers never need it.
+    const { sig: _sig, ...decided } = { sig: "", ...(await this.decide(a.id, approve, `${a.approver} (signed)`)) };
+    return decided;
+  }
+
+  private async approvalFor(approvalId: string, scope?: string) {
+    const a = await this.store.getApproval(approvalId);
+    // Another card's approval looks the same as a missing one to an agent.
+    if (!a || (scope !== undefined && a.name !== scope)) throw new ServiceError("not_found", "no such approval");
+    if (a.status === "pending" && Date.now() > a.expiresAt) {
+      const expired = { ...a, status: "expired" as const };
+      await this.store.putApproval(expired);
+      return expired;
+    }
+    return a;
   }
 
   /** An approved held payment: re-check the policy as it stands now, then charge. */

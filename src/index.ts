@@ -7,6 +7,7 @@
 //   /api/cards/:name/simulate   sandbox: a merchant charges the card directly, skipping the pre-check (admin token)
 //   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
+//   /approvals/:id         GET an approval + the EIP-712 typed data card.approver signs; POST {approve, signature} decides it (no token: the signature is the authority)
 //   /public/feed           recent policy events across cards, for the demo site
 //   /keys[?keyID=]         Visa TAP public keys as a JWK set (the spec's Public Key Retrieval)
 //   /keys/:keyid           the same key in the agent-registry shape Visa's reference merchant fetches
@@ -18,6 +19,7 @@ import { viemReader } from "@x402identity/payee";
 import { AirwallexClient, KvTokenStore } from "./airwallex/client.ts";
 import { gatewayResponse } from "./ens/gateway.ts";
 import { McpServer, authenticate, issueWithToken } from "./mcp.ts";
+import { ensApproverAuth } from "./policy/approver.ts";
 import { ensPayeeChecker } from "./policy/payee.ts";
 import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
 import { verifyTap } from "./tap/verify.ts";
@@ -71,13 +73,15 @@ function service(env: Env, store: Store, origin?: string): CardService {
       : new AirwallexIssuer(
           new AirwallexClient({ clientId: env.AWX_CLIENT_ID, apiKey: env.AWX_API_KEY, tokenStore: new KvTokenStore(env.KV) }),
         );
+  const eth = createPublicClient({ chain: mainnet, transport: http(env.ETH_RPC_URL) }) as PublicClient;
   return new CardService(store, issuer, {
     approvalSecret: env.APPROVAL_SECRET,
     cardholderEmail: env.CARDHOLDER_EMAIL ?? "agents@x402card.dev",
     approvalUrl: env.APPROVAL_URL,
     tap: tap(env),
     ...(origin ? { tapKeysUrl: `${origin}/keys` } : {}),
-    checkPayee: ensPayeeChecker(viemReader(createPublicClient({ chain: mainnet, transport: http(env.ETH_RPC_URL) }) as PublicClient)),
+    checkPayee: ensPayeeChecker(viemReader(eth)),
+    approverAuth: ensApproverAuth(eth),
   });
 }
 
@@ -157,6 +161,26 @@ export default {
         return json({ events });
       }
       return json({ error: "not found" }, 404);
+    }
+
+    const ap = path.match(/^\/approvals\/([0-9a-f-]{36})$/);
+    if (ap) {
+      const svc = service(env, store);
+      try {
+        if (req.method === "GET") return json(await svc.approvalView(ap[1]));
+        if (req.method === "POST") {
+          const b = (await req.json().catch(() => ({}))) as { approve?: unknown; signature?: unknown };
+          if (typeof b.approve !== "boolean" || typeof b.signature !== "string") {
+            return json({ error: { code: "bad_input", message: "body must be {approve: boolean, signature: string}" } }, 400);
+          }
+          const approval = await svc.decideSigned(ap[1], b.approve, b.signature);
+          return json({ approval, card: await svc.getCard(approval.name) });
+        }
+        return json({ error: "method not allowed" }, 405);
+      } catch (e) {
+        const err = describeError(e);
+        return json({ error: err }, err.code === "not_found" ? 404 : err.code === "bad_signature" ? 403 : 400);
+      }
     }
 
     if (path === "/mcp") {
