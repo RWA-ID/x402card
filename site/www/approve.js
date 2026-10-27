@@ -103,10 +103,13 @@
     $("[data-pending-count]").textContent = pending.length ? `${pending.length} pending` : "";
     box.textContent = "";
     if (!pending.length) {
-      box.append(el("div", { class: "empty", style: "grid-column:1/-1", text: "Nothing waiting. Escalated funding requests from agents show up here." }));
+      box.append(el("div", { class: "empty", style: "grid-column:1/-1", text: "Nothing waiting. Escalated funding requests and held payments from agents show up here." }));
       return;
     }
-    for (const a of pending) box.append(requestCard(a, cards.find((c) => c.name === fullName(a.name))));
+    for (const a of pending) {
+      const card = cards.find((c) => c.name === fullName(a.name));
+      box.append(a.kind === "payment" ? paymentCard(a, card) : requestCard(a, card));
+    }
     if (focusId) {
       const f = box.querySelector(`[data-id="${CSS.escape(focusId)}"]`);
       if (f) { f.classList.add("focus"); f.scrollIntoView({ block: "center", behavior: R ? "auto" : "smooth" }); }
@@ -177,6 +180,58 @@
       el("div", { class: "req-actions" }, approveBtn, denyBtn, el("label", { class: "as" }, "as ", as)));
   }
 
+  // A payment the payee gate held: approving charges the card for exactly this merchant.
+  function paymentCard(a, card) {
+    const rec = card?.records || {};
+    const p = a.payment || {};
+    const cur = a.currency;
+    const [why] = splitReason(a.reason);
+    const whyRow = el("div", { class: "req-why" }, el("span", { class: "dot" }), el("span", { text: "HELD · " + why }));
+    const as = el("input", { value: a.approver || "admin", "aria-label": "Decide as", spellcheck: "false" });
+    const approveBtn = el("button", { class: "approve-btn", text: `Approve & pay ${money(a.amount, cur)}` });
+    const denyBtn = el("button", { class: "btn-deny", text: "Deny" });
+
+    const decide = async (approve) => {
+      busy = true; approveBtn.disabled = denyBtn.disabled = true;
+      const by = as.value.trim() || "admin";
+      try {
+        const res = await api(`/api/approvals/${a.id}`, { method: "POST", body: JSON.stringify({ approve, by }) });
+        if (!approve) {
+          denyBtn.textContent = "Denied"; approveBtn.style.opacity = "0.3";
+          whyRow.className = "req-why no"; whyRow.lastChild.textContent = `DENIED · by ${by}`;
+        } else if (res.approval?.charge?.approved === false) {
+          approveBtn.textContent = "Declined by issuer";
+          whyRow.className = "req-why no"; whyRow.lastChild.textContent = `ISSUER DECLINED · ${res.approval.charge.decline_reason || "DECLINED"}`;
+        } else {
+          approveBtn.textContent = "Paid ✓"; approveBtn.style.background = "var(--success)";
+          whyRow.className = "req-why ok"; whyRow.lastChild.textContent = `PAID · approved by ${by}`;
+        }
+        setTimeout(() => { busy = false; lastSig = ""; load(); }, 1800);
+      } catch (err) {
+        busy = false; approveBtn.disabled = denyBtn.disabled = false;
+        whyRow.className = "req-why no"; whyRow.lastChild.textContent = err.message;
+      }
+    };
+    approveBtn.addEventListener("click", () => decide(true));
+    denyBtn.addEventListener("click", () => decide(false));
+
+    return el("article", { class: "req-card", "data-id": a.id },
+      el("div", { class: "req-top" },
+        el("div", { style: "min-width:0" },
+          el("div", { class: "req-name", text: fullName(a.name) }),
+          el("div", { class: "req-purpose", text: `wants to pay ${p.merchant || "a merchant"}` + (p.purpose ? " · " + p.purpose : "") })),
+        el("div", { class: "req-amt" }, money(a.amount, cur), el("small", { text: cur }))),
+      whyRow,
+      el("div", { class: "kv" },
+        el("span", { text: "checkout" }), el("span", { text: p.merchantUrl || "not given" }),
+        el("span", { text: "payee name" }), el("span", { text: p.payeeName ? `${p.payeeName} · ${p.payeeStatus}` : "not given" }),
+        el("span", { text: "MCC" }), el("span", { text: p.mcc || "—" }),
+        el("span", { text: "card.payee" }), el("span", { text: rec["card.payee"] || "any" }),
+        el("span", { text: "requested" }), el("span", { text: ago(a.createdAt) }),
+        el("span", { text: "binding" }), el("span", { text: `${a.name} · ${a.amount} · ${cur} · ${p.payeeName || p.merchantUrl || p.merchant}` })),
+      el("div", { class: "req-actions" }, approveBtn, denyBtn, el("label", { class: "as" }, "as ", as)));
+  }
+
   // Reasons look like "300 > card.limit.tx (50) · dataset license".
   function splitReason(r = "") {
     const i = r.indexOf(" · ");
@@ -240,7 +295,7 @@
         el("div", { style: "min-width:0" },
           el("div", { class: "feed-agent", text: fullName(a.name) }),
           el("div", { class: "feed-merch", text: a.reason })),
-        el("div", { class: "feed-right" }, el("div", { class: "feed-amt", text: "+" + money(a.amount, a.currency) }), pill(status))));
+        el("div", { class: "feed-right" }, el("div", { class: "feed-amt", text: (a.kind === "payment" ? "" : "+") + money(a.amount, a.currency) }), pill(status))));
     }
     box.append(panel);
   }

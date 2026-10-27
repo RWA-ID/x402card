@@ -6,7 +6,8 @@ import * as issuing from "./airwallex/issuing.ts";
 import type { AuthorizationControls, IssuingTransaction } from "./airwallex/issuing.ts";
 import { LEGACY_PARENT, PARENT_NAMES, RESERVED_LABELS, cardKeyOf, nameOfKey } from "./ens/gateway.ts";
 import { DEFAULT_CONFIG, type EngineConfig, decideFunding, evaluateActivity, precheckPayment, roundMajor, toAuthorizationControls } from "./policy/engine.ts";
-import { newPendingApproval, signApproval, verifyApproval, type PendingApproval } from "./policy/approvals.ts";
+import { newPendingApproval, signApproval, verifyApproval, type HeldPayment, type PendingApproval } from "./policy/approvals.ts";
+import { decidePayee, toOrigin, type PayeeCheck, type PayeeChecker } from "./policy/payee.ts";
 import { type CardPolicy, PolicyError, type TextRecords, parseRecords, toRecords } from "./policy/records.ts";
 import type { Store } from "./store.ts";
 
@@ -108,7 +109,7 @@ export interface CardView {
   status: "active" | "frozen";
   last4?: string;
   records: TextRecords;
-  pending_approvals: { id: string; amount: number; currency: string; reason: string }[];
+  pending_approvals: { id: string; kind: "funding" | "payment"; amount: number; currency: string; reason: string; merchant?: string }[];
 }
 
 export interface SafeTransaction {
@@ -129,6 +130,10 @@ export interface PaymentInput {
   mcc: string;
   merchant: string;
   purpose?: string;
+  /** The checkout's URL: the origin the payee gate checks against payeeName. */
+  merchantUrl?: string;
+  /** The ENS name the agent believes it is paying, e.g. modelhub.eth. */
+  payeeName?: string;
   /** Same id on retry replays the first result instead of charging again. */
   requestId?: string;
 }
@@ -136,12 +141,14 @@ export interface PaymentInput {
 /**
  * blocked  = refused by x402card's pre-check; nothing reached the card network.
  * declined = passed the pre-check, refused by the issuer at authorization.
+ * pending_human = the payee gate held it for card.approver; approving it makes the charge.
  */
 export type PaymentResult = (
   | { decision: "approved"; amount: number; currency: string; merchant: string }
   | { decision: "blocked"; stage: "x402card"; code: string; reason: string }
   | { decision: "declined"; stage: "issuer"; code: string }
-) & { card_frozen?: string; replayed?: boolean };
+  | { decision: "pending_human"; reason: string; approval_id: string; approver: string; approval_url?: string }
+) & { payee?: PayeeCheck; card_frozen?: string; replayed?: boolean };
 
 export type FundingResult =
   | { decision: "approved"; reason: string; new_monthly_limit: number }
@@ -154,6 +161,8 @@ export interface ServiceOptions {
   /** Approval page link; "{id}" is replaced with the approval id. */
   approvalUrl?: string;
   config?: EngineConfig;
+  /** Reads a payee's ENS records (policy/payee.ts). Without it every named payee is unverified. */
+  checkPayee?: PayeeChecker;
 }
 
 export class CardService {
@@ -202,7 +211,14 @@ export class CardService {
       status: policy.status,
       last4: ref.last4,
       records: toRecords(policy),
-      pending_approvals: approvals.map((a) => ({ id: a.id, amount: a.amount, currency: a.currency, reason: a.reason })),
+      pending_approvals: approvals.map((a) => ({
+        id: a.id,
+        kind: a.kind ?? "funding",
+        amount: a.amount,
+        currency: a.currency,
+        reason: a.reason,
+        ...(a.payment ? { merchant: a.payment.merchant } : {}),
+      })),
     };
   }
 
@@ -228,12 +244,19 @@ export class CardService {
       reason: d.reason,
       approval_id: pending.id,
       approver: policy.approver,
-      ...(this.opts.approvalUrl ? { approval_url: this.opts.approvalUrl.replace("{id}", pending.id) } : {}),
+      ...this.approvalLink(pending.id),
     };
   }
 
-  /** Human decision on an escalated request. Applies exactly the signed name/amount/currency. */
-  async decide(approvalId: string, approve: boolean, decidedBy: string): Promise<PendingApproval> {
+  private approvalLink(id: string): { approval_url?: string } {
+    return this.opts.approvalUrl ? { approval_url: this.opts.approvalUrl.replace("{id}", id) } : {};
+  }
+
+  /**
+   * Human decision on an escalated request. Applies exactly the signed
+   * name/amount/currency: funding raises the allowance, a held payment is charged.
+   */
+  async decide(approvalId: string, approve: boolean, decidedBy: string): Promise<PendingApproval & { charge?: ChargeResult }> {
     const a = await this.store.getApproval(approvalId);
     if (!a) throw new ServiceError("not_found", "no such approval");
     if (a.status !== "pending") throw new ServiceError("already_decided", `approval already ${a.status}`);
@@ -248,8 +271,13 @@ export class CardService {
     if (!approve) {
       await this.store.putApproval({ ...a, status: "denied" });
       await this.store.addEvent(a.name, { at: Date.now(), kind: "denied", detail: `denied by ${decidedBy}`, amount: a.amount, currency: a.currency });
+      if (a.payment?.requestId) {
+        await this.store.putPayment(a.name, a.payment.requestId, { decision: "blocked", stage: "x402card", code: "DENIED_BY_APPROVER", reason: `denied by ${decidedBy}` });
+      }
       return { ...a, status: "denied" };
     }
+
+    if (a.kind === "payment" && a.payment) return this.releasePayment(a, a.payment, decidedBy);
 
     const { label, policy } = await this.load(a.name);
     if (policy.status === "frozen") throw new ServiceError("frozen", "card is frozen; unfreeze before approving");
@@ -260,6 +288,24 @@ export class CardService {
     await this.raiseMonthly(label, policy, a.amount);
     await this.store.addEvent(label, { at: Date.now(), kind: "approved", detail: `approved by ${decidedBy}`, amount: a.amount, currency: a.currency });
     return { ...a, status: "approved" };
+  }
+
+  /** An approved held payment: re-check the policy as it stands now, then charge. */
+  private async releasePayment(a: PendingApproval & { sig: string }, h: HeldPayment, decidedBy: string) {
+    const { label, policy, ref } = await this.load(a.name);
+    const check = precheckPayment(policy, { amount: a.amount, currency: a.currency, mcc: h.mcc });
+    if (!check.ok) throw new ServiceError(check.code.toLowerCase(), `${check.reason}; the payment can't be released`);
+
+    await this.store.putApproval({ ...a, status: "approved" });
+    const charge = await this.issuer.simulateCharge(ref.cardId, { amount: a.amount, currency: a.currency, mcc: h.mcc, merchant: h.merchant });
+    await this.logCharge(label, charge, `${payeeLabel(h.merchant, h.payeeName, h.payeeStatus)} · MCC ${h.mcc} · approved by ${decidedBy}`, a.amount, a.currency);
+    if (h.requestId) {
+      const result: PaymentResult = charge.approved
+        ? { decision: "approved", amount: a.amount, currency: a.currency, merchant: h.merchant }
+        : { decision: "declined", stage: "issuer", code: charge.decline_reason ?? "DECLINED" };
+      await this.store.putPayment(label, h.requestId, result);
+    }
+    return { ...a, status: "approved" as const, charge };
   }
 
   async freeze(name: string, reason: string): Promise<CardView> {
@@ -289,9 +335,10 @@ export class CardService {
   }
 
   /**
-   * The agent's payment path: pre-check against the ENS policy, then hand the
-   * charge to the issuer, which enforces the same controls again. A refusal
-   * at either layer runs the anomaly rules right away.
+   * The agent's payment path: pre-check against the ENS policy, then the payee
+   * gate (is this checkout really the name the agent means to pay?), then hand
+   * the charge to the issuer, which enforces the same controls again. A
+   * refusal at any layer runs the anomaly rules right away.
    */
   async pay(name: string, p: PaymentInput): Promise<PaymentResult> {
     const { label, policy, ref } = await this.load(name);
@@ -300,28 +347,68 @@ export class CardService {
       if (prior) return { ...prior, replayed: true };
     }
     const currency = p.currency.toUpperCase();
-    const detail = `${p.merchant} · MCC ${p.mcc}${p.purpose ? ` · ${p.purpose}` : ""}`;
+    const block = async (code: string, reason: string, detail: string, payee?: PayeeCheck): Promise<PaymentResult> => {
+      await this.store.addEvent(label, { at: Date.now(), kind: "blocked", detail: `${detail} · ${code}`, amount: p.amount, currency, code });
+      return { decision: "blocked", stage: "x402card", code, reason, ...(payee ? { payee } : {}) };
+    };
 
     let result: PaymentResult;
     const check = precheckPayment(policy, { amount: p.amount, currency, mcc: p.mcc });
     if (!check.ok) {
-      await this.store.addEvent(label, { at: Date.now(), kind: "blocked", detail: `${detail} · ${check.code}`, amount: p.amount, currency, code: check.code });
-      result = { decision: "blocked", stage: "x402card", code: check.code, reason: check.reason };
+      result = await block(check.code, check.reason, describePayment(p.merchant, p));
     } else {
-      const r = await this.issuer.simulateCharge(ref.cardId, { amount: p.amount, currency, mcc: p.mcc, merchant: p.merchant });
-      await this.logCharge(label, r, detail, p.amount, currency);
-      result = r.approved
-        ? { decision: "approved", amount: p.amount, currency, merchant: p.merchant }
-        : { decision: "declined", stage: "issuer", code: r.decline_reason ?? "DECLINED" };
+      const payee = await this.checkPayee(p);
+      const detail = describePayment(payeeLabel(p.merchant, payee.name, payee.status), p);
+      const gate = decidePayee(policy, payee);
+      if (gate.action === "block") {
+        result = await block(gate.code, gate.reason, detail, payee);
+      } else if (gate.action === "escalate") {
+        result = { ...(await this.holdPayment(label, policy.approver, p, currency, payee, gate.reason)), payee };
+      } else {
+        const r = await this.issuer.simulateCharge(ref.cardId, { amount: p.amount, currency, mcc: p.mcc, merchant: p.merchant });
+        await this.logCharge(label, r, detail, p.amount, currency);
+        result = r.approved
+          ? { decision: "approved", amount: p.amount, currency, merchant: p.merchant, payee }
+          : { decision: "declined", stage: "issuer", code: r.decline_reason ?? "DECLINED", payee };
+      }
     }
 
     // A frozen card is refused anyway; don't count those toward a new freeze.
-    if (result.decision !== "approved" && policy.status !== "frozen") {
+    if ((result.decision === "blocked" || result.decision === "declined") && policy.status !== "frozen") {
       const v = await this.checkActivity(label);
       if (v.frozen) result.card_frozen = v.reason;
     }
     if (p.requestId) await this.store.putPayment(label, p.requestId, result);
     return result;
+  }
+
+  /** Who the payment is to, as far as the agent's inputs and the chain can say. */
+  private async checkPayee(p: PaymentInput): Promise<PayeeCheck> {
+    const origin = p.merchantUrl ? toOrigin(p.merchantUrl) : null;
+    if (p.merchantUrl && !origin) throw new ServiceError("bad_input", "merchant_url must be an absolute http(s) URL");
+    const name = p.payeeName?.trim();
+    if (!name || !origin) {
+      return { status: "unverified", ...(name ? { name } : {}), ...(origin ? { origin } : {}), reason: name ? "no-merchant-url" : "no-payee-name" };
+    }
+    if (!this.opts.checkPayee) return { status: "unverified", name, origin, reason: "no-ens-reader" };
+    return this.opts.checkPayee(name, origin);
+  }
+
+  private async holdPayment(label: string, approver: string, p: PaymentInput, currency: string, payee: PayeeCheck, why: string) {
+    const held: HeldPayment = {
+      mcc: p.mcc,
+      merchant: p.merchant,
+      payeeStatus: payee.status,
+      ...(p.merchantUrl ? { merchantUrl: p.merchantUrl } : {}),
+      ...(payee.name ? { payeeName: payee.name } : {}),
+      ...(p.purpose ? { purpose: p.purpose } : {}),
+      ...(p.requestId ? { requestId: p.requestId } : {}),
+    };
+    const reason = `${why} · pay ${p.merchant}${p.purpose ? ` · ${p.purpose}` : ""}`;
+    const pending = newPendingApproval(label, p.amount, currency, reason, approver, Date.now(), held);
+    await this.store.putApproval({ ...pending, sig: await signApproval(this.opts.approvalSecret, pending) });
+    await this.store.addEvent(label, { at: Date.now(), kind: "escalated", detail: reason, amount: p.amount, currency });
+    return { decision: "pending_human" as const, reason: why, approval_id: pending.id, approver, ...this.approvalLink(pending.id) };
   }
 
   /** Sandbox demo: a merchant charges the card directly (no x402card pre-check), logged for the feed. */
@@ -384,6 +471,15 @@ export class CardService {
     if (!ref || !records) throw new ServiceError("not_found", `${fullName(label)} has no card`);
     return { label, ref, policy: parseRecords(records) };
   }
+}
+
+function describePayment(who: string, p: PaymentInput): string {
+  return `${who} · MCC ${p.mcc}${p.purpose ? ` · ${p.purpose}` : ""}`;
+}
+
+/** "ModelHub API (modelhub.eth ✓)" once the payee gate has verified the name. */
+function payeeLabel(merchant: string, name: string | undefined, status: string): string {
+  return name && status === "verified" ? `${merchant} (${name} ✓)` : merchant;
 }
 
 function toSafe(t: IssuingTransaction): SafeTransaction {

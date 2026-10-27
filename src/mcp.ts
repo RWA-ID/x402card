@@ -7,7 +7,7 @@ import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
-const SERVER_INFO = { name: "x402card", version: "0.2.0" };
+const SERVER_INFO = { name: "x402card", version: "0.3.0" };
 
 export type Caller = { kind: "admin" } | { kind: "agent"; label: string };
 
@@ -41,6 +41,12 @@ export const TOOLS = [
             currencies: { type: "array", items: { type: "string" }, description: "ISO codes; the first is the limit currency" },
             mcc_allow: { type: "array", items: { type: "string" }, description: "Allowed 4-digit merchant category codes; empty = any" },
             approver: { type: "string", description: "Who approves escalations, e.g. alice.eth" },
+            payee: {
+              type: "string",
+              enum: ["any", "verified-or-escalate", "verified-only"],
+              description: "What a payment needs to know about its payee. verified = the payee's ENS name lists the checkout's origin. Default any.",
+            },
+            payee_allow: { type: "array", items: { type: "string" }, description: "ENS names this card may pay, e.g. modelhub.eth; empty = any verified payee" },
           },
           required: ["limit_tx", "limit_monthly", "currencies", "approver"],
         },
@@ -59,7 +65,7 @@ export const TOOLS = [
     name: "pay",
     title: "Pay a merchant",
     description:
-      "Pay a merchant with this card. x402card checks the ENS policy first (status, card.limit.tx, card.currencies, card.mcc.allow) and refuses before anything reaches the card network (decision: blocked); the issuer then enforces the same limits plus the monthly allowance (decision: declined). You never handle the card number. Pass the same request_id when retrying so a payment can't go through twice.",
+      "Pay a merchant with this card. x402card checks the ENS policy first (status, card.limit.tx, card.currencies, card.mcc.allow) and refuses before anything reaches the card network (decision: blocked); the issuer then enforces the same limits plus the monthly allowance (decision: declined). Pass merchant_url and payee_name so x402card can check the checkout really belongs to that ENS name: a name that doesn't list the URL's origin is blocked (PAYEE_MISMATCH), and depending on card.payee an unverified payee is blocked or held for card.approver (decision: pending_human; the charge happens when they approve). You never handle the card number. Pass the same request_id when retrying so a payment can't go through twice.",
     inputSchema: {
       type: "object",
       properties: {
@@ -68,6 +74,8 @@ export const TOOLS = [
         currency: { type: "string", description: "ISO code, must be in card.currencies" },
         mcc: { type: "string", pattern: "^\\d{4}$", description: "Merchant category code, e.g. 5734 (software)" },
         merchant: { type: "string", description: "Merchant name" },
+        merchant_url: { type: "string", description: "URL of the checkout page or API you are paying, e.g. https://modelhub.example/checkout" },
+        payee_name: { type: "string", description: "ENS name the merchant shows as its identity, e.g. modelhub.eth" },
         purpose: { type: "string", description: "What this is for (kept in the card's activity log)" },
         request_id: { type: "string", description: "Idempotency key; reuse it on retry" },
       },
@@ -212,6 +220,8 @@ export class McpServer {
             currency: str(a.currency, "currency"),
             mcc: str(a.mcc, "mcc"),
             merchant: str(a.merchant, "merchant").slice(0, 43),
+            merchantUrl: optStr(a.merchant_url) || undefined,
+            payeeName: optStr(a.payee_name).toLowerCase() || undefined,
             purpose: optStr(a.purpose),
             requestId: optStr(a.request_id) || undefined,
           })),
@@ -267,6 +277,8 @@ function policyToRecords(p: unknown): TextRecords {
     "card.currencies": list(o.currencies),
     "card.mcc.allow": list(o.mcc_allow),
     "card.approver": String(o.approver ?? ""),
+    "card.payee": String(o.payee ?? ""),
+    "card.payee.allow": list(o.payee_allow),
   };
 }
 

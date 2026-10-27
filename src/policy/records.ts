@@ -8,6 +8,8 @@ export const RECORD_KEYS = [
   "card.mcc.allow",
   "card.status",
   "card.approver",
+  "card.payee",
+  "card.payee.allow",
 ] as const;
 
 export type RecordKey = (typeof RECORD_KEYS)[number];
@@ -23,7 +25,17 @@ export interface CardPolicy {
   status: "active" | "frozen";
   /** Who may approve escalations (ENS name or address). */
   approver: string;
+  /**
+   * What a payment needs to know about who it pays (see policy/payee.ts).
+   * any = check when the agent names a payee, never gate on it.
+   */
+  payee: PayeeMode;
+  /** ENS names this card may pay. Empty = any verified payee. */
+  payeeAllow: string[];
 }
+
+export const PAYEE_MODES = ["any", "verified-or-escalate", "verified-only"] as const;
+export type PayeeMode = (typeof PAYEE_MODES)[number];
 
 export class PolicyError extends Error {}
 
@@ -48,8 +60,22 @@ export function parseRecords(r: TextRecords): CardPolicy {
   const approver = (r["card.approver"] ?? "").trim();
   if (!approver) throw new PolicyError("card.approver is required");
 
-  return { limitTx, limitMonthly, currencies, mccAllow, status, approver };
+  // Absent = any, so cards issued before the payee gate keep paying as they did.
+  const payee = (r["card.payee"] ?? "").trim() || "any";
+  if (!(PAYEE_MODES as readonly string[]).includes(payee)) {
+    throw new PolicyError(`card.payee must be ${PAYEE_MODES.join("|")}`);
+  }
+  const payeeAllow = list(r["card.payee.allow"]).map((n) => n.toLowerCase());
+  for (const n of payeeAllow) if (!ENS_NAME.test(n)) throw new PolicyError(`bad payee name ${n}`);
+  if (payeeAllow.length > 0 && payee === "any") {
+    throw new PolicyError("card.payee.allow needs card.payee verified-only or verified-or-escalate");
+  }
+
+  return { limitTx, limitMonthly, currencies, mccAllow, status, approver, payee: payee as PayeeMode, payeeAllow };
 }
+
+// The verifier only reads .eth names; anything else could never match.
+const ENS_NAME = /^[^\s.,]+(\.[^\s.,]+)*\.eth$/;
 
 export function toRecords(p: CardPolicy): Required<TextRecords> {
   return {
@@ -59,6 +85,8 @@ export function toRecords(p: CardPolicy): Required<TextRecords> {
     "card.mcc.allow": p.mccAllow.join(","),
     "card.status": p.status,
     "card.approver": p.approver,
+    "card.payee": p.payee,
+    "card.payee.allow": p.payeeAllow.join(","),
   };
 }
 

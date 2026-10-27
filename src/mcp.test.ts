@@ -6,10 +6,11 @@ import { McpServer, authenticate, sha256Hex } from "./mcp.ts";
 import { CardService } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer, MemoryKV } from "./testing.ts";
+import type { PayeeChecker } from "./policy/payee.ts";
 
 const ADMIN = "admin-token";
 
-function setup() {
+function setup(checkPayee?: PayeeChecker) {
   const kv = new MemoryKV();
   const store = new Store(kv.asKV());
   const issuer = new FakeIssuer();
@@ -17,6 +18,7 @@ function setup() {
     approvalSecret: "test-secret",
     cardholderEmail: "agents@x402card.dev",
     approvalUrl: "https://demo.x402card.eth.limo/approve.html#{id}",
+    checkPayee,
   });
   let id = 0;
   async function call(token: string, method: string, params: Record<string, unknown> = {}) {
@@ -209,4 +211,91 @@ test("namespaces: the same label under x402card.eth and xcard.eth are separate c
     assert.match((await tool(ADMIN, "issue_card", { name, policy })).content[0].text, /reserved/);
   }
   assert.match((await tool(ADMIN, "issue_card", { name: "scout.other.eth", policy })).content[0].text, /bad_name/);
+});
+
+// Stands in for ENS: modelhub.eth lists its two origins.
+const fakePayees: PayeeChecker = async (name, origin) => {
+  const listed: Record<string, string[]> = { "modelhub.eth": ["https://modelhub.example", "https://api.modelhub.example"] };
+  if (!listed[name]) return { status: "unverified", name, origin, reason: "no-records" };
+  return listed[name].includes(origin)
+    ? { status: "verified", name, origin, reason: "origin-bound" }
+    : { status: "mismatch", name, origin, reason: "origin-not-listed" };
+};
+
+test("payee gate: verified pays, a lookalike is blocked then freezes, an unknown payee waits for a human", async () => {
+  const { tool, issuer, store, svc } = setup(fakePayees);
+  const issued = await tool(ADMIN, "issue_card", {
+    name: "buyer.xcard.eth",
+    policy: { limit_tx: 50, limit_monthly: 500, currencies: ["USD"], mcc_allow: ["5734"], approver: "alice.eth", payee: "verified-or-escalate" },
+  });
+  assert.ok(!issued.isError, issued.content?.[0]?.text);
+  assert.equal(issued.structuredContent.card.records["card.payee"], "verified-or-escalate");
+  const agent = issued.structuredContent.agent_token as string;
+  const ref = (await store.getCard("buyer.xcard.eth"))!;
+  const pay = async (args: Record<string, unknown>) =>
+    (await tool(agent, "pay", { currency: "USD", mcc: "5734", merchant: "ModelHub API", ...args })).structuredContent;
+  const clearings = () => issuer.cards.get(ref.cardId)!.txs.filter((t) => t.transaction_type === "CLEARING").length;
+
+  // 1. The checkout's origin is listed by the name: paid, and the feed names it.
+  const ok = await pay({ amount: 20, merchant_url: "https://api.modelhub.example/v1/checkout", payee_name: "modelhub.eth" });
+  assert.equal(ok.decision, "approved");
+  assert.equal(ok.payee.status, "verified");
+  assert.match((await store.getEvents("buyer.xcard.eth"))[0].detail, /modelhub\.eth ✓/);
+
+  // 2. A lookalike checkout claiming the same name: blocked before the network. Twice freezes.
+  const phish = await pay({ amount: 20, merchant_url: "https://modelhub-pay.example/checkout", payee_name: "modelhub.eth" });
+  assert.deepEqual([phish.decision, phish.code, phish.card_frozen], ["blocked", "PAYEE_MISMATCH", undefined]);
+  assert.equal(clearings(), 1, "a blocked payment never reaches the issuer");
+
+  // 3. No name to check: held for card.approver, nothing charged yet.
+  const held = await pay({ amount: 30, merchant_url: "https://new-vendor.example", purpose: "GPU hours", request_id: "gpu-1" });
+  assert.equal(held.decision, "pending_human");
+  assert.equal(held.approver, "alice.eth");
+  assert.match(held.reason, /not verified \(no-payee-name\)/);
+  assert.equal(clearings(), 1);
+  const pending = (await tool(agent, "get_card")).structuredContent.card.pending_approvals;
+  assert.deepEqual(pending.map((a: any) => [a.kind, a.merchant]), [["payment", "ModelHub API"]]);
+  assert.equal((await pay({ amount: 30, merchant_url: "https://new-vendor.example", request_id: "gpu-1" })).decision, "pending_human", "a retry replays the hold");
+
+  // Approving charges exactly the held payment, and a retry now sees the outcome.
+  const decided = await svc.decide(held.approval_id, true, "alice.eth");
+  assert.equal(decided.charge?.approved, true);
+  assert.equal(clearings(), 2);
+  const replay = await pay({ amount: 30, merchant_url: "https://new-vendor.example", request_id: "gpu-1" });
+  assert.deepEqual([replay.decision, replay.replayed], ["approved", true]);
+
+  // A second lookalike attempt freezes the card.
+  const again = await pay({ amount: 5, merchant_url: "https://modelhub-pay.example", payee_name: "modelhub.eth" });
+  assert.match(again.card_frozen, /2 payee-mismatch attempts/);
+  assert.equal(issuer.cards.get(ref.cardId)!.status, "INACTIVE");
+});
+
+test("payee gate: verified-only and the allow-list; a denied hold never charges", async () => {
+  const { tool, issuer, store, svc } = setup(fakePayees);
+  const policy = { limit_tx: 50, limit_monthly: 500, currencies: ["USD"], approver: "alice.eth" };
+  const strict = await tool(ADMIN, "issue_card", { name: "strict", policy: { ...policy, payee: "verified-only", payee_allow: ["other.eth"] } });
+  const agent = strict.structuredContent.agent_token as string;
+  const pay = async (args: Record<string, unknown>) =>
+    (await tool(agent, "pay", { amount: 5, currency: "USD", mcc: "5734", merchant: "ModelHub API", ...args })).structuredContent;
+
+  assert.equal((await pay({})).code, "PAYEE_UNVERIFIED");
+  assert.equal((await pay({ merchant_url: "https://modelhub.example", payee_name: "modelhub.eth" })).code, "PAYEE_NOT_ALLOWED");
+  assert.match((await tool(agent, "pay", { amount: 5, currency: "USD", mcc: "5734", merchant: "M", merchant_url: "not a url" })).content[0].text, /bad_input/);
+  assert.match((await tool(ADMIN, "issue_card", { name: "loose", policy: { ...policy, payee_allow: ["a.eth"] } })).content[0].text, /bad_policy/);
+
+  // Cards without card.payee pay as before, with or without a payee.
+  const legacy = await tool(ADMIN, "issue_card", { name: "legacy", policy });
+  const legacyAgent = legacy.structuredContent.agent_token as string;
+  const r = (await tool(legacyAgent, "pay", { amount: 5, currency: "USD", mcc: "5734", merchant: "M", merchant_url: "https://x.example", payee_name: "modelhub.eth" })).structuredContent;
+  assert.deepEqual([r.decision, r.payee.status], ["approved", "mismatch"]);
+
+  // A denied hold: no charge, and the agent's retry learns it was denied.
+  const esc = await tool(ADMIN, "issue_card", { name: "esc", policy: { ...policy, payee: "verified-or-escalate" } });
+  const escAgent = esc.structuredContent.agent_token as string;
+  const held = (await tool(escAgent, "pay", { amount: 9, currency: "USD", mcc: "5734", merchant: "M", request_id: "r1" })).structuredContent;
+  await svc.decide(held.approval_id, false, "alice.eth");
+  const ref = (await store.getCard("esc"))!;
+  assert.equal(issuer.cards.get(ref.cardId)!.txs.length, 0);
+  const after = (await tool(escAgent, "pay", { amount: 9, currency: "USD", mcc: "5734", merchant: "M", request_id: "r1" })).structuredContent;
+  assert.equal(after.code, "DENIED_BY_APPROVER");
 });

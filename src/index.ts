@@ -9,10 +9,13 @@
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
 //   /public/feed           recent policy events across cards, for the demo site
 //   cron (every minute)    anomaly check -> freeze
-import type { Address, Hex } from "viem";
+import { createPublicClient, http, type Address, type Hex, type PublicClient } from "viem";
+import { mainnet } from "viem/chains";
+import { viemReader } from "@x402identity/payee";
 import { AirwallexClient, KvTokenStore } from "./airwallex/client.ts";
 import { gatewayResponse } from "./ens/gateway.ts";
 import { McpServer, authenticate, issueWithToken } from "./mcp.ts";
+import { ensPayeeChecker } from "./policy/payee.ts";
 import { AirwallexIssuer, CardService, describeError, fullName, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer } from "./testing.ts";
@@ -28,6 +31,8 @@ export interface Env {
   CARDHOLDER_EMAIL?: string;
   /** Where humans approve escalations; {id} is replaced. */
   APPROVAL_URL?: string;
+  /** Ethereum mainnet RPC for the payee gate's ENS reads. Public RPCs throttle Workers; a failed read holds the payment, never passes it. */
+  ETH_RPC_URL?: string;
   /** Local dev only (`wrangler dev --var ISSUER:fake`): in-memory issuer instead of Airwallex. */
   ISSUER?: string;
 }
@@ -52,6 +57,7 @@ function service(env: Env, store: Store): CardService {
     approvalSecret: env.APPROVAL_SECRET,
     cardholderEmail: env.CARDHOLDER_EMAIL ?? "agents@x402card.dev",
     approvalUrl: env.APPROVAL_URL,
+    checkPayee: ensPayeeChecker(viemReader(createPublicClient({ chain: mainnet, transport: http(env.ETH_RPC_URL) }) as PublicClient)),
   });
 }
 

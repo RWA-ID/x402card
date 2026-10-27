@@ -8,7 +8,7 @@ export interface EngineConfig {
   escalateAbove: number;
   /** Auto-approval may not take the wallet's available balance below this. */
   reserveFloor: number;
-  /** Disallowed-MCC attempts within the window that trigger a freeze. */
+  /** Disallowed-MCC attempts (and, separately, payee mismatches) within the window that trigger a freeze. */
   mccStrikesToFreeze: number;
   /** Total attempts within the window that trigger a freeze. */
   velocityMax: number;
@@ -159,6 +159,12 @@ export function evaluateActivity(
     blockedInWindow.filter((b) => b.code === "MERCHANT_CATEGORY_NOT_ALLOWED").length;
   if (strikes >= cfg.mccStrikesToFreeze) {
     return { action: "freeze", reason: `${strikes} disallowed merchant-category attempts` };
+  }
+  // A payee that doesn't match its name looks like a phishing checkout; one
+  // retry is allowed (a typo), a second means the agent is being steered.
+  const mismatches = blockedInWindow.filter((b) => b.code === "PAYEE_MISMATCH").length;
+  if (mismatches >= cfg.mccStrikesToFreeze) {
+    return { action: "freeze", reason: `${mismatches} payee-mismatch attempts` };
   }
   const attempts = inWindow.length + blockedInWindow.length;
   if (attempts > cfg.velocityMax) {

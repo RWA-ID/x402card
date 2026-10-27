@@ -16,6 +16,7 @@
     "wrangler": "^4.147.0"
   },
   "dependencies": {
+    "@x402identity/payee": "^0.2.0",
     "viem": "^2.57.3"
   }
 }

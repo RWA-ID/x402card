@@ -159,6 +159,8 @@ Every card name, `<label>.xcard.eth` or `<label>.x402card.eth`, exposes these te
 | `card.mcc.allow` | `5734,7372` | Allowed 4-digit merchant category codes. Empty means any. |
 | `card.status` | `active` \| `frozen` | Mirrors the Airwallex card state. |
 | `card.approver` | `alice.eth` | Who approves escalations. |
+| `card.payee` | `verified-or-escalate` | What a payment must prove about its payee: `any` (the default), `verified-or-escalate` or `verified-only`. See [Payee gate](#payee-gate). |
+| `card.payee.allow` | `modelhub.eth,aws.eth` | ENS names this card may pay. Empty means any verified payee. Needs `card.payee` other than `any`. |
 
 **Namespaces.** Both parents resolve through the same resolver and gateway. The same label under each is a separate card with its own policy and token. Pass the full name to choose; a bare label (`researcher`) means `x402card.eth`, the original namespace.
 
@@ -175,9 +177,24 @@ Plain, deterministic TypeScript with no LLM ([`src/policy/engine.ts`](src/policy
 | Funding request | amount > `card.limit.tx`, or > global ceiling ($250), or wallet would drop below reserve floor ($1,000) | **escalate** to `card.approver` |
 | Funding request | otherwise | **approve**: raise `card.limit.monthly` and the Airwallex `MONTHLY` limit together |
 | Payment (`pay`) | card frozen, bad amount or MCC, currency not allowed, MCC not in `card.mcc.allow`, amount > `card.limit.tx` | **block** before the card network; otherwise pass to the issuer, which also enforces `MONTHLY` |
-| Activity (cron, and after every refused payment) | ≥ 2 disallowed-MCC attempts in 10 min, or > 10 payment attempts in 10 min (issuer authorizations + pre-check blocks) | **freeze**: card `INACTIVE` + `card.status=frozen`. A human unfreeze starts a clean window. |
+| Payment (`pay`) | passed the pre-check: payee gate per `card.payee` | **block** a lookalike (`PAYEE_MISMATCH`); **block** or **escalate** an unverified payee; otherwise pay |
+| Activity (cron, and after every refused payment) | ≥ 2 disallowed-MCC attempts in 10 min, ≥ 2 payee mismatches in 10 min, or > 10 payment attempts in 10 min (issuer authorizations + pre-check blocks) | **freeze**: card `INACTIVE` + `card.status=frozen`. A human unfreeze starts a clean window. |
 
 Amounts are major units (`300` = $300), rounded to the currency's decimals. A charge counts as successful only once it reaches `CLEARING`; declines carry `failure_reason`.
+
+### Payee gate
+
+Limits and MCCs say how much and what kind of merchant. The payee gate asks **who**: is this checkout really the merchant the agent means to pay? It uses the [x402 `payee-name`](https://github.com/x402-foundation/wg-identity/issues/36) records: a merchant's ENS name lists the origins it takes payments on in `org.x402.origins`. The agent passes `merchant_url` and `payee_name` to `pay`, and xcard reads the name's records on Ethereum mainnet ([`@x402identity/payee`](https://www.npmjs.com/package/@x402identity/payee), [`src/policy/payee.ts`](src/policy/payee.ts)).
+
+| Check | Meaning | `verified-or-escalate` | `verified-only` |
+|---|---|---|---|
+| **verified** | the name is live and lists the checkout's origin | pay (feed shows `name ✓`) | pay |
+| **mismatch** | the name lists other origins, or has expired: a lookalike checkout | block `PAYEE_MISMATCH` (a strike toward freezing) | block |
+| **unverified** | no name given, the name lists no origins, or the chain read failed | hold for `card.approver` | block `PAYEE_UNVERIFIED` |
+
+A held payment returns `pending_human` with an approval link. Approving it re-checks the policy and charges exactly the held amount and merchant; the approval's HMAC binds the merchant URL and payee name too. A retry with the same `request_id` returns the outcome once a human has decided. Under `any`, the check still runs when the agent names a payee and the result is reported, but never gates.
+
+A card payment has no `payTo` (the card network routes the money), so only the origin half of `payee-name` applies. The origin comes from the agent's own request, so this guards an honest agent against a lookalike checkout. It doesn't stop an agent that lies about the URL; the issuer's limits and MCCs still bind it. Set `ETH_RPC_URL` on the Worker: public RPCs throttle Workers, and a failed read holds the payment rather than passing it.
 
 ---
 

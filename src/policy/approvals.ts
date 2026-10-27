@@ -1,6 +1,7 @@
-// Escalated funding approvals. An approval is an HMAC over the exact
+// Escalated approvals. An approval is an HMAC over the exact
 // (name, amount, currency, approval id), so it can't be replayed for a
-// different card, a bigger amount or another currency.
+// different card, a bigger amount or another currency. A held payment also
+// binds its merchant, so approving it can't pay someone else.
 
 export interface PendingApproval {
   id: string;
@@ -12,6 +13,20 @@ export interface PendingApproval {
   createdAt: number;
   expiresAt: number;
   status: "pending" | "approved" | "denied" | "expired";
+  /** Absent = funding (approvals stored before payments could be held). */
+  kind?: "funding" | "payment";
+  payment?: HeldPayment;
+}
+
+/** A payment the payee gate held for a human; approving it makes the charge. */
+export interface HeldPayment {
+  mcc: string;
+  merchant: string;
+  merchantUrl?: string;
+  payeeName?: string;
+  payeeStatus: string;
+  purpose?: string;
+  requestId?: string;
 }
 
 const TTL_MS = 24 * 60 * 60 * 1000;
@@ -23,6 +38,7 @@ export function newPendingApproval(
   reason: string,
   approver: string,
   now = Date.now(),
+  payment?: HeldPayment,
 ): PendingApproval {
   return {
     id: crypto.randomUUID(),
@@ -34,11 +50,19 @@ export function newPendingApproval(
     createdAt: now,
     expiresAt: now + TTL_MS,
     status: "pending",
+    ...(payment ? { kind: "payment" as const, payment } : {}),
   };
 }
 
-function canonical(a: Pick<PendingApproval, "id" | "name" | "amount" | "currency">): string {
-  return `x402card-approval:v1|${a.id}|${a.name.toLowerCase()}|${a.amount}|${a.currency.toUpperCase()}`;
+type Signed = Pick<PendingApproval, "id" | "name" | "amount" | "currency" | "kind" | "payment">;
+
+function canonical(a: Signed): string {
+  const base = `${a.id}|${a.name.toLowerCase()}|${a.amount}|${a.currency.toUpperCase()}`;
+  // Funding keeps the v1 string so approvals signed before payments existed still verify.
+  if (a.kind !== "payment") return `x402card-approval:v1|${base}`;
+  const p = a.payment;
+  // JSON, so a "|" inside a merchant name can't shift fields.
+  return `x402card-payment:v1|${base}|${JSON.stringify([p?.mcc, p?.merchant, p?.merchantUrl ?? "", p?.payeeName ?? ""])}`;
 }
 
 async function hmacKey(secret: string): Promise<CryptoKey> {
@@ -51,15 +75,15 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-export async function signApproval(secret: string, a: PendingApproval): Promise<string> {
+export async function signApproval(secret: string, a: Signed): Promise<string> {
   const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), new TextEncoder().encode(canonical(a)));
   return toHex(new Uint8Array(sig));
 }
 
-/** True only if `sig` was issued for exactly this name, amount and currency. */
+/** True only if `sig` was issued for exactly this name, amount and currency (and merchant, for a payment). */
 export async function verifyApproval(
   secret: string,
-  a: Pick<PendingApproval, "id" | "name" | "amount" | "currency">,
+  a: Signed,
   sig: string,
 ): Promise<boolean> {
   const bytes = fromHex(sig);
