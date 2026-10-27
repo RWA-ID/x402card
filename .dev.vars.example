@@ -4,3 +4,7 @@ AWX_API_KEY=
 GATEWAY_SIGNER_KEY=
 MCP_ADMIN_TOKEN=
 APPROVAL_SECRET=
+# Payee gate: Ethereum mainnet RPC for ENS reads (optional; public RPCs throttle Workers).
+ETH_RPC_URL=
+# Visa TAP: Ed25519 private JWK from `node scripts/tap-keygen.ts <file>` (optional; sign_request needs it).
+TAP_PRIVATE_KEY=
