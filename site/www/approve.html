@@ -45,6 +45,11 @@
     </div>
   </div>
 
+  <section class="block one" data-one hidden>
+    <div class="block-head"><h2>Your decision</h2><span class="count">signed with your wallet</span></div>
+    <div data-one-body aria-live="polite"></div>
+  </section>
+
   <section class="wizard" data-wizard aria-label="How an approval works">
     <div class="wiz-stage">
       <div class="floor-glow"></div>
@@ -92,7 +97,7 @@
       <button class="btn-sm" type="submit" style="cursor:pointer">Connect</button>
     </form>
     <div class="err" data-signin-err></div>
-    <p style="font-size:12.5px;color:var(--dim)">No token? The walkthrough above shows exactly what happens when an approver says yes. Next step for the project: <span class="mono">card.approver</span> approves by signing with their wallet or Safe instead of an admin token.</p>
+    <p style="font-size:12.5px;color:var(--dim)">Approving one request? Open the link the agent gave you: it signs with the wallet in <span class="mono">card.approver</span>, no token needed. The operator console here is for issuing cards and the whole fleet.</p>
   </section>
 
   <section class="block" data-app hidden>

@@ -47,7 +47,7 @@ test("protocol: initialize, tools/list, auth", async () => {
   assert.equal(init.result.protocolVersion, "2025-06-18");
   assert.ok(init.result.capabilities.tools);
   const list = await call(ADMIN, "tools/list");
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "get_card", "pay", "sign_request", "request_funding", "get_approval", "submit_approval", "freeze", "list_transactions"]);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "get_card", "pay", "sign_request", "request_funding", "get_approval", "freeze", "list_transactions"]);
   assert.equal((await call("wrong", "tools/list")).status, 401);
   assert.equal((await call(ADMIN, "nope")).error.code, -32601);
 });

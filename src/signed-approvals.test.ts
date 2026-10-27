@@ -1,6 +1,7 @@
-// card.approver decides with a wallet signature: the chat path (get_approval ->
-// PayBox signs typed_data -> submit_approval) and the public /approvals/:id
-// endpoint behind the approval page. Real secp256k1 signatures throughout.
+// card.approver decides with a wallet signature on the approval page: the
+// service path (approvalView -> sign -> decideSigned), the public
+// /approvals/:id endpoint, and what an agent sees over MCP (status only, no
+// way to submit). Real secp256k1 signatures throughout.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { verifyTypedData, type PublicClient } from "viem";
@@ -50,97 +51,114 @@ function setup() {
     assert.ok(!r.isError, r.content?.[0]?.text);
     return r.structuredContent.agent_token as string;
   };
-  return { store, issuer, svc, tool, issue };
+  // What the approval page does: the view's typed data, signed, then POSTed.
+  const view = (id: string, scope?: string) => svc.approvalView(id, scope) as Promise<any>;
+  const submit = async (id: string, approve: boolean, signature: string, scope?: string): Promise<any> => {
+    try {
+      return await svc.decideSigned(id, approve, signature, scope);
+    } catch (e: any) {
+      return { error: { code: e.code, message: e.message } };
+    }
+  };
+  return { store, issuer, svc, tool, issue, view, submit };
 }
 
 // What a wallet does with eth_signTypedData_v4 JSON: parse it and sign it as is.
 const signJson = (account: typeof alice, td: unknown) => account.signTypedData(JSON.parse(JSON.stringify(td)));
 
-test("a held payment is approved in chat with the approver's wallet signature", async () => {
-  const { tool, issue, issuer } = setup();
+test("a held payment is approved with the approver's wallet signature", async () => {
+  const { tool, issue, issuer, view, submit } = setup();
   const agent = await issue("scout.xcard.eth");
 
   const held = (await tool(agent, "pay", { amount: 15, currency: "USD", mcc: "5734", merchant: "New Vendor", merchant_url: "https://new-vendor.example/buy" })).structuredContent;
   assert.equal(held.decision, "pending_human");
 
-  const view = (await tool(agent, "get_approval", { approval_id: held.approval_id })).structuredContent;
-  assert.equal(view.card, "scout.xcard.eth");
-  assert.equal(view.signable, true);
-  const msg = view.typed_data.approve.message;
+  const v = await view(held.approval_id);
+  assert.equal(v.card, "scout.xcard.eth");
+  assert.equal(v.signable, true);
+  assert.equal(v.approver_address, alice.address);
+  const msg = v.typed_data.approve.message;
   assert.deepEqual(
     [msg.decision, msg.card, msg.kind, msg.amount, msg.currency, msg.merchant, msg.checkout, msg.approver],
     ["approve", "scout.xcard.eth", "payment", "15", "USD", "New Vendor", "https://new-vendor.example/buy", "alice.eth"],
   );
-  assert.equal(view.typed_data.deny.message.decision, "deny");
-  assert.equal(view.approval.sig, undefined, "the HMAC never leaves the Worker");
+  assert.equal(v.typed_data.deny.message.decision, "deny");
+  assert.equal(v.approval.sig, undefined, "the HMAC never leaves the Worker");
 
   // Someone else's wallet, or the deny message offered as an approval, is refused.
-  const bad = async (signature: string, approve = true) => {
-    const r = await tool(agent, "submit_approval", { approval_id: held.approval_id, approve, signature });
-    assert.ok(r.isError);
-    return r.structuredContent.error.code;
-  };
-  assert.equal(await bad(await signJson(mallory, view.typed_data.approve)), "bad_signature");
-  assert.equal(await bad(await signJson(alice, view.typed_data.deny)), "bad_signature");
-  assert.equal(await bad("0x1234"), "bad_signature");
+  const code = async (signature: string, approve = true) => (await submit(held.approval_id, approve, signature)).error?.code;
+  assert.equal(await code(await signJson(mallory, v.typed_data.approve)), "bad_signature");
+  assert.equal(await code(await signJson(alice, v.typed_data.deny)), "bad_signature");
+  assert.equal(await code("0x1234"), "bad_signature");
 
-  const ok = await tool(agent, "submit_approval", { approval_id: held.approval_id, approve: true, signature: await signJson(alice, view.typed_data.approve) });
-  assert.ok(!ok.isError, ok.content?.[0]?.text);
-  assert.equal(ok.structuredContent.approval.status, "approved");
-  assert.equal(ok.structuredContent.approval.charge.approved, true);
-  assert.equal(ok.structuredContent.approval.sig, undefined);
+  const ok = await submit(held.approval_id, true, await signJson(alice, v.typed_data.approve));
+  assert.equal(ok.error, undefined, ok.error?.message);
+  assert.equal(ok.status, "approved");
+  assert.equal(ok.charge.approved, true);
+  assert.equal(ok.sig, undefined);
   const [card] = issuer.cards.values();
   assert.ok(card.txs.some((t) => t.transaction_type === "CLEARING" && t.transaction_amount === 15), "approving charged the card");
 
   // The same signature can't decide it twice.
-  assert.equal(await bad(await signJson(alice, view.typed_data.approve)), "already_decided");
+  assert.equal(await code(await signJson(alice, v.typed_data.approve)), "already_decided");
 });
 
 test("funding: a signed approval raises the allowance; a signed denial refuses it", async () => {
-  const { tool, issue } = setup();
+  const { tool, issue, view, submit, svc } = setup();
   const agent = await issue("researcher.xcard.eth");
   const ask = async () => (await tool(agent, "request_funding", { amount: 300, currency: "USD", purpose: "dataset" })).structuredContent;
 
   const a = await ask();
-  const view = (await tool(agent, "get_approval", { approval_id: a.approval_id })).structuredContent;
-  assert.equal(view.typed_data.approve.message.kind, "funding");
-  const r = await tool(agent, "submit_approval", { approval_id: a.approval_id, approve: true, signature: await signJson(alice, view.typed_data.approve) });
-  assert.equal(r.structuredContent.card.records["card.limit.monthly"], "800");
+  const v = await view(a.approval_id);
+  assert.equal(v.typed_data.approve.message.kind, "funding");
+  await submit(a.approval_id, true, await signJson(alice, v.typed_data.approve));
+  assert.equal((await svc.getCard("researcher.xcard.eth")).records["card.limit.monthly"], "800");
 
   const b = await ask();
-  const v2 = (await tool(agent, "get_approval", { approval_id: b.approval_id })).structuredContent;
+  const v2 = await view(b.approval_id);
   // A signature over another approval's message doesn't carry over.
-  const reused = await tool(agent, "submit_approval", { approval_id: b.approval_id, approve: true, signature: await signJson(alice, view.typed_data.approve) });
-  assert.equal(reused.structuredContent.error.code, "bad_signature");
-  const d = await tool(agent, "submit_approval", { approval_id: b.approval_id, approve: false, signature: await signJson(alice, v2.typed_data.deny) });
-  assert.equal(d.structuredContent.approval.status, "denied");
-  assert.equal(d.structuredContent.card.records["card.limit.monthly"], "800");
+  assert.equal((await submit(b.approval_id, true, await signJson(alice, v.typed_data.approve))).error.code, "bad_signature");
+  const d = await submit(b.approval_id, false, await signJson(alice, v2.typed_data.deny));
+  assert.equal(d.status, "denied");
+  assert.equal((await svc.getCard("researcher.xcard.eth")).records["card.limit.monthly"], "800");
 });
 
-test("scope and approvers that can't sign", async () => {
+test("agents see status only: no typed data, no way to submit", async () => {
   const { tool, issue } = setup();
   const scout = await issue("scout.xcard.eth");
   const other = await issue("other.xcard.eth");
   const held = (await tool(scout, "pay", { amount: 15, currency: "USD", mcc: "5734", merchant: "New Vendor" })).structuredContent;
 
-  // Another card's token can't see or decide it; the admin can see it.
+  const got = (await tool(scout, "get_approval", { approval_id: held.approval_id })).structuredContent;
+  assert.equal(got.approval.status, "pending");
+  assert.equal(got.typed_data, undefined, "an agent never gets the message to sign");
+  assert.equal((await tool(scout, "submit_approval", { approval_id: held.approval_id, approve: true, signature: "0x" + "ab".repeat(65) })).structuredContent.error.code, "unknown_tool");
+  // Another card's token can't see it.
   assert.equal((await tool(other, "get_approval", { approval_id: held.approval_id })).structuredContent.error.code, "not_found");
-  const sig = await signJson(alice, (await tool(ADMIN, "get_approval", { approval_id: held.approval_id })).structuredContent.typed_data.approve);
-  assert.equal((await tool(other, "submit_approval", { approval_id: held.approval_id, approve: true, signature: sig })).structuredContent.error.code, "not_found");
+});
+
+test("approvers that can't sign", async () => {
+  const { tool, issue, view, submit } = setup();
+  const scout = await issue("scout.xcard.eth");
+  const held = (await tool(scout, "pay", { amount: 15, currency: "USD", mcc: "5734", merchant: "New Vendor" })).structuredContent;
+  const sig = await signJson(alice, (await view(held.approval_id)).typed_data.approve);
+  // Scope: another card's agent can't decide it.
+  assert.equal((await submit(held.approval_id, true, sig, "other.xcard.eth")).error.code, "not_found");
 
   // Free text can only be decided in the operator console; a name with no address can't sign.
   const ops = await issue("ops.xcard.eth", "the ops team");
   const h2 = (await tool(ops, "pay", { amount: 15, currency: "USD", mcc: "5734", merchant: "New Vendor" })).structuredContent;
-  const v = (await tool(ops, "get_approval", { approval_id: h2.approval_id })).structuredContent;
+  const v = await view(h2.approval_id);
   assert.equal(v.signable, false);
   assert.equal(v.typed_data, undefined);
-  assert.equal((await tool(ops, "submit_approval", { approval_id: h2.approval_id, approve: true, signature: sig })).structuredContent.error.code, "approver_cannot_sign");
+  assert.equal((await submit(h2.approval_id, true, sig)).error.code, "approver_cannot_sign");
 
   const nobody = await issue("nobody.xcard.eth", "nobody.eth");
   const h3 = (await tool(nobody, "pay", { amount: 15, currency: "USD", mcc: "5734", merchant: "New Vendor" })).structuredContent;
-  const r = await tool(nobody, "submit_approval", { approval_id: h3.approval_id, approve: true, signature: sig });
-  assert.equal(r.structuredContent.error.code, "approver_cannot_sign");
-  assert.match(r.structuredContent.error.message, /no ETH address/);
+  assert.equal((await view(h3.approval_id)).approver_address, undefined);
+  const r = await submit(h3.approval_id, true, sig);
+  assert.equal(r.error.code, "approver_cannot_sign");
+  assert.match(r.error.message, /no ETH address/);
 });
 
 test("public /approvals/:id: GET the typed data, POST the signature, no token", async () => {

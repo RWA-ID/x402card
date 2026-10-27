@@ -434,6 +434,12 @@ td.name { color: var(--text); }
 .issue-f .field input { padding: 7px 0; }
 .issue-name { max-width: 560px; }
 .issue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+/* One approval, decided with the approver's wallet. */
+.one .req-card { max-width: 560px; }
+.one-note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.one-wallets { margin-left: auto; }
+.one-wallets[hidden] { display: none; }
+
 .issue-payee { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
 .issue-payee .ns-switch { align-self: flex-start; }
 .issue-payee .ns-switch button { padding: 9px 10px; }

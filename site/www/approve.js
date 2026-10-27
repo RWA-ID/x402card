@@ -478,7 +478,147 @@
     setNs(ns);
   }
 
-  window.addEventListener("hashchange", () => { focusId = location.hash.slice(1); lastSig = ""; load(); });
+  // ---------- one approval, decided with the approver's wallet ----------
+  // approval_url deep-links here (#<id>). No token: GET /approvals/:id is
+  // public by link, and the decision is an EIP-712 signature from the address
+  // card.approver resolves to. Signing is free; nothing goes on-chain.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const wallets = [];
+  window.addEventListener("eip6963:announceProvider", (e) => {
+    const { info, provider } = e.detail || {};
+    if (provider && !wallets.some((w) => w.info.uuid === info.uuid)) wallets.push({ info, provider });
+  });
+  window.dispatchEvent(new Event("eip6963:requestProvider"));
+  const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+  // card.approver as people read it: the name, or a bare address shortened.
+  const who = (s) => (/^0x[0-9a-fA-F]{40}$/.test(s) ? short(s) : s);
+
+  async function loadOne() {
+    const id = location.hash.slice(1);
+    const box = $("[data-one]"), body = $("[data-one-body]");
+    if (!UUID.test(id)) { box.hidden = true; return; }
+    box.hidden = false;
+    body.textContent = "";
+    body.append(el("div", { class: "empty", text: "Loading the request…" }));
+    try {
+      const r = await fetch(`${API}/approvals/${id}`);
+      const v = await r.json().catch(() => ({}));
+      body.textContent = "";
+      if (r.status === 404) { body.append(el("div", { class: "empty", text: "This approval link isn't valid. Ask the agent for a new one." })); return; }
+      if (!r.ok) throw new Error(v?.error?.message || `HTTP ${r.status}`);
+      body.append(oneCard(v));
+    } catch (err) {
+      body.textContent = "";
+      body.append(el("div", { class: "empty", text: "Couldn't load the request: " + err.message }));
+    }
+  }
+
+  function oneCard(v) {
+    const a = v.approval, p = a.payment || {}, cur = a.currency;
+    const pay = a.kind === "payment";
+    const live = a.status === "pending" && a.expiresAt > Date.now();
+    const [why, purpose] = splitReason(a.reason);
+    const whyRow = el("div", { class: "req-why" }, el("span", { class: "dot" }),
+      el("span", { text: live ? (pay ? "HELD · " : "PAUSED · ") + why : (a.status === "pending" ? "EXPIRED" : a.status.toUpperCase()) }));
+    if (!live) whyRow.className = "req-why " + (a.status === "approved" ? "ok" : "no");
+    const kv = el("div", { class: "kv" },
+      el("span", { text: "approver" }), el("span", { text: who(a.approver) + (v.approver_address && who(a.approver) !== short(v.approver_address) ? ` · ${short(v.approver_address)}` : "") }),
+      ...(pay ? [
+        el("span", { text: "checkout" }), el("span", { text: p.merchantUrl || "not given" }),
+        el("span", { text: "payee name" }), el("span", { text: p.payeeName ? `${p.payeeName} · ${p.payeeStatus}` : "not given" }),
+        el("span", { text: "MCC" }), el("span", { text: p.mcc || "—" }),
+      ] : []),
+      el("span", { text: "expires" }), el("span", { text: new Date(a.expiresAt).toLocaleString() }));
+    const note = el("p", { class: "one-note" });
+    const err = el("div", { class: "err" });
+    const card = el("article", { class: "req-card focus", "data-id": a.id },
+      el("div", { class: "req-top" },
+        el("div", { style: "min-width:0" },
+          el("div", { class: "req-name", text: v.card }),
+          el("div", { class: "req-purpose", text: pay ? `wants to pay ${p.merchant || "a merchant"}` + (p.purpose ? " · " + p.purpose : "") : "requests funds" + (purpose ? " · " + purpose : "") })),
+        el("div", { class: "req-amt" }, (pay ? "" : "+") + money(a.amount, cur), el("small", { text: cur }))),
+      whyRow, kv);
+
+    if (!live) return card;
+    if (!v.signable) {
+      note.textContent = `This card's approver ("${a.approver}") isn't an ENS name or address, so only the operator can decide it. Sign in below with the admin token.`;
+      card.append(note);
+      return card;
+    }
+
+    const approveBtn = el("button", { class: "approve-btn", text: pay ? `Approve & pay ${money(a.amount, cur)}` : `Approve ${money(a.amount, cur)}` });
+    const denyBtn = el("button", { class: "btn-deny", text: "Deny" });
+    const picker = el("div", { class: "ns-switch one-wallets", role: "radiogroup", "aria-label": "Wallet" });
+    let chosen = 0;
+    const drawPicker = () => {
+      picker.textContent = "";
+      picker.hidden = wallets.length < 2;
+      wallets.forEach((w, i) => picker.append(el("button", { type: "button", role: "radio", "aria-checked": String(i === chosen), text: w.info.name,
+        onclick: () => { chosen = i; drawPicker(); } })));
+    };
+    drawPicker();
+    const signer = who(a.approver) === who(v.approver_address || "") ? who(a.approver) : `${a.approver}${v.approver_address ? ` (${short(v.approver_address)})` : ""}`;
+    note.textContent = `Your wallet asks you to sign a message: free, nothing is sent on-chain. Sign with ${signer}.`;
+
+    const provider = () => wallets[chosen]?.provider || window.ethereum;
+    const decide = async (approve) => {
+      const p0 = provider();
+      if (!p0) {
+        err.textContent = "No wallet in this browser. Open this link in your wallet app's browser (MetaMask, Rabby, Coinbase Wallet) or on a computer with a wallet extension.";
+        return;
+      }
+      approveBtn.disabled = denyBtn.disabled = true; err.textContent = "";
+      const btn = approve ? approveBtn : denyBtn, label = btn.textContent;
+      try {
+        btn.textContent = "Connecting…";
+        const accounts = await p0.request({ method: "eth_requestAccounts" });
+        const want = (v.approver_address || "").toLowerCase();
+        const acct = accounts.find((x) => x.toLowerCase() === want) || accounts[0];
+        if (want && acct.toLowerCase() !== want) {
+          throw new Error(`Connected ${short(acct)}, but the approver is ${short(v.approver_address)}. Switch to that account in your wallet and try again.`);
+        }
+        if ((await p0.request({ method: "eth_chainId" })) !== "0x1") {
+          try { await p0.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x1" }] }); }
+          catch { throw new Error("Switch your wallet to Ethereum mainnet. Signing is free; nothing is sent on-chain."); }
+        }
+        btn.textContent = "Sign in your wallet…";
+        const signature = await p0.request({ method: "eth_signTypedData_v4", params: [acct, JSON.stringify(v.typed_data[approve ? "approve" : "deny"])] });
+        btn.textContent = "Submitting…";
+        const r = await fetch(`${API}/approvals/${a.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approve, signature }) });
+        const res = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(res?.error?.message || `HTTP ${r.status}`);
+        const charge = res.approval?.charge;
+        if (!approve) {
+          denyBtn.textContent = "Denied"; approveBtn.style.opacity = "0.3";
+          whyRow.className = "req-why no"; whyRow.lastChild.textContent = `DENIED · signed by ${who(a.approver)}`;
+        } else if (charge?.approved === false) {
+          approveBtn.textContent = "Declined by issuer";
+          whyRow.className = "req-why no"; whyRow.lastChild.textContent = `ISSUER DECLINED · ${charge.decline_reason || "DECLINED"}`;
+        } else {
+          approveBtn.textContent = pay ? "Paid ✓" : "Approved ✓"; approveBtn.style.background = "var(--success)";
+          const lim = res.card?.records?.["card.limit.monthly"];
+          whyRow.className = "req-why ok";
+          whyRow.lastChild.textContent = (pay ? "PAID" : `APPROVED · allowance now ${money(lim, cur)}`) + ` · signed by ${who(a.approver)}`;
+        }
+        picker.hidden = true;
+        note.textContent = "Done. The agent sees the decision the next time it checks.";
+        if (token) { lastSig = ""; load(); }
+      } catch (e) {
+        btn.textContent = label;
+        approveBtn.disabled = denyBtn.disabled = false;
+        err.textContent = e?.code === 4001 ? "You cancelled in your wallet. Nothing was decided." : e.message;
+      }
+    };
+    approveBtn.addEventListener("click", () => decide(true));
+    denyBtn.addEventListener("click", () => decide(false));
+    // Wallets that announce late (extensions) still make the picker.
+    window.addEventListener("eip6963:announceProvider", () => setTimeout(drawPicker));
+    card.append(el("div", { class: "req-actions" }, approveBtn, denyBtn, picker), note, err);
+    return card;
+  }
+
+  window.addEventListener("hashchange", () => { focusId = location.hash.slice(1); lastSig = ""; load(); loadOne(); });
+  loadOne();
   initIssue();
   token ? start() : showSignin();
 })();

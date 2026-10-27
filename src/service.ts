@@ -179,6 +179,9 @@ export interface ApprovalView {
   card: string;
   /** card.approver is an ENS name or an address, so a wallet signature can decide it. */
   signable: boolean;
+  /** The address card.approver resolves to now; the one signature that counts. */
+  approver_address?: string;
+  approval_url?: string;
   typed_data?: { approve: ApprovalTypedData; deny: ApprovalTypedData };
 }
 
@@ -326,10 +329,14 @@ export class CardService {
     const { sig: _sig, ...approval } = a;
     const card = fullName(a.name);
     const signable = isSignableApprover(a.approver);
+    // Best effort: the page uses it to pick the right account. decideSigned resolves again.
+    const approver_address = signable && a.status === "pending" ? await this.opts.approverAuth?.resolve(a.approver).catch(() => null) : null;
     return {
       approval,
       card,
       signable,
+      ...(approver_address ? { approver_address } : {}),
+      ...this.approvalLink(a.id),
       ...(signable ? { typed_data: { approve: approvalTypedData(a, "approve", card), deny: approvalTypedData(a, "deny", card) } } : {}),
     };
   }
