@@ -8,6 +8,7 @@ import { LEGACY_PARENT, PARENT_NAMES, RESERVED_LABELS, cardKeyOf, nameOfKey } fr
 import { DEFAULT_CONFIG, type EngineConfig, decideFunding, evaluateActivity, precheckPayment, roundMajor, toAuthorizationControls } from "./policy/engine.ts";
 import { newPendingApproval, signApproval, verifyApproval, type HeldPayment, type PendingApproval } from "./policy/approvals.ts";
 import { decidePayee, toOrigin, type PayeeCheck, type PayeeChecker } from "./policy/payee.ts";
+import type { TapSigner, TapTag } from "./tap/sign.ts";
 import { type CardPolicy, PolicyError, type TextRecords, parseRecords, toRecords } from "./policy/records.ts";
 import type { Store } from "./store.ts";
 
@@ -163,6 +164,20 @@ export interface ServiceOptions {
   config?: EngineConfig;
   /** Reads a payee's ENS records (policy/payee.ts). Without it every named payee is unverified. */
   checkPayee?: PayeeChecker;
+  /** Visa TAP signing key (tap/sign.ts). Without it sign_request is unavailable. */
+  tap?: () => Promise<TapSigner>;
+  /** Where merchants fetch the TAP public key, e.g. https://…/keys. */
+  tapKeysUrl?: string;
+}
+
+export interface SignedRequest {
+  url: string;
+  tag: TapTag;
+  /** Send these two headers on the request to url, unchanged. */
+  headers: { "Signature-Input": string; Signature: string };
+  keyid: string;
+  expires_at: string;
+  keys_url?: string;
 }
 
 export class CardService {
@@ -299,6 +314,8 @@ export class CardService {
     await this.store.putApproval({ ...a, status: "approved" });
     const charge = await this.issuer.simulateCharge(ref.cardId, { amount: a.amount, currency: a.currency, mcc: h.mcc, merchant: h.merchant });
     await this.logCharge(label, charge, `${payeeLabel(h.merchant, h.payeeName, h.payeeStatus)} · MCC ${h.mcc} · approved by ${decidedBy}`, a.amount, a.currency);
+    const origin = h.merchantUrl ? toOrigin(h.merchantUrl) : null;
+    if (charge.approved && origin) await this.store.allowTapCheckout(label, origin);
     if (h.requestId) {
       const result: PaymentResult = charge.approved
         ? { decision: "approved", amount: a.amount, currency: a.currency, merchant: h.merchant }
@@ -367,6 +384,7 @@ export class CardService {
       } else {
         const r = await this.issuer.simulateCharge(ref.cardId, { amount: p.amount, currency, mcc: p.mcc, merchant: p.merchant });
         await this.logCharge(label, r, detail, p.amount, currency);
+        if (r.approved && payee.origin) await this.store.allowTapCheckout(label, payee.origin);
         result = r.approved
           ? { decision: "approved", amount: p.amount, currency, merchant: p.merchant, payee }
           : { decision: "declined", stage: "issuer", code: r.decline_reason ?? "DECLINED", payee };
@@ -380,6 +398,34 @@ export class CardService {
     }
     if (p.requestId) await this.store.putPayment(label, p.requestId, result);
     return result;
+  }
+
+  /**
+   * A Visa TAP signature for the agent's next request to url. browse
+   * (agent-browser-auth) works for any site; checkout (agent-payer-auth) only
+   * for a merchant this card paid with policy approval in the last 15 minutes,
+   * so the payer signature never vouches for a payment xcard didn't approve.
+   */
+  async signRequest(name: string, url: string, purpose: "browse" | "checkout"): Promise<SignedRequest> {
+    const { label, policy } = await this.load(name);
+    if (!this.opts.tap) throw new ServiceError("tap_not_configured", "this deployment has no TAP signing key");
+    if (policy.status === "frozen") throw new ServiceError("frozen", "card is frozen");
+    const origin = toOrigin(url);
+    if (!origin) throw new ServiceError("bad_input", "url must be an absolute http(s) URL");
+    if (purpose === "checkout" && !(await this.store.tapCheckoutAllowed(label, origin))) {
+      throw new ServiceError("no_approved_payment", `no approved payment to ${origin} in the last 15 minutes; call pay with this merchant_url first`);
+    }
+    const tag: TapTag = purpose === "checkout" ? "agent-payer-auth" : "agent-browser-auth";
+    const signer = await this.opts.tap();
+    const { expires, ...headers } = await signer.sign(url, tag);
+    return {
+      url,
+      tag,
+      headers,
+      keyid: signer.keyid,
+      expires_at: new Date(expires * 1000).toISOString(),
+      ...(this.opts.tapKeysUrl ? { keys_url: this.opts.tapKeysUrl } : {}),
+    };
   }
 
   /** Who the payment is to, as far as the agent's inputs and the chain can say. */

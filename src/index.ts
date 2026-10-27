@@ -8,6 +8,9 @@
 //   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
 //   /public/feed           recent policy events across cards, for the demo site
+//   /keys[?keyID=]         Visa TAP public keys as a JWK set (the spec's Public Key Retrieval)
+//   /keys/:keyid           the same key in the agent-registry shape Visa's reference merchant fetches
+//   /demo-merchant/*       a merchant that verifies TAP signatures, for the demo
 //   cron (every minute)    anomaly check -> freeze
 import { createPublicClient, http, type Address, type Hex, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
@@ -16,6 +19,8 @@ import { AirwallexClient, KvTokenStore } from "./airwallex/client.ts";
 import { gatewayResponse } from "./ens/gateway.ts";
 import { McpServer, authenticate, issueWithToken } from "./mcp.ts";
 import { ensPayeeChecker } from "./policy/payee.ts";
+import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
+import { verifyTap } from "./tap/verify.ts";
 import { AirwallexIssuer, CardService, describeError, fullName, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer } from "./testing.ts";
@@ -33,20 +38,33 @@ export interface Env {
   APPROVAL_URL?: string;
   /** Ethereum mainnet RPC for the payee gate's ENS reads. Public RPCs throttle Workers; a failed read holds the payment, never passes it. */
   ETH_RPC_URL?: string;
+  /** Visa TAP signing key: an Ed25519 private JWK (scripts/tap-keygen.ts). */
+  TAP_PRIVATE_KEY?: string;
   /** Local dev only (`wrangler dev --var ISSUER:fake`): in-memory issuer instead of Airwallex. */
   ISSUER?: string;
 }
 
 // One fake per isolate, so local dev keeps state between requests.
 let fakeIssuer: FakeIssuer | undefined;
+// The imported TAP key, per isolate (keyed by the secret, so a rotation takes effect).
+let tapCache: { secret: string; signer: Promise<TapSigner> } | undefined;
+
+function tap(env: Env): (() => Promise<TapSigner>) | undefined {
+  const secret = env.TAP_PRIVATE_KEY;
+  if (!secret) return undefined;
+  return () => {
+    if (tapCache?.secret !== secret) tapCache = { secret, signer: tapSigner(secret) };
+    return tapCache.signer;
+  };
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Protocol-Version",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Protocol-Version, Signature-Input, Signature",
 };
 
-function service(env: Env, store: Store): CardService {
+function service(env: Env, store: Store, origin?: string): CardService {
   const issuer =
     env.ISSUER === "fake"
       ? (fakeIssuer ??= new FakeIssuer())
@@ -57,6 +75,8 @@ function service(env: Env, store: Store): CardService {
     approvalSecret: env.APPROVAL_SECRET,
     cardholderEmail: env.CARDHOLDER_EMAIL ?? "agents@x402card.dev",
     approvalUrl: env.APPROVAL_URL,
+    tap: tap(env),
+    ...(origin ? { tapKeysUrl: `${origin}/keys` } : {}),
     checkPayee: ensPayeeChecker(viemReader(createPublicClient({ chain: mainnet, transport: http(env.ETH_RPC_URL) }) as PublicClient)),
   });
 }
@@ -77,6 +97,40 @@ export default {
     if (path.startsWith("/gateway")) {
       return gatewayResponse(req, path, store, env.GATEWAY_SIGNER_KEY as Hex, {
         parentAddr: env.PARENT_ADDR as Address | undefined,
+      });
+    }
+
+    if ((path === "/keys" || path.startsWith("/keys/")) && req.method === "GET") {
+      const signer = await tap(env)?.();
+      if (!signer) return json({ error: "TAP is not configured" }, 404);
+      const wanted = path.startsWith("/keys/") ? decodeURIComponent(path.slice(6)) : url.searchParams.get("keyID");
+      if (wanted && wanted !== signer.keyid) return json({ error: "unknown keyID" }, 404);
+      if (path.startsWith("/keys/")) {
+        // Visa's reference merchant reads {key_id, algorithm, public_key} with the raw key in base64.
+        return json({ key_id: signer.keyid, algorithm: "ed25519", public_key: b64(fromB64(signer.publicJwk.x)), is_active: true });
+      }
+      return json({ keys: [{ ...signer.publicJwk, kid: signer.keyid, use: "sig", alg: "EdDSA" }] });
+    }
+
+    if (path.startsWith("/demo-merchant/")) {
+      // Stands in for a merchant (or its CDN) that checks TAP before serving an agent.
+      // A real merchant fetches the key from /keys; this one shares the Worker's key.
+      const signer = await tap(env)?.();
+      if (!signer) return json({ error: "TAP is not configured" }, 404);
+      const verdict = await verifyTap(req, {
+        resolveKey: async (kid) => (kid === signer.keyid ? signer.publicJwk : null),
+        nonces: { claim: (n, ttl) => store.claimTapNonce(n, ttl) },
+      });
+      const page = path.slice("/demo-merchant".length);
+      if (!verdict.ok) return json({ merchant: "demo", page, trusted_agent: false, ...verdict }, verdict.code === "NOT_AGENT" ? 200 : 403);
+      const checkout = verdict.tag === "agent-payer-auth";
+      return json({
+        merchant: "demo",
+        page,
+        trusted_agent: true,
+        tag: verdict.tag,
+        keyid: verdict.keyid,
+        message: checkout ? "Trusted agent at checkout: express checkout offered." : "Trusted agent browsing: product data served.",
       });
     }
 
@@ -112,7 +166,7 @@ export default {
           headers: { "Content-Type": "application/json", "WWW-Authenticate": "Bearer", ...CORS },
         });
       }
-      const res = await new McpServer(service(env, store), store, caller).handle(req);
+      const res = await new McpServer(service(env, store, url.origin), store, caller).handle(req);
       for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
       return res;
     }

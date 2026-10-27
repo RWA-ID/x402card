@@ -84,6 +84,22 @@ export const TOOLS = [
     annotations: { openWorldHint: true },
   },
   {
+    name: "sign_request",
+    title: "Sign a request to a merchant (Visa TAP)",
+    description:
+      "Get Visa Trusted Agent Protocol headers (RFC 9421 Signature-Input and Signature) for your next HTTP request to url, so the merchant can tell a trusted agent from a bot. purpose browse (tag agent-browser-auth) works for any site, e.g. product pages. purpose checkout (tag agent-payer-auth) works only after pay approved a payment with this merchant_url's origin in the last 15 minutes. Send both headers unchanged on a request to exactly this host and path; they expire in 8 minutes and each works once.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: nameProp,
+        url: { type: "string", description: "The exact URL you will request, e.g. https://shop.example/checkout" },
+        purpose: { type: "string", enum: ["browse", "checkout"] },
+      },
+      required: ["url", "purpose"],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: "request_funding",
     title: "Request funding",
     description:
@@ -226,6 +242,11 @@ export class McpServer {
             requestId: optStr(a.request_id) || undefined,
           })),
         };
+      }
+      case "sign_request": {
+        const purpose = a.purpose === "checkout" ? "checkout" : a.purpose === "browse" ? "browse" : null;
+        if (!purpose) throw toolError("bad_input", "purpose must be browse or checkout");
+        return { ...(await this.svc.signRequest(this.target(a), str(a.url, "url"), purpose)) };
       }
       case "request_funding": {
         const amount = Number(a.amount);

@@ -7,10 +7,12 @@ import { CardService } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer, MemoryKV } from "./testing.ts";
 import type { PayeeChecker } from "./policy/payee.ts";
+import { generateTapKey, tapSigner, type TapSigner } from "./tap/sign.ts";
+import { verifyTap } from "./tap/verify.ts";
 
 const ADMIN = "admin-token";
 
-function setup(checkPayee?: PayeeChecker) {
+function setup(checkPayee?: PayeeChecker, tap?: () => Promise<TapSigner>) {
   const kv = new MemoryKV();
   const store = new Store(kv.asKV());
   const issuer = new FakeIssuer();
@@ -19,6 +21,8 @@ function setup(checkPayee?: PayeeChecker) {
     cardholderEmail: "agents@x402card.dev",
     approvalUrl: "https://demo.x402card.eth.limo/approve.html#{id}",
     checkPayee,
+    tap,
+    tapKeysUrl: "https://x/keys",
   });
   let id = 0;
   async function call(token: string, method: string, params: Record<string, unknown> = {}) {
@@ -43,7 +47,7 @@ test("protocol: initialize, tools/list, auth", async () => {
   assert.equal(init.result.protocolVersion, "2025-06-18");
   assert.ok(init.result.capabilities.tools);
   const list = await call(ADMIN, "tools/list");
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "get_card", "pay", "request_funding", "freeze", "list_transactions"]);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "get_card", "pay", "sign_request", "request_funding", "freeze", "list_transactions"]);
   assert.equal((await call("wrong", "tools/list")).status, 401);
   assert.equal((await call(ADMIN, "nope")).error.code, -32601);
 });
@@ -298,4 +302,58 @@ test("payee gate: verified-only and the allow-list; a denied hold never charges"
   assert.equal(issuer.cards.get(ref.cardId)!.txs.length, 0);
   const after = (await tool(escAgent, "pay", { amount: 9, currency: "USD", mcc: "5734", merchant: "M", request_id: "r1" })).structuredContent;
   assert.equal(after.code, "DENIED_BY_APPROVER");
+});
+
+test("TAP: browse signs anywhere; checkout only after an approved payment to that merchant", async () => {
+  const signer = tapSigner(await generateTapKey());
+  const { tool, svc } = setup(fakePayees, () => signer);
+  const issued = await tool(ADMIN, "issue_card", {
+    name: "shopper.xcard.eth",
+    policy: { limit_tx: 50, limit_monthly: 500, currencies: ["USD"], approver: "alice.eth", payee: "verified-or-escalate" },
+  });
+  const agent = issued.structuredContent.agent_token as string;
+  const sign = (url: string, purpose: string) => tool(agent, "sign_request", { url, purpose });
+  const merchantCheck = async (url: string, headers: Record<string, string>) => {
+    const s = await signer;
+    const seen = new Set<string>();
+    return verifyTap({ url, headers: new Headers(headers) }, {
+      resolveKey: async (kid) => (kid === s.keyid ? s.publicJwk : null),
+      nonces: { claim: async (n) => (seen.has(n) ? false : (seen.add(n), true)) },
+    });
+  };
+
+  // Browsing a product page: any site.
+  const browse = (await sign("https://modelhub.example/models/gpt", "browse")).structuredContent;
+  assert.equal(browse.tag, "agent-browser-auth");
+  assert.equal(browse.keys_url, "https://x/keys");
+  assert.equal((await merchantCheck("https://modelhub.example/models/gpt", browse.headers)).ok, true);
+
+  // Checkout before paying: refused. After a verified, approved payment: signed, and the merchant accepts it.
+  const checkoutUrl = "https://api.modelhub.example/checkout";
+  assert.match((await sign(checkoutUrl, "checkout")).content[0].text, /no_approved_payment/);
+  const paid = (await tool(agent, "pay", { amount: 20, currency: "USD", mcc: "5734", merchant: "ModelHub API", merchant_url: checkoutUrl, payee_name: "modelhub.eth" })).structuredContent;
+  assert.equal(paid.decision, "approved");
+  const checkout = (await sign(checkoutUrl, "checkout")).structuredContent;
+  assert.equal(checkout.tag, "agent-payer-auth");
+  const verdict = await merchantCheck(checkoutUrl, checkout.headers);
+  assert.ok(verdict.ok && verdict.tag === "agent-payer-auth");
+  // The window is per origin: paying modelhub doesn't let the agent sign a checkout elsewhere.
+  assert.match((await sign("https://modelhub-pay.example/checkout", "checkout")).content[0].text, /no_approved_payment/);
+
+  // A held payment opens the window only once a human approves it.
+  const held = (await tool(agent, "pay", { amount: 15, currency: "USD", mcc: "5734", merchant: "New Vendor", merchant_url: "https://new-vendor.example/buy" })).structuredContent;
+  assert.match((await sign("https://new-vendor.example/buy", "checkout")).content[0].text, /no_approved_payment/);
+  await svc.decide(held.approval_id, true, "alice.eth");
+  assert.equal((await sign("https://new-vendor.example/buy", "checkout")).structuredContent.tag, "agent-payer-auth");
+
+  // A frozen card signs nothing.
+  await tool(agent, "freeze", { reason: "test" });
+  assert.match((await sign("https://modelhub.example/", "browse")).content[0].text, /frozen/);
+});
+
+test("TAP: sign_request needs a configured key", async () => {
+  const { tool } = setup();
+  const issued = await tool(ADMIN, "issue_card", { name: "nokey", policy: { limit_tx: 5, limit_monthly: 50, currencies: ["USD"], approver: "a.eth" } });
+  const r = await tool(issued.structuredContent.agent_token, "sign_request", { url: "https://x.example/", purpose: "browse" });
+  assert.match(r.content[0].text, /tap_not_configured/);
 });

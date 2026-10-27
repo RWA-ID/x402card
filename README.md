@@ -58,7 +58,7 @@ The policy is enforced twice: by xcard before anything is sent, and by the card 
                        └──────────────────────────────────────────────┘  │
                                                                          ▼
   AI agent ──MCP──▶ ┌────────────────────────────── Cloudflare Worker ──────────┐
-  (Claude, any     │  /mcp       tools: issue_card, get_card, pay,              │
+  (Claude, any     │  /mcp       tools: issue_card, get_card, pay, sign_request,│
    MCP client)     │             request_funding, freeze, list_transactions     │
                    │  /gateway   signed answers to text()/addr() lookups        │
   human / platform │  /api       approvals, unfreeze (admin)                     │
@@ -241,14 +241,34 @@ curl -s https://x402card.dmpay.workers.dev/mcp \
 
 | Tool | Arguments | Returns |
 |---|---|---|
-| `issue_card` *(admin)* | `name`, `policy: { limit_tx, limit_monthly, currencies[], mcc_allow[], approver }` | `card`, `agent_token` (shown once) |
+| `issue_card` *(admin)* | `name`, `policy: { limit_tx, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }` | `card`, `agent_token` (shown once) |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
-| `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (xcard pre-check) · `declined` + `code` (issuer); `card_frozen` if this attempt froze the card |
+| `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `merchant_url?`, `payee_name?`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (xcard pre-check or payee gate) · `declined` + `code` (issuer) · `pending_human` + `approval_id`, `approval_url` (payee held); `payee` check; `card_frozen` if this attempt froze the card |
+| `sign_request` | `name?`, `url`, `purpose: browse \| checkout` | Visa TAP `headers` (`Signature-Input`, `Signature`) for one request to `url`, `tag`, `keyid`, `expires_at`, `keys_url`. `checkout` needs an approved `pay` to that origin in the last 15 min. See [Visa TAP](#visa-trusted-agent-protocol-tap). |
 | `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver`, `approval_url` · `denied` + `reason` |
 | `freeze` | `name?`, `reason?` | `card` (now `frozen`) |
 | `list_transactions` | `name?` | `type`, `status`, `settled`, `amount`, `currency`, `merchant`, `mcc`, `decline_reason`, `at` |
 
 With an agent token, `name` is optional and defaults to the token's own card. Tool failures come back as results with `isError: true` and a `code: message` the model can read (`forbidden`, `not_found`, `bad_policy`, `airwallex_…`).
+
+### Visa Trusted Agent Protocol (TAP)
+
+The payee gate tells the agent who the merchant is. [TAP](https://developer.visa.com/capabilities/trusted-agent-protocol) tells the merchant who the agent is: an RFC 9421 signature over the request's `@authority` and `@path`, tagged `agent-browser-auth` (browsing) or `agent-payer-auth` (checkout), that a merchant or its CDN verifies against the agent's public key.
+
+```
+1. pay(merchant_url=https://shop.example/checkout, payee_name=shop.eth)   payee gate + policy → approved
+2. sign_request(url=https://shop.example/checkout, purpose=checkout)      → Signature-Input, Signature
+3. agent → shop.example  GET /checkout + both headers                     merchant verifies with GET /keys
+```
+
+xcard signs a **checkout** only for an origin it approved a payment to in the last 15 minutes (directly, or once `card.approver` released a held payment), so the payer signature never vouches for a payment the policy refused. Browsing signatures work for any site. A frozen card signs nothing. Each signature lasts 8 minutes (the spec's cap) and carries a fresh nonce.
+
+- **Keys:** `GET /keys` (optionally `?keyID=`) returns the JWK set, as in the spec's Public Key Retrieval. `GET /keys/:keyid` returns the same key as `{key_id, algorithm, public_key}`, the shape Visa's [reference merchant](https://github.com/visa/trusted-agent-protocol) fetches from its agent registry. The `keyid` is the key's RFC 7638 thumbprint.
+- **Wire format:** standard RFC 9421 (`alg="ed25519"`, the signature base is the `Signature-Input` member verbatim). The published spec calls the key parameter `keyid` and Visa's reference code reads `keyId`, so both are sent; both are inside the signed parameters. A test runs every signature through a line-for-line port of the reference merchant's verifier ([`src/tap/tap.test.ts`](src/tap/tap.test.ts)).
+- **Merchant side:** [`src/tap/verify.ts`](src/tap/verify.ts) implements the spec's verification steps (tag, minimum fields, timestamps within 8 minutes, nonce replay, key, signature). `/demo-merchant/*` on the Worker runs it, for the demo.
+- **Setup:** `node scripts/tap-keygen.ts <file>` writes a new Ed25519 key (mode 600) and prints its keyid; `npx wrangler secret put TAP_PRIVATE_KEY < <file>`, then delete the file.
+
+Not yet: the Agentic Consumer Recognition Object and Payment Container (body signatures), which carry Visa-issued ID tokens and payment credentials from Visa Intelligent Commerce.
 
 ## Integrate: read a card's policy from any ENS client
 

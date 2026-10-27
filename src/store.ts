@@ -9,6 +9,8 @@
 //   tok:<sha256>      agent token -> label it may act for
 //   evt:<label>       recent policy events (escalations, freezes) for the feed
 //   pay:<label>:<id>  result of a pay call, replayed when the agent retries with the same request_id (24h)
+//   tapok:<label>:<origin>  a payment to this merchant was approved, so a TAP checkout signature may be issued (15 min)
+//   tapn:<nonce>      TAP nonce seen by the demo merchant (8 min)
 //   awx:token         cached Airwallex token (see airwallex/client.ts)
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
@@ -83,5 +85,23 @@ export class Store implements RecordSource {
   getPayment<T>(label: string, requestId: string) { return this.kv.get<T>(`pay:${label}:${requestId}`, "json"); }
   putPayment(label: string, requestId: string, result: unknown) {
     return this.kv.put(`pay:${label}:${requestId}`, JSON.stringify(result), { expirationTtl: 24 * 3600 });
+  }
+
+  /** Opens the TAP checkout window for a merchant origin after a payment to it was approved. */
+  allowTapCheckout(label: string, origin: string) {
+    return this.kv.put(`tapok:${label}:${origin}`, String(Date.now()), { expirationTtl: 15 * 60 });
+  }
+  async tapCheckoutAllowed(label: string, origin: string) { return (await this.kv.get(`tapok:${label}:${origin}`)) !== null; }
+
+  /**
+   * TAP replay check for the demo merchant. KV is eventually consistent, so two
+   * requests racing within a second can both pass; a real merchant wants a
+   * strongly consistent store (a Durable Object) here.
+   */
+  async claimTapNonce(nonce: string, ttlS: number): Promise<boolean> {
+    const k = `tapn:${nonce}`;
+    if ((await this.kv.get(k)) !== null) return false;
+    await this.kv.put(k, "1", { expirationTtl: Math.max(60, ttlS) });
+    return true;
   }
 }
