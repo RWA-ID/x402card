@@ -89,6 +89,8 @@
       save(token);
       $("[data-token]").value = "";
       start();
+      // The console opens above the sign-in form; take the reader to it.
+      $("[data-meta]").scrollIntoView({ block: "start", behavior: R ? "auto" : "smooth" });
     } catch (err) {
       if (err.message !== "unauthorized") $("[data-signin-err]").textContent = "Couldn't reach the API: " + err.message;
     }
