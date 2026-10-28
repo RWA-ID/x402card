@@ -59,7 +59,9 @@ test("approval card: a ui:// resource linked from pay, request_funding and get_a
   const tools = (await call(ADMIN, "tools/list")).result.tools;
   const linked = tools.filter((t: any) => t._meta?.ui?.resourceUri === "ui://xcard/approval.html").map((t: any) => t.name);
   assert.deepEqual(linked, ["pay", "request_funding", "update_policy", "get_approval"]);
-  assert.deepEqual((await call(ADMIN, "resources/list")).result.resources.map((r: any) => r.uri), ["ui://xcard/approval.html"]);
+  assert.deepEqual((await call(ADMIN, "resources/list")).result.resources.map((r: any) => r.uri), ["ui://xcard/approval.html", "ui://xcard/issue.html"]);
+  const [form] = (await call(ADMIN, "resources/read", { uri: "ui://xcard/issue.html" })).result.contents;
+  assert.match(form.text, /"5734","Software"/, "the category list is filled in");
   const [res] = (await call(ADMIN, "resources/read", { uri: "ui://xcard/approval.html" })).result.contents;
   assert.equal(res.mimeType, "text/html;profile=mcp-app");
   assert.match(res.text, /eth_signTypedData_v4/);
@@ -381,7 +383,7 @@ test("owner (wallet sign-in): list_cards, a name picks among several, others' ca
   for (const name of ["a.xcard.eth", "b.xcard.eth", "c.xcard.eth"]) await tool(ADMIN, "issue_card", { name, policy });
   const owner = (labels: string[]) => async (name: string, args: Record<string, unknown> = {}) => {
     const req = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
-    return ((await (await new McpServer(svc, store, { kind: "owner", labels }).handle(req)).json()) as any).result;
+    return ((await (await new McpServer(svc, store, { kind: "owner", address: "0x0000000000000000000000000000000000000001", labels }).handle(req)).json()) as any).result;
   };
   const two = owner(["a.xcard.eth", "b.xcard.eth"]);
   assert.deepEqual((await two("list_cards")).structuredContent.cards.map((c: any) => c.name), ["a.xcard.eth", "b.xcard.eth"]);
@@ -395,4 +397,38 @@ test("owner (wallet sign-in): list_cards, a name picks among several, others' ca
   assert.equal(asked.decision, "pending_human");
   assert.match((await two("get_approval", { approval_id: asked.approval_id })).content[0].text, /not_found/);
   assert.equal((await owner(["c.xcard.eth"])("get_approval", { approval_id: asked.approval_id })).structuredContent.approval.status, "pending");
+});
+
+test("issue_card from a wallet sign-in: the form first, then the next testN.xcard.eth, within the caps", async () => {
+  const { svc, store, tool } = setup();
+  const wallet = "0xc32A9e2f1092F1D57D3267C2E70b80DA9De06D59";
+  const owner = async (name: string, args: Record<string, unknown> = {}) => {
+    const req = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+    return ((await (await new McpServer(svc, store, { kind: "owner", address: wallet, labels: [] }).handle(req)).json()) as any).result;
+  };
+  // A name someone already has is skipped.
+  await tool(ADMIN, "issue_card", { name: "test1.xcard.eth", policy: { limit_tx: 10, limit_monthly: 100, currencies: ["USD"], approver: "alice.eth" } });
+
+  const f = (await owner("issue_card", { policy: { limit_monthly: 300 } })).structuredContent;
+  assert.equal(f.decision, "form");
+  assert.equal(f.defaults.limit_monthly, 300, "a suggestion prefills the form");
+  assert.equal(f.caps.tx, 50);
+  assert.equal((await store.listLabels()).length, 1, "nothing issued yet");
+
+  const r = (await owner("issue_card", { submit: true, policy: { limit_tx: 40, limit_daily: 150, limit_monthly: 400, mcc_allow: ["5734"], approver: "mallory.eth", currencies: ["EUR"] } })).structuredContent;
+  assert.equal(r.card.name, "test2.xcard.eth");
+  assert.equal(r.card.records["card.approver"], wallet, "always the signed-in wallet");
+  assert.equal(r.card.records["card.currencies"], "USD");
+  assert.equal(r.card.records["card.limit.daily"], "150");
+  assert.ok(!("agent_token" in r), "the connection is the access; no token to leak into the chat");
+  assert.equal((await store.getCard("test2.xcard.eth"))!.issuedBy, wallet);
+
+  assert.match((await owner("issue_card", { submit: true, policy: { limit_tx: 60, limit_monthly: 400 } })).content[0].text, /over_test_caps/);
+  assert.match((await owner("issue_card", { submit: true, policy: { limit_tx: 10, limit_daily: 900, limit_monthly: 400 } })).content[0].text, /over_test_caps|bad_policy/);
+  await owner("issue_card", { submit: true });
+  await owner("issue_card", { submit: true });
+  assert.match((await owner("issue_card", { submit: true })).content[0].text, /limit_reached/);
+  // Agent tokens never see it.
+  const agent = (await tool(ADMIN, "issue_card", { name: "z.xcard.eth", policy: { limit_tx: 10, limit_monthly: 100, currencies: ["USD"], approver: "alice.eth" } })).structuredContent.agent_token;
+  assert.match((await tool(agent, "issue_card", {})).content[0].text, /forbidden/);
 });

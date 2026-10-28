@@ -2,17 +2,18 @@
 // Auth: Bearer token. The admin token can do everything; each issued card
 // gets an agent token that only works for its own name. Agents never see
 // card numbers, Airwallex IDs or keys.
-import { CardService, ServiceError, describeError, fullName, normalizeLabel } from "./service.ts";
+import { CardService, ServiceError, TEST_CARDS, describeError, fullName, normalizeLabel } from "./service.ts";
 import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 import { UI_MIME, approvalResource } from "./ui/approval.ts";
+import { issueResource } from "./ui/issue.ts";
 import type { PolicyInput } from "./policy/changes.ts";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "x402card", title: "X Card", version: "0.4.0" };
 
 // owner = a wallet signed in over OAuth: the cards whose card.approver is that wallet.
-export type Caller = { kind: "admin" } | { kind: "agent"; label: string } | { kind: "owner"; labels: string[] };
+export type Caller = { kind: "admin" } | { kind: "agent"; label: string } | { kind: "owner"; address: string; labels: string[] };
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -30,13 +31,17 @@ const nameProp = {
 /** The approval card (MCP Apps): shown in the chat for results that wait on card.approver. */
 export const APPROVAL_UI = "ui://xcard/approval.html";
 const approvalUi = { ui: { resourceUri: APPROVAL_UI }, "ui/resourceUri": APPROVAL_UI };
+/** The issue form (MCP Apps): the person sets the policy and submits. */
+export const ISSUE_UI = "ui://xcard/issue.html";
+const issueUi = { ui: { resourceUri: ISSUE_UI }, "ui/resourceUri": ISSUE_UI };
 
 export const TOOLS = [
   {
     name: "issue_card",
+    _meta: issueUi,
     title: "Issue an agent card",
     description:
-      "Issue a virtual card addressed by <name>.xcard.eth or <name>.x402card.eth (pick the namespace with the full name) with the given spend policy. The policy is published as ENS text records. Returns an agent token scoped to this card (shown once). Admin only.",
+      "Issue a virtual card with a spend policy published as ENS text records. Signed in with a wallet: call it with no arguments (or with a suggested policy) and the person fills in the policy on a form in the chat and submits it; they get the next free testN.xcard.eth, approved by their own wallet, within test caps ($50/transaction, $200/day, $500/month, USD, 3 cards per wallet). Never set submit yourself. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
     inputSchema: {
       type: "object",
       properties: {
@@ -57,10 +62,9 @@ export const TOOLS = [
             },
             payee_allow: { type: "array", items: { type: "string" }, description: "ENS names this card may pay, e.g. modelhub.eth; empty = any verified payee" },
           },
-          required: ["limit_tx", "limit_monthly", "currencies", "approver"],
         },
+        submit: { type: "boolean", description: "Set by the form in the chat when the person submits it" },
       },
-      required: ["name", "policy"],
     },
   },
   {
@@ -245,13 +249,19 @@ export class McpServer {
           return rpc(msg.id, {});
         case "tools/list":
           return rpc(msg.id, {
-            tools: this.caller.kind === "admin" ? TOOLS : TOOLS.filter((t) => t.name !== "issue_card"),
+            tools: this.caller.kind === "agent" ? TOOLS.filter((t) => t.name !== "issue_card") : TOOLS,
           });
         case "resources/list":
-          return rpc(msg.id, { resources: [{ uri: APPROVAL_UI, name: "approval", title: "X Card approval", mimeType: UI_MIME }] });
+          return rpc(msg.id, {
+            resources: [
+              { uri: APPROVAL_UI, name: "approval", title: "X Card approval", mimeType: UI_MIME },
+              { uri: ISSUE_UI, name: "issue", title: "Issue an X Card", mimeType: UI_MIME },
+            ],
+          });
         case "resources/read": {
-          if (msg.params?.uri !== APPROVAL_UI) return rpc(msg.id, undefined, { code: -32002, message: "resource not found" });
-          return rpc(msg.id, { contents: [approvalResource(this.origin)] });
+          if (msg.params?.uri === APPROVAL_UI) return rpc(msg.id, { contents: [approvalResource(this.origin)] });
+          if (msg.params?.uri === ISSUE_UI) return rpc(msg.id, { contents: [issueResource()] });
+          return rpc(msg.id, undefined, { code: -32002, message: "resource not found" });
         }
         case "tools/call":
           return rpc(msg.id, await this.callTool(String(msg.params?.name ?? ""), (msg.params?.arguments ?? {}) as Record<string, unknown>));
@@ -278,8 +288,15 @@ export class McpServer {
   private async dispatch(tool: string, a: Record<string, unknown>): Promise<Record<string, unknown>> {
     switch (tool) {
       case "issue_card": {
-        if (this.caller.kind !== "admin") throw toolError("forbidden", "issue_card needs the admin token");
-        return { ...(await issueWithToken(this.svc, this.store, str(a.name, "name"), a.policy)) };
+        if (this.caller.kind === "admin") return { ...(await issueWithToken(this.svc, this.store, str(a.name, "name"), a.policy)) };
+        if (this.caller.kind !== "owner") throw toolError("forbidden", "an agent token can't issue cards");
+        // The form shows first; the person submits it (submit: true) from the chat.
+        if (a.submit !== true) {
+          return { decision: "form", caps: TEST_CARDS, defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy) } };
+        }
+        const records = policyToRecords({ ...TEST_DEFAULTS, ...pickPolicy(a.policy), currencies: ["USD"], approver: this.caller.address });
+        const card = await this.svc.issueTestCard(this.caller.address, records);
+        return { decision: "issued", card, note: `${card.name} is yours: you're its approver, and this connection can use it now.` };
       }
       case "list_cards": {
         const labels = this.caller.kind === "admin" ? await this.store.listLabels() : this.caller.kind === "agent" ? [this.caller.label] : this.caller.labels;
@@ -392,6 +409,18 @@ export async function issueWithToken(svc: CardService, store: Store, name: strin
   const token = randomToken();
   await store.putToken(await sha256Hex(token), label);
   return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
+}
+
+/** What the issue form starts from for a self-serve test card. */
+const TEST_DEFAULTS = { limit_tx: 25, limit_daily: 100, limit_monthly: 250, mcc_allow: ["5734", "7372"], payee: "verified-or-escalate" };
+
+/** The policy fields a suggestion or the form may set; everything else is fixed. */
+function pickPolicy(p: unknown): Record<string, unknown> {
+  if (!p || typeof p !== "object") return {};
+  const o = p as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of ["limit_tx", "limit_daily", "limit_monthly", "mcc_allow", "payee", "payee_allow"]) if (o[k] !== undefined) out[k] = o[k];
+  return out;
 }
 
 function policyToRecords(p: unknown): TextRecords {

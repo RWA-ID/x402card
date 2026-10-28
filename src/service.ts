@@ -1,5 +1,6 @@
 // Card operations behind the MCP tools and the approval endpoints. Agents get
 // policy, status and transactions back; never card numbers or Airwallex IDs.
+import { getAddress, isAddress } from "viem";
 import { AirwallexClient, AirwallexError } from "./airwallex/client.ts";
 import { AirwallexSandboxSimulator } from "./airwallex/simulator.ts";
 import * as issuing from "./airwallex/issuing.ts";
@@ -76,6 +77,9 @@ export class AirwallexIssuer implements Issuer {
     }
   }
 }
+
+/** Self-serve test cards: what any signed-in wallet may issue itself. */
+export const TEST_CARDS = { tx: 50, daily: 200, monthly: 500, perWallet: 3 } as const;
 
 export class ServiceError extends Error {
   code: string;
@@ -218,7 +222,41 @@ export class CardService {
     this.cfg = opts.config ?? DEFAULT_CONFIG;
   }
 
-  async issueCard(name: string, records: TextRecords): Promise<CardView> {
+  /**
+   * A wallet issues itself a test card over the connector: the next free
+   * testN.xcard.eth, approved by that same wallet, within TEST_CARDS' caps.
+   */
+  async issueTestCard(address: string, records: TextRecords): Promise<CardView> {
+    if (!isAddress(address)) throw new ServiceError("bad_input", "not a wallet address");
+    const me = getAddress(address);
+    const refs = await Promise.all((await this.store.listLabels()).map((l) => this.store.getCard(l)));
+    if (refs.filter((r) => r?.issuedBy === me).length >= TEST_CARDS.perWallet) {
+      throw new ServiceError("limit_reached", `a wallet can issue itself ${TEST_CARDS.perWallet} test cards`);
+    }
+    let policy: CardPolicy;
+    try {
+      policy = parseRecords({ "card.currencies": "USD", "card.payee": "verified-or-escalate", ...records, "card.approver": me, "card.status": "active" });
+    } catch (e) {
+      if (e instanceof PolicyError) throw new ServiceError("bad_policy", e.message);
+      throw e;
+    }
+    const over = [
+      policy.limitTx > TEST_CARDS.tx && `per transaction max ${TEST_CARDS.tx}`,
+      (policy.limitDaily ?? Infinity) > TEST_CARDS.daily && `daily max ${TEST_CARDS.daily}`,
+      policy.limitMonthly > TEST_CARDS.monthly && `monthly max ${TEST_CARDS.monthly}`,
+      policy.currencies.join(",") !== "USD" && "USD only",
+    ].filter(Boolean);
+    if (over.length) throw new ServiceError("over_test_caps", `test cards: ${over.join(", ")}`);
+
+    for (let tries = 0; tries < 20; tries++) {
+      const label = `test${await this.store.nextTestNumber()}.xcard.eth`;
+      if (await this.store.getCard(label)) continue;
+      return this.issueCard(label, toRecords(policy), { issuedBy: me });
+    }
+    throw new ServiceError("busy", "couldn't find a free test name; try again");
+  }
+
+  async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string } = {}): Promise<CardView> {
     const label = normalizeLabel(name);
     if (RESERVED_LABELS.has(labelOfKey(label)) || RESERVED_KEYS.has(label)) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
     if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
@@ -236,7 +274,10 @@ export class CardService {
       requestId,
     });
 
-    await this.store.putCard(label, { cardholderId: holder.cardholderId, cardId: card.cardId, last4: card.last4, createdAt: Date.now() });
+    await this.store.putCard(label, {
+      cardholderId: holder.cardholderId, cardId: card.cardId, last4: card.last4, createdAt: Date.now(),
+      ...(opts.issuedBy ? { issuedBy: opts.issuedBy } : {}),
+    });
     await this.store.putRecords(label, toRecords(policy));
     await this.store.clearRequestId("issue", label);
     await this.store.addEvent(label, { at: Date.now(), kind: "issued", detail: "card issued" });

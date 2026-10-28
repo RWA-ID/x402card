@@ -40,8 +40,10 @@ test("accessOptions: cards whose approver is this wallet; operators get the flee
   assert.equal(a[0].name, "All my cards (2)");
   assert.deepEqual(a.slice(1).map((o) => o.id).sort(), ["card:researcher", "card:scout.xcard.eth"]);
   assert.deepEqual(a.slice(1).map((o) => o.name).sort(), ["researcher.x402card.eth", "scout.xcard.eth"]);
-  assert.deepEqual((await accessOptions(op.address, deps)).map((o) => o.id), ["fleet"]);
-  assert.deepEqual(await accessOptions(privateKeyToAccount(generatePrivateKey()).address, deps), []);
+  assert.deepEqual((await accessOptions(op.address, deps)).map((o) => o.id), ["fleet", "wallet"]);
+  // A wallet with no cards can still connect, to issue itself a test card.
+  const fresh = await accessOptions(privateKeyToAccount(generatePrivateKey()).address, deps);
+  assert.deepEqual(fresh.map((o) => [o.id, o.name]), [["wallet", "My cards (none yet)"]]);
 });
 
 test("callerFor: a grant ends when the card's approver changes", async () => {

@@ -72,14 +72,15 @@ export async function accessOptions(address: Address, deps: AccessDeps): Promise
     out.push({ id: "fleet", grant: { kind: "fleet" }, name: "Every card (operator)", detail: "Issue cards and act for any card, like the admin token." });
   }
   const cards = await walletCards(address, deps);
-  if (cards.length) {
-    out.push({
-      id: "wallet",
-      grant: { kind: "wallet" },
-      name: `All my cards (${cards.length})`,
-      detail: "Every card you approve, including cards issued to you later.",
-    });
-  }
+  // Offered with no cards too: the app can then issue this wallet a test card.
+  out.push({
+    id: "wallet",
+    grant: { kind: "wallet" },
+    name: cards.length ? `All my cards (${cards.length})` : "My cards (none yet)",
+    detail: cards.length
+      ? "Every card you approve, including cards issued to you later."
+      : "Connect now and ask the app to issue you a test card. You'll be its approver.",
+  });
   for (const { label, approver } of cards) {
     const grant: Grant = { kind: "card", card: label };
     out.push({ id: grantId(grant), grant, name: fullName(label), detail: `You're its approver (${approver}).`, approver });
@@ -94,7 +95,7 @@ export async function accessOptions(address: Address, deps: AccessDeps): Promise
  */
 export async function callerFor(p: GrantProps, deps: Pick<AccessDeps, "store" | "resolve">): Promise<Caller | null> {
   if (p.grant.kind === "fleet") return { kind: "admin" };
-  if (p.grant.kind === "wallet") return { kind: "owner", labels: (await walletCards(p.address, deps)).map((c) => c.label) };
+  if (p.grant.kind === "wallet") return { kind: "owner", address: p.address, labels: (await walletCards(p.address, deps)).map((c) => c.label) };
   const records = await deps.store.getRecords(p.grant.card);
   if (!records || (records["card.approver"] ?? "").trim() !== p.approver) return null;
   return { kind: "agent", label: p.grant.card };

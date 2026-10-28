@@ -22,6 +22,8 @@ export interface CardRef {
   cardId: string;
   last4?: string;
   createdAt: number;
+  /** The wallet that issued it for itself (self-serve test cards); absent = the operator. */
+  issuedBy?: string;
 }
 
 export interface CardEvent {
@@ -46,6 +48,13 @@ export class Store implements RecordSource {
 
   getCard(label: string) { return this.kv.get<CardRef>(`card:${label}`, "json"); }
   putCard(label: string, c: CardRef) { return this.kv.put(`card:${label}`, JSON.stringify(c)); }
+
+  /** Next self-serve test number (test1, test2, …). Not atomic; the caller skips names already taken. */
+  async nextTestNumber(): Promise<number> {
+    const n = Number((await this.kv.get("seq:test")) ?? "0") + 1;
+    await this.kv.put("seq:test", String(n));
+    return n;
+  }
 
   async listLabels(): Promise<string[]> {
     const { keys } = await this.kv.list({ prefix: "card:" });
