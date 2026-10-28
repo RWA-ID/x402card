@@ -68,8 +68,8 @@ The policy is enforced twice: by X Card before anything is sent, and by the card
                        └──────────────────────────────────────────────┘  │
                                                                          ▼
   AI agent ──MCP──▶ ┌────────────────────────────── Cloudflare Worker ──────────┐
-  (Claude, any     │  /mcp       tools: issue_card, get_card, pay, sign_request,│
-   MCP client)     │             request_funding, freeze, list_transactions     │
+  (Claude, any     │  /mcp       10 tools + in-chat views (MCP Apps); OAuth     │
+   MCP client)     │             wallet sign-in or scoped tokens                │
                    │  /gateway   signed answers to text()/addr() lookups        │
   human / platform │  /api       approvals (funding + held payments), unfreeze  │
   ──REST────────▶  │  /keys      Visa TAP public key (JWK set + registry shape) │
@@ -89,7 +89,8 @@ The policy is enforced twice: by X Card before anything is sent, and by the card
 2. **Pay.** `pay(amount, currency, mcc, merchant, merchant_url, payee_name)` is checked against the ENS policy first and refused before it reaches the card network if it breaks a rule. Then the [payee gate](#verified-payee) checks that the checkout's origin belongs to the ENS name the agent says it is paying. Airwallex then checks the authorization against the card's controls again: per-transaction limit, monthly limit, currencies and MCC allow-list. Either way a refusal carries the rule it hit (`MERCHANT_CATEGORY_NOT_ALLOWED`, `PAYEE_MISMATCH`, `LIMIT_EXCEEDED`, …), so the agent can adapt instead of retrying. See [How an agent pays](#how-an-agent-pays-without-the-card-number).
 3. **Sign the checkout.** After an approved payment, `sign_request(url, "checkout")` returns [Visa TAP](#visa-trusted-agent-protocol-tap) headers for the agent's request to that merchant, which the merchant verifies against X Card's published key.
 4. **Fund.** `request_funding(amount, currency)` either raises the monthly allowance right away (within `card.limit.tx` and above the wallet reserve floor) or creates a **pending approval** for the human in `card.approver`. The approval is HMAC-bound to the exact name, amount and currency.
-5. **Freeze.** A cron job checks each card's recent activity. Two disallowed-merchant attempts or two payee mismatches within 10 minutes, or a burst of authorizations, freezes the card on Airwallex and sets `card.status=frozen` in ENS. Agents can freeze their own card; only a human can unfreeze.
+5. **Change the policy.** `update_policy` changes limits (per transaction, daily, monthly), merchant categories or payee rules. Tightening applies at once; anything that loosens the policy waits for `card.approver` to sign the exact change. See [Changing the policy](#changing-the-policy).
+6. **Freeze.** A cron job checks each card's recent activity. Two disallowed-merchant attempts or two payee mismatches within 10 minutes, or a burst of authorizations, freezes the card on Airwallex and sets `card.status=frozen` in ENS. Agents can freeze their own card; only a human can unfreeze.
 
 ## How an agent pays without the card number
 
@@ -337,10 +338,14 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 |---|---|
 | ENS OffchainResolver on mainnet, `xcard.eth` and `x402card.eth` pointed at it | ✅ live, source verified |
 | CCIP-Read gateway (signed records) | ✅ live |
-| MCP server (8 tools, scoped tokens) | ✅ live |
+| MCP server (10 tools; OAuth wallet sign-in or scoped tokens) | ✅ live at `mcp.x-card.dev` |
+| In-chat views (MCP Apps): card view, approval card, issue form, TAP signature | ✅ live; rendered in Claude.ai |
+| `update_policy` + daily limit (tighten now, loosen with a wallet signature) | ✅ live; first live policy approval signed in Claude.ai on 2026-10-28 |
+| Self-serve test cards (`testN.xcard.eth`, issued from the chat) | ✅ live |
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
-| Demo site on IPFS (`ai.xcard.eth`) | ✅ live |
-| Airwallex card creation | ⏳ waiting on Airwallex. The first sandbox account had no card program (`cards/create` returned `Invalid issuance details`); a new account under the US LLC is in review, escalated with Airwallex support. Until then the full flow runs against `FakeIssuer`, which enforces controls the way the sandbox does. |
+| Site on `x-card.dev` (Cloudflare) with an IPFS mirror (`ai.xcard.eth`) | ✅ live |
+| Airwallex card creation | ✅ live on an Airwallex demo account: real sandbox virtual Visa cards with our controls applied |
+| Airwallex charges (`pay`) | ⏳ the sandbox's transaction simulator is down for Airwallex maintenance ([status page](https://status.airwallex.com/): "Degraded performance in Sandbox simulation features", since 2026-10-26), so charges fail at the issuer step. Everything before it (pre-check, payee gate, held payments) works live; tests run the full flow against `FakeIssuer`. |
 | Root governance: names + resolver owned by a 2-of-3 Safe | ✅ done; both parent names and the resolver are owned by the Safe |
 | Agent `pay` tool with policy pre-check | ✅ live; tested end to end against a fake issuer |
 | Verified payee (payee gate, `card.payee`, held payments) | ✅ live; tested end to end, verifier checked against mainnet ENS. Not yet exercised on a live card (needs Airwallex issuance). |
@@ -355,6 +360,7 @@ Every card name, `<label>.xcard.eth` or `<label>.x402card.eth`, exposes these te
 | Key | Example | Meaning |
 |---|---|---|
 | `card.limit.tx` | `50` | Max per transaction, in major units of the first currency. Funding requests above this need a human. |
+| `card.limit.daily` | `200` | Max per day. Optional: empty means no daily limit. Must sit between `card.limit.tx` and `card.limit.monthly`. Sent to Airwallex as a `DAILY` limit. |
 | `card.limit.monthly` | `500` | Monthly allowance. Approved funding raises it. |
 | `card.currencies` | `USD` | Allowed transaction currencies, comma-separated. The first is the limit currency. |
 | `card.mcc.allow` | `5734,7372` | Allowed 4-digit merchant category codes. Empty means any. |
@@ -365,7 +371,7 @@ Every card name, `<label>.xcard.eth` or `<label>.x402card.eth`, exposes these te
 
 **Namespaces.** Both parents resolve through the same resolver and gateway. The same label under each is a separate card with its own policy and token. Pass the full name to choose; a bare label (`researcher`) means `x402card.eth`, the original namespace.
 
-Reserved labels that can't be issued: `ai`, `demo`, `www`, `app`, `api`, `gateway`, `shop`. `ai.xcard.eth` and `demo.x402card.eth` have their own on-chain resolver and host the site; `shop.xcard.eth` is the demo merchant's payee name, served by the gateway.
+Reserved labels that can't be issued: `ai`, `www`, `app`, `api`, `gateway`, `shop` under both parents, and `demo` under `x402card.eth` only. `ai.xcard.eth` and `demo.x402card.eth` have their own on-chain resolver and host the site; `shop.xcard.eth` is the demo merchant's payee name, served by the gateway. `demo.xcard.eth` is an ordinary card name.
 
 ## Policy engine
 
@@ -373,11 +379,13 @@ Plain, deterministic TypeScript with no LLM ([`src/policy/engine.ts`](src/policy
 
 | Input | Rule | Outcome |
 |---|---|---|
-| Records | → `authorization_controls`: `PER_TRANSACTION`, `MONTHLY`, `allowed_currencies`, `allowed_merchant_categories` | enforced by Airwallex at authorization time |
+| Records | → `authorization_controls`: `PER_TRANSACTION`, `DAILY` (when set), `MONTHLY`, `allowed_currencies`, `allowed_merchant_categories` | enforced by Airwallex at authorization time |
 | Funding request | card frozen, currency not allowed, bad decimals | **deny** |
 | Funding request | amount > `card.limit.tx`, or > global ceiling ($250), or wallet would drop below reserve floor ($1,000) | **escalate** to `card.approver` |
 | Funding request | otherwise | **approve**: raise `card.limit.monthly` and the Airwallex `MONTHLY` limit together |
-| Payment (`pay`) | card frozen, bad amount or MCC, currency not allowed, MCC not in `card.mcc.allow`, amount > `card.limit.tx` | **block** before the card network; otherwise pass to the issuer, which also enforces `MONTHLY` |
+| Payment (`pay`) | card frozen, bad amount or MCC, currency not allowed, MCC not in `card.mcc.allow`, amount > `card.limit.tx` or > `card.limit.daily` | **block** before the card network; otherwise pass to the issuer, which also enforces what's left of `DAILY` and `MONTHLY` |
+| Policy change (`update_policy`) | every change tightens (lower limit, fewer categories, stricter payee rule, a new daily limit) | **apply** now, records and Airwallex controls together |
+| Policy change (`update_policy`) | any change loosens | **escalate** the whole change to `card.approver`; nothing changes until they sign it |
 | Payment (`pay`) | passed the pre-check: payee gate per `card.payee` | **block** a lookalike (`PAYEE_MISMATCH`); **block** or **escalate** an unverified payee; otherwise pay |
 | Activity (cron, and after every refused payment) | ≥ 2 disallowed-MCC attempts in 10 min, ≥ 2 payee mismatches in 10 min, or > 10 payment attempts in 10 min (issuer authorizations + pre-check blocks) | **freeze**: card `INACTIVE` + `card.status=frozen`. A human unfreeze starts a clean window. |
 
@@ -390,11 +398,12 @@ Amounts are major units (`300` = $300), rounded to the currency's decimals. A ch
 The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol versions `2025-06-18`, `2025-03-26`, `2024-11-05`) and takes a bearer token: an OAuth access token from signing in with your wallet, or one of the static tokens.
 
 - **OAuth, for Claude.ai, ChatGPT and other apps that add a connector by URL.** Add `https://mcp.x-card.dev/mcp` as a custom connector. The app finds the sign-in on its own (RFC 9728 metadata on the `401`, then dynamic client registration or a client ID metadata document, PKCE). You sign in with your wallet (Sign-In with Ethereum) and pick what to connect:
-  - **a card whose `card.approver` resolves to your wallet.** The app acts as that card's agent, with the same tools and limits as its agent token.
+  - **All my cards** (offered first): every card whose `card.approver` resolves to your wallet, read again on each request, so cards issued to you later show up and reassigned ones drop off. Offered even with no cards yet, so a new wallet can connect and issue itself a test card.
+  - **one card whose `card.approver` resolves to your wallet.** The app acts as that card's agent, with the same tools and limits as its agent token.
   - **every card**, if your wallet is listed in the Worker's `OPERATORS`. Same as the admin token.
 
   Connecting never lets the app approve anything: requests over the policy still need your signature on the approval page. A connection ends if the card's `card.approver` changes. Tokens last an hour and refresh for up to 30 days.
-- **Admin token**: can call every tool, including `issue_card`. Keep it on the operator side.
+- **Admin token**: can call every tool; `issue_card` with any name and policy, and `update_policy` applies directly. Keep it on the operator side.
 - **Agent token** (`x4c_…`): returned once by `issue_card`. It only works for its own card, and `issue_card` is hidden from it. Give this to the agent.
 
 ### Claude Code
@@ -433,16 +442,42 @@ curl -s https://mcp.x-card.dev/mcp \
 
 | Tool | Arguments | Returns |
 |---|---|---|
-| `issue_card` *(admin)* | `name`, `policy: { limit_tx, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }` | `card`, `agent_token` (shown once) |
+| `issue_card` | Operator: `name`, `policy: { limit_tx, limit_daily?, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }`. Wallet sign-in: no arguments, or a suggested `policy` | Operator: `card`, `agent_token` (shown once). Wallet sign-in: `decision: "form"` with defaults and caps; the person submits the form in the chat and gets the next free `testN.xcard.eth` with their wallet as approver (caps: $50/transaction, $200/day, $500/month, USD, 3 per wallet; no agent token, the connection is the access) |
+| `list_cards` | | every card this connection can use: `name`, `status`, `last4`, limits, categories, payee rule, approver, `pending_approvals` |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
 | `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `merchant_url?`, `payee_name?`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (X Card pre-check or payee gate) · `declined` + `code` (issuer) · `pending_human` + `approval_id`, `approval_url` (payee held); `payee` check; `card_frozen` if this attempt froze the card |
 | `sign_request` | `name?`, `url`, `purpose: browse \| checkout` | Visa TAP `headers` (`Signature-Input`, `Signature`) for one request to `url`, `tag`, `keyid`, `expires_at`, `keys_url`. `checkout` needs an approved `pay` to that origin in the last 15 min. See [Visa TAP](#visa-trusted-agent-protocol-tap). |
 | `request_funding` | `name?`, `amount`, `currency`, `purpose?` | `approved` + `new_monthly_limit` · `pending_human` + `approval_id`, `approver`, `approval_url` · `denied` + `reason` |
+| `update_policy` | `name?`, any of `limit_tx`, `limit_daily` (`0` removes it), `limit_monthly`, `mcc_allow[]`, `payee`, `payee_allow[]`; `reason?` | `applied` + `changes`, `card` · `pending_human` + `changes`, `approval_id`, `approval_url` · `unchanged`. See [Changing the policy](#changing-the-policy). |
 | `get_approval` | `approval_id` | `approval` (status: pending, approved, denied or expired; amount, merchant…), `card`, `approval_url`. The agent can't decide it: `card.approver` signs on the approval page. See [Approving with a wallet](#approving-with-a-wallet). |
 | `freeze` | `name?`, `reason?` | `card` (now `frozen`) |
 | `list_transactions` | `name?` | `type`, `status`, `settled`, `amount`, `currency`, `merchant`, `mcc`, `decline_reason`, `at` |
 
-With an agent token, `name` is optional and defaults to the token's own card. Tool failures come back as results with `isError: true` and a `code: message` the model can read (`forbidden`, `not_found`, `bad_policy`, `airwallex_…`).
+With an agent token, or a connection with a single card, `name` is optional and defaults to that card. Tool failures come back as results with `isError: true` and a `code: message` the model can read (`forbidden`, `not_found`, `bad_policy`, `airwallex_…`).
+
+### In-chat views (MCP Apps)
+
+In apps that support [MCP Apps](https://github.com/modelcontextprotocol/ext-apps) (Claude.ai among them), every tool's result shows as an interactive view in the chat. Each is a `ui://` resource (`text/html;profile=mcp-app`) linked from the tool's `_meta.ui.resourceUri`; other clients get the same JSON as before.
+
+| View | Tools | What it shows |
+|---|---|---|
+| `ui://xcard/card.html` | `get_card`, `list_cards`, `freeze`, `list_transactions`, `sign_request` | The card face as on the site (mark, chip, last 4, name; iced with a FROZEN stamp when frozen), policy tags, approver, waiting requests and the ENS text records; a grid for `list_cards`; a transaction list; a TAP signature with its headers and a live expiry |
+| `ui://xcard/approval.html` | `pay`, `request_funding`, `update_policy`, `get_approval` | The request (amount, or each policy change from → to) with **Approve** and **Deny**. They sign the EIP-712 approval with the wallet in the frame when the app exposes one; otherwise a small popup on the approval page asks the wallet right away and closes itself (a tab if popups are blocked), and the card follows the decision. Then it tells the chat. |
+| `ui://xcard/issue.html` | `issue_card` | A form for the policy: limits within the caps, categories as chips, payee check. Submitting issues the card through the app (`tools/call`), and the view turns into the issued card. |
+
+Wallet extensions don't inject into the chat's sandboxed frame in Claude.ai, so there the popup is what signs.
+
+### Changing the policy
+
+`update_policy` takes only what changes, validates the result as a whole (`card.limit.tx ≤ card.limit.daily ≤ card.limit.monthly`), and classifies each change ([`src/policy/changes.ts`](src/policy/changes.ts)):
+
+| Change | Tightens | Loosens |
+|---|---|---|
+| A limit | lower, or adding a daily limit | higher, or removing the daily limit |
+| `card.mcc.allow`, `card.payee.allow` (empty = any) | fewer entries, or a list where there was none | a new entry, or emptying the list |
+| `card.payee` | towards `verified-only` | towards `any` |
+
+If every change tightens, it applies at once, to the ENS records and the Airwallex controls together. If any change loosens, nothing changes: the whole change becomes an approval for `card.approver`, who signs EIP-712 typed data of primary type `PolicyChange(string id, string decision, string card, string changes, string approver, uint256 expires)`, where `changes` reads like `card.limit.tx 50 → 100; card.limit.daily 200 → 300`, so the wallet shows exactly what is being allowed. The approval is HMAC-bound to every change (record, from, to). It is refused, not applied on top, if any of those records changed after the request. The approver and currencies can't be changed this way, and only a human can unfreeze. With the admin token, changes apply directly.
 
 ## Integrate: read a card's policy from any ENS client
 
@@ -523,6 +558,8 @@ Approval(string id, string decision, string card, string kind, string amount, st
 ```
 
 `decision` is `approve` or `deny`, and each has its own message, so a denial can't be replayed as an approval. `amount` is a decimal string so no signer rounds it. X Card resolves `card.approver` on mainnet ENS when the signature arrives (a bare `0x` address works too). It accepts the decision only if that address signed this exact message, verified with viem's `verifyTypedData`, so an EOA, a Safe (ERC-1271) and a not-yet-deployed smart wallet (ERC-6492) all work. The approver is the one recorded when the request was made. The HMAC binding and single use from the [Security model](#security-model) still apply. An approver that is free text (not a name or address) can only be decided in the operator console.
+
+**In the chat.** In apps that show [in-chat views](#in-chat-views-mcp-apps), the approval card's Approve button starts this same signature: with the wallet in the frame if there is one, otherwise in a small popup on the approval page (`approve?popup=approve#<id>`) that shows only that request, asks the wallet at once and closes when done. A policy change is signed as `PolicyChange` typed data (see [Changing the policy](#changing-the-policy)).
 
 **On the approval page.** `pending_human` results carry an `approval_url` (`approve.html#<id>`). The page loads the request from `GET /approvals/:id` with no sign-in, shows exactly what it would do, and asks the approver's wallet to sign it with `eth_signTypedData_v4` (free, nothing goes on-chain). It checks the connected account is the one `card.approver` resolves to and posts the signature to `POST /approvals/:id`. On a phone, open the link in a wallet app's browser.
 
@@ -643,6 +680,8 @@ GATEWAY_SIGNER=<address of GATEWAY_SIGNER_KEY> \
 # then setResolver(namehash("<your-name>.eth"), <resolver>) on the ENS registry
 ```
 
+The site is a separate, assets-only Worker: `npx wrangler deploy -c site/wrangler.jsonc` (custom domains in that file). Keep `"workers_dev": true` on the main Worker if your resolver's gateway URL is its workers.dev address: with `routes` set and the line missing, wrangler turns workers.dev off.
+
 Change `PARENT_NAME` in `src/ens/gateway.ts` and `PARENT_ADDR` in `wrangler.jsonc` for your own name. If the parent name has records today (an address, a contenthash), serve them from the gateway before switching resolvers, as `PARENT_ADDR` does.
 
 ## Demo runner
@@ -694,13 +733,18 @@ To try TAP locally, put a `TAP_PRIVATE_KEY` in `.dev.vars` (from `scripts/tap-ke
 ```
 src/
   index.ts              Worker routes + cron
-  mcp.ts                MCP server (JSON-RPC over HTTP), auth, tool schemas
+  worker.ts             entry: OAuth (wallet sign-in) around the app
+  mcp.ts                MCP server (JSON-RPC over HTTP), auth, tool schemas, ui:// resources
+  oauth/                consent page (SIWE), what a wallet may grant
+  ui/                   in-chat views (MCP Apps): card.ts, approval.ts, issue.ts
   service.ts            card operations behind the tools (Issuer interface)
   store.ts              KV layout
   ens/gateway.ts        CCIP-Read gateway + signing
   policy/records.ts     ENS record schema + validation
   policy/engine.ts      records → controls, funding decisions, anomaly rules
-  policy/approvals.ts   HMAC-bound approvals (funding and held payments)
+  policy/approvals.ts   HMAC-bound approvals (funding, held payments, policy changes)
+  policy/approver.ts    EIP-712 approvals signed by card.approver
+  policy/changes.ts     update_policy: what tightens, what loosens
   policy/payee.ts       payee gate: x402 payee-name check + card.payee decision
   tap/sign.ts           Visa TAP signing (RFC 9421, Ed25519), keyid, key generation
   tap/verify.ts         Visa TAP verification (the merchant side)
@@ -709,7 +753,8 @@ src/
   airwallex/simulator.ts  every sandbox simulation call behind one interface
 contracts/              OffchainResolver.sol + Hardhat deploy
 scripts/                Airwallex checks, resolver e2e, IPFS pinning, TAP key generation
-site/www/               demo site + approvals page (static; pinned to IPFS), brand/ logos, og.png
+site/www/               site + approvals page (static; served on x-card.dev, mirrored to IPFS), brand/ logos, og.png
+site/wrangler.jsonc     the site's assets-only Worker
 site/og/                source of the og.png share card
 ```
 
@@ -717,10 +762,11 @@ site/og/                source of the og.png share card
 
 - **Production checkout behind `pay`:** network-token (Visa Intelligent Commerce / Mastercard Agent Pay) or vaulted-PAN checkout in the issuer adapter, replacing the sandbox simulation.
 - **TAP body objects:** the Agentic Consumer Recognition Object and Payment Container, once Visa Intelligent Commerce credentials are available.
-- **Payee fields on the issue form:** `card.payee` and `card.payee.allow` on the approvals page's issue form (today they're set over MCP or the API).
+- **Cards for teams:** an operator issues named cards (one per employee) with a manager as `card.approver`, and emails each employee a one-time claim link; signing in with their wallet makes them the card's holder for their own agent. Self-serve test cards become the case where holder and approver are the same wallet.
+- **Voice:** let the model submit the issue form after the person confirms the policy out loud, for apps where the form doesn't show (voice mode).
 - **An origin-only verifier** exported from `@x402identity/payee`, replacing the placeholder-`payTo` call.
 - **A strongly consistent nonce store** (Durable Object) for the demo merchant.
-- **Wallet-signed approvals** (EIP-712 from `card.approver`, ERC-1271 for Safes) replacing the admin token for approvals and unfreezes.
+- **Wallet-signed unfreeze** (approvals already are), replacing the admin token there too.
 - **Issuer-agnostic attach:** `attach_card` for cards issued elsewhere, a `card.issuer` record, and adapters beyond Airwallex.
 - **Paid self-serve issuance over x402**: let agents issue their own card name by paying a small fee in USDC, with the payer wallet becoming `card.approver`.
 - **The same policy for x402 payments:** apply a name's ENS policy to x402 / USDC payments on Base, so one name governs both card and stablecoin spending.
