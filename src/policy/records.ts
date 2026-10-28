@@ -3,6 +3,7 @@
 
 export const RECORD_KEYS = [
   "card.limit.tx",
+  "card.limit.daily",
   "card.limit.monthly",
   "card.currencies",
   "card.mcc.allow",
@@ -17,6 +18,8 @@ export type TextRecords = Partial<Record<RecordKey, string>>;
 
 export interface CardPolicy {
   limitTx: number;
+  /** Absent = no daily limit (cards issued before it existed). */
+  limitDaily?: number;
   limitMonthly: number;
   /** First entry is the limit currency. */
   currencies: string[];
@@ -46,6 +49,12 @@ export function parseRecords(r: TextRecords): CardPolicy {
   const limitTx = positiveNumber(r["card.limit.tx"], "card.limit.tx");
   const limitMonthly = positiveNumber(r["card.limit.monthly"], "card.limit.monthly");
   if (limitTx > limitMonthly) throw new PolicyError("card.limit.tx exceeds card.limit.monthly");
+  const daily = (r["card.limit.daily"] ?? "").trim();
+  const limitDaily = daily ? positiveNumber(daily, "card.limit.daily") : undefined;
+  if (limitDaily !== undefined) {
+    if (limitTx > limitDaily) throw new PolicyError("card.limit.tx exceeds card.limit.daily");
+    if (limitDaily > limitMonthly) throw new PolicyError("card.limit.daily exceeds card.limit.monthly");
+  }
 
   const currencies = list(r["card.currencies"]).map((c) => c.toUpperCase());
   if (currencies.length === 0) throw new PolicyError("card.currencies is required");
@@ -71,7 +80,7 @@ export function parseRecords(r: TextRecords): CardPolicy {
     throw new PolicyError("card.payee.allow needs card.payee verified-only or verified-or-escalate");
   }
 
-  return { limitTx, limitMonthly, currencies, mccAllow, status, approver, payee: payee as PayeeMode, payeeAllow };
+  return { limitTx, ...(limitDaily !== undefined ? { limitDaily } : {}), limitMonthly, currencies, mccAllow, status, approver, payee: payee as PayeeMode, payeeAllow };
 }
 
 // The verifier only reads .eth names; anything else could never match.
@@ -80,6 +89,7 @@ const ENS_NAME = /^[^\s.,]+(\.[^\s.,]+)*\.eth$/;
 export function toRecords(p: CardPolicy): Required<TextRecords> {
   return {
     "card.limit.tx": String(p.limitTx),
+    "card.limit.daily": p.limitDaily !== undefined ? String(p.limitDaily) : "",
     "card.limit.monthly": String(p.limitMonthly),
     "card.currencies": p.currencies.join(","),
     "card.mcc.allow": p.mccAllow.join(","),

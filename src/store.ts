@@ -27,7 +27,7 @@ export interface CardRef {
 export interface CardEvent {
   at: number;
   /** "blocked" = refused by x402card's pre-check; "declined" = refused by the issuer. */
-  kind: "issued" | "charged" | "blocked" | "declined" | "funded" | "escalated" | "approved" | "denied" | "frozen" | "unfrozen";
+  kind: "issued" | "charged" | "blocked" | "declined" | "funded" | "escalated" | "approved" | "denied" | "frozen" | "unfrozen" | "policy";
   detail: string;
   amount?: number;
   currency?: string;

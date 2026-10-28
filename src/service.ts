@@ -11,6 +11,7 @@ import { approvalTypedData, isSignableApprover, type ApprovalTypedData, type App
 import { decidePayee, toOrigin, type PayeeCheck, type PayeeChecker } from "./policy/payee.ts";
 import type { TapSigner, TapTag } from "./tap/sign.ts";
 import { type CardPolicy, PolicyError, type TextRecords, parseRecords, toRecords } from "./policy/records.ts";
+import { describeChanges, planChanges, type PolicyChange, type PolicyInput } from "./policy/changes.ts";
 import type { Store } from "./store.ts";
 
 /** The Airwallex surface the service needs; faked in tests. */
@@ -111,7 +112,7 @@ export interface CardView {
   status: "active" | "frozen";
   last4?: string;
   records: TextRecords;
-  pending_approvals: { id: string; kind: "funding" | "payment"; amount: number; currency: string; reason: string; merchant?: string }[];
+  pending_approvals: { id: string; kind: "funding" | "payment" | "policy"; amount: number; currency: string; reason: string; merchant?: string }[];
 }
 
 export interface SafeTransaction {
@@ -151,6 +152,15 @@ export type PaymentResult = (
   | { decision: "declined"; stage: "issuer"; code: string }
   | { decision: "pending_human"; reason: string; approval_id: string; approver: string; approval_url?: string }
 ) & { payee?: PayeeCheck; card_frozen?: string; replayed?: boolean };
+
+/**
+ * applied = took effect now (only tightening, or the operator asked).
+ * pending_human = loosens the policy, so nothing changes until card.approver signs.
+ */
+export type PolicyResult =
+  | { decision: "applied"; changes: string; card: CardView }
+  | { decision: "unchanged"; reason: string }
+  | { decision: "pending_human"; reason: string; changes: string; approval_id: string; approver: string; approval_url?: string };
 
 export type FundingResult =
   | { decision: "approved"; reason: string; new_monthly_limit: number }
@@ -248,6 +258,7 @@ export class CardService {
         currency: a.currency,
         reason: a.reason,
         ...(a.payment ? { merchant: a.payment.merchant } : {}),
+        ...(a.policy ? { changes: describeChanges(a.policy.changes) } : {}),
       })),
     };
   }
@@ -276,6 +287,64 @@ export class CardService {
       approver: policy.approver,
       ...this.approvalLink(pending.id),
     };
+  }
+
+  /**
+   * Change the card's limits, merchant categories or payee rules. Tightening
+   * applies at once; if any change loosens the policy, the whole change waits
+   * for card.approver (direct = the operator, who applies it either way).
+   */
+  async updatePolicy(name: string, input: PolicyInput, opts: { direct?: boolean; purpose?: string } = {}): Promise<PolicyResult> {
+    const { label, policy } = await this.load(name);
+    let plan: ReturnType<typeof planChanges>;
+    try {
+      plan = planChanges(policy, input);
+    } catch (e) {
+      if (e instanceof PolicyError) throw new ServiceError("bad_policy", e.message);
+      throw e;
+    }
+    if (!plan.changes.length) return { decision: "unchanged", reason: "the card already has this policy" };
+    const changes = describeChanges(plan.changes);
+
+    if (!plan.loosens || opts.direct) {
+      await this.applyPolicy(label, plan.next, `${plan.loosens ? "changed" : "tightened"}: ${changes}`);
+      return { decision: "applied", changes, card: await this.getCard(label) };
+    }
+
+    const why = `loosens the policy (${plan.changes.filter((c) => c.loosens).map((c) => c.key).join(", ")})`;
+    const reason = `${why}${opts.purpose ? ` · ${opts.purpose}` : ""}`;
+    const pending = { ...newPendingApproval(label, 0, policy.currencies[0], reason, policy.approver), kind: "policy" as const, policy: { changes: plan.changes } };
+    await this.store.putApproval({ ...pending, sig: await signApproval(this.opts.approvalSecret, pending) });
+    await this.store.addEvent(label, { at: Date.now(), kind: "escalated", detail: `policy change · ${changes}` });
+    return { decision: "pending_human", reason: why, changes, approval_id: pending.id, approver: policy.approver, ...this.approvalLink(pending.id) };
+  }
+
+  /** The approved changes, on top of the policy as it is now; refused if a record moved since the request. */
+  private async releasePolicy(a: PendingApproval & { sig: string }, changes: PolicyChange[], decidedBy: string) {
+    const { label, policy } = await this.load(a.name);
+    const now = toRecords(policy);
+    const moved = changes.filter((c) => now[c.key] !== c.from);
+    if (moved.length) {
+      throw new ServiceError("policy_changed", `${moved.map((c) => c.key).join(", ")} changed since the request; ask again`);
+    }
+    let next: CardPolicy;
+    try {
+      next = parseRecords({ ...now, ...Object.fromEntries(changes.map((c) => [c.key, c.to])) });
+    } catch (e) {
+      if (e instanceof PolicyError) throw new ServiceError("bad_policy", e.message);
+      throw e;
+    }
+    await this.store.putApproval({ ...a, status: "approved" });
+    await this.applyPolicy(label, next, `approved by ${decidedBy}: ${describeChanges(changes)}`);
+    return { ...a, status: "approved" as const };
+  }
+
+  private async applyPolicy(label: string, next: CardPolicy, detail: string) {
+    const ref = await this.store.getCard(label);
+    if (!ref) throw new ServiceError("not_found", `${fullName(label)} has no card`);
+    await this.issuer.updateCard(ref.cardId, { controls: toAuthorizationControls(next) });
+    await this.store.putRecords(label, toRecords(next));
+    await this.store.addEvent(label, { at: Date.now(), kind: "policy", detail });
   }
 
   private approvalLink(id: string): { approval_url?: string } {
@@ -308,6 +377,7 @@ export class CardService {
     }
 
     if (a.kind === "payment" && a.payment) return this.releasePayment(a, a.payment, decidedBy);
+    if (a.kind === "policy" && a.policy) return this.releasePolicy(a, a.policy.changes, decidedBy);
 
     const { label, policy } = await this.load(a.name);
     if (policy.status === "frozen") throw new ServiceError("frozen", "card is frozen; unfreeze before approving");

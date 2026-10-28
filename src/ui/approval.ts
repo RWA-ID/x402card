@@ -158,6 +158,8 @@ const HTML = /* html */ `<!doctype html>
     if (id) return loadApproval(id);
     if (res.isError || sc.error) return summary("no", "Blocked", (sc.error && sc.error.message) || "The request was refused.");
     if (sc.decision === "approved") return summary("ok", "Approved", sc.reason || "Within the card's policy.");
+    if (sc.decision === "applied") return summary("ok", "Policy updated", sc.changes || "");
+    if (sc.decision === "unchanged") return summary("", "No change", sc.reason || "");
     if (sc.decision) return summary(sc.decision === "declined" || sc.decision === "blocked" ? "no" : "", sc.decision.replace(/_/g, " "), sc.reason || "");
     root.textContent = ""; root.hidden = true;
   }
@@ -183,7 +185,9 @@ const HTML = /* html */ `<!doctype html>
   const stopPoll = () => { clearInterval(poll); poll = undefined; };
 
   function render(v) {
-    const a = v.approval, p = a.payment || {}, cur = a.currency, pay = a.kind === "payment";
+    const a = v.approval, p = a.payment || {}, cur = a.currency, pay = a.kind === "payment", pol = a.kind === "policy";
+    const show = (k, x) => (x ? x : k === "card.limit.daily" ? "none" : "any");
+    const changes = (a.policy && a.policy.changes) || [];
     const live = a.status === "pending" && a.expiresAt > Date.now();
     const purpose = (a.reason || "").split(" · ").slice(1).join(" · ");
     const state = live ? (pay ? "Held" : "Needs approval") : a.status === "pending" ? "Expired" : a.status;
@@ -191,9 +195,10 @@ const HTML = /* html */ `<!doctype html>
     const rows = [
       ["approver", who(a.approver) + (v.approver_address && who(a.approver) !== short(v.approver_address) ? " · " + short(v.approver_address) : "")],
       ...(pay ? [["checkout", p.merchantUrl || "not given"], ["payee", p.payeeName ? p.payeeName + " · " + p.payeeStatus : "not given"]] : []),
+      ...changes.map((c) => [c.key.slice(5), show(c.key, c.from) + " → " + show(c.key, c.to)]),
       ["why", (a.reason || "").split(" · ")[0]],
     ];
-    const approveBtn = el("button", { class: "approve", type: "button", text: pay ? "Approve & pay " + money(a.amount, cur) : "Approve " + money(a.amount, cur) });
+    const approveBtn = el("button", { class: "approve", type: "button", text: pay ? "Approve & pay " + money(a.amount, cur) : pol ? "Approve changes" : "Approve " + money(a.amount, cur) });
     const denyBtn = el("button", { class: "deny", type: "button", text: "Deny" });
     const note = el("p", { class: "note" });
     const err = el("div", { class: "err" });
@@ -204,8 +209,8 @@ const HTML = /* html */ `<!doctype html>
       el("div", { class: "main" },
         el("div", { style: "min-width:0" },
           el("div", { class: "name", text: v.card }),
-          el("div", { class: "what", text: pay ? "wants to pay " + (p.merchant || "a merchant") + (p.purpose ? " · " + p.purpose : "") : "requests funds" + (purpose ? " · " + purpose : "") })),
-        el("div", { class: "amt" }, (pay ? "" : "+") + money(a.amount, cur), el("small", { text: cur }))),
+          el("div", { class: "what", text: pay ? "wants to pay " + (p.merchant || "a merchant") + (p.purpose ? " · " + p.purpose : "") : (pol ? "wants a policy change" : "requests funds") + (purpose ? " · " + purpose : "") })),
+        pol ? el("div", { class: "amt", text: "Policy" }) : el("div", { class: "amt" }, (pay ? "" : "+") + money(a.amount, cur), el("small", { text: cur }))),
       el("div", { class: "kv" }, ...rows.flatMap(([k, val]) => [el("span", { text: k }), el("span", { text: val })])));
 
     const finish = (decided) => {
@@ -213,10 +218,12 @@ const HTML = /* html */ `<!doctype html>
       const ok = decided.status === "approved";
       pill.className = "pill " + (ok ? "ok" : "no"); pill.textContent = decided.status;
       approveBtn.disabled = denyBtn.disabled = true;
-      if (ok) { approveBtn.textContent = pay ? "Paid ✓" : "Approved ✓"; approveBtn.classList.add("done"); denyBtn.hidden = true; }
+      if (ok) { approveBtn.textContent = pay ? "Paid ✓" : pol ? "Applied ✓" : "Approved ✓"; approveBtn.classList.add("done"); denyBtn.hidden = true; }
       else { denyBtn.textContent = "Denied"; approveBtn.hidden = true; }
       note.textContent = "Signed by " + who(a.approver) + ". Nothing was sent on-chain.";
-      const what = pay ? "the " + money(a.amount, cur) + " payment to " + (p.merchant || "the merchant") : "the " + money(a.amount, cur) + " funding request";
+      const what = pay ? "the " + money(a.amount, cur) + " payment to " + (p.merchant || "the merchant")
+        : pol ? "the policy change (" + changes.map((c) => c.key + " " + show(c.key, c.from) + " → " + show(c.key, c.to)).join("; ") + ")"
+        : "the " + money(a.amount, cur) + " funding request";
       tell("I " + (ok ? "approved " : "denied ") + what + " for " + v.card + " with my wallet (approval " + a.id + ").");
     };
 

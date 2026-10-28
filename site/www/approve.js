@@ -110,7 +110,7 @@
     }
     for (const a of pending) {
       const card = cards.find((c) => c.name === fullName(a.name));
-      box.append(a.kind === "payment" ? paymentCard(a, card) : requestCard(a, card));
+      box.append(a.kind === "payment" ? paymentCard(a, card) : a.kind === "policy" ? policyCard(a) : requestCard(a, card));
     }
     if (focusId) {
       const f = box.querySelector(`[data-id="${CSS.escape(focusId)}"]`);
@@ -231,6 +231,43 @@
         el("span", { text: "card.payee" }), el("span", { text: rec["card.payee"] || "any" }),
         el("span", { text: "requested" }), el("span", { text: ago(a.createdAt) }),
         el("span", { text: "binding" }), el("span", { text: `${a.name} · ${a.amount} · ${cur} · ${p.payeeName || p.merchantUrl || p.merchant}` })),
+      el("div", { class: "req-actions" }, approveBtn, denyBtn, el("label", { class: "as" }, "as ", as)));
+  }
+
+  // A policy change: each record from → to. Approving applies them all.
+  const showVal = (k, v) => (v ? v : k === "card.limit.daily" ? "none" : "any");
+  const changeRows = (a) => (a.policy?.changes || []).flatMap((c) => [
+    el("span", { text: c.key }), el("span", { text: `${showVal(c.key, c.from)} → ${showVal(c.key, c.to)}${c.loosens ? "" : " (tighter)"}` })]);
+
+  function policyCard(a) {
+    const [why, purpose] = splitReason(a.reason);
+    const whyRow = el("div", { class: "req-why" }, el("span", { class: "dot" }), el("span", { text: "PAUSED · " + why }));
+    const as = el("input", { value: a.approver || "admin", "aria-label": "Decide as", spellcheck: "false" });
+    const approveBtn = el("button", { class: "approve-btn", text: "Approve changes" });
+    const denyBtn = el("button", { class: "btn-deny", text: "Deny" });
+    const decide = async (approve) => {
+      busy = true; approveBtn.disabled = denyBtn.disabled = true;
+      const by = as.value.trim() || "admin";
+      try {
+        await api(`/api/approvals/${a.id}`, { method: "POST", body: JSON.stringify({ approve, by }) });
+        if (approve) { approveBtn.textContent = "Applied ✓"; approveBtn.style.background = "var(--success)"; whyRow.className = "req-why ok"; whyRow.lastChild.textContent = `APPLIED · approved by ${by}`; }
+        else { denyBtn.textContent = "Denied"; approveBtn.style.opacity = "0.3"; whyRow.className = "req-why no"; whyRow.lastChild.textContent = `DENIED · by ${by}`; }
+        setTimeout(() => { busy = false; lastSig = ""; load(); }, 1800);
+      } catch (err) {
+        busy = false; approveBtn.disabled = denyBtn.disabled = false;
+        whyRow.className = "req-why no"; whyRow.lastChild.textContent = err.message;
+      }
+    };
+    approveBtn.addEventListener("click", () => decide(true));
+    denyBtn.addEventListener("click", () => decide(false));
+    return el("article", { class: "req-card", "data-id": a.id },
+      el("div", { class: "req-top" },
+        el("div", { style: "min-width:0" },
+          el("div", { class: "req-name", text: fullName(a.name) }),
+          el("div", { class: "req-purpose", text: "wants a policy change" + (purpose ? " · " + purpose : "") })),
+        el("div", { class: "req-amt" }, "Policy")),
+      whyRow,
+      el("div", { class: "kv" }, ...changeRows(a), el("span", { text: "requested" }), el("span", { text: ago(a.createdAt) })),
       el("div", { class: "req-actions" }, approveBtn, denyBtn, el("label", { class: "as" }, "as ", as)));
   }
 
@@ -449,6 +486,7 @@
       try {
         const r = await api("/api/cards", { method: "POST", body: JSON.stringify({ name, policy: {
           limit_tx: Number(f("limit_tx")), limit_monthly: Number(f("limit_monthly")),
+          ...(f("limit_daily") ? { limit_daily: Number(f("limit_daily")) } : {}),
           currencies: list(f("currencies").toUpperCase()), mcc_allow: list(f("mcc_allow")), approver: f("approver"),
           payee, payee_allow: payeeAllow,
         } }) });
@@ -529,7 +567,7 @@
 
   function oneCard(v) {
     const a = v.approval, p = a.payment || {}, cur = a.currency;
-    const pay = a.kind === "payment";
+    const pay = a.kind === "payment", pol = a.kind === "policy";
     const live = a.status === "pending" && a.expiresAt > Date.now();
     const [why, purpose] = splitReason(a.reason);
     const whyRow = el("div", { class: "req-why" }, el("span", { class: "dot" }),
@@ -542,6 +580,7 @@
         el("span", { text: "payee name" }), el("span", { text: p.payeeName ? `${p.payeeName} · ${p.payeeStatus}` : "not given" }),
         el("span", { text: "MCC" }), el("span", { text: p.mcc || "—" }),
       ] : []),
+      ...(pol ? changeRows(a) : []),
       el("span", { text: "expires" }), el("span", { text: new Date(a.expiresAt).toLocaleString() }));
     const note = el("p", { class: "one-note" });
     const err = el("div", { class: "err" });
@@ -549,8 +588,8 @@
       el("div", { class: "req-top" },
         el("div", { style: "min-width:0" },
           el("div", { class: "req-name", text: v.card }),
-          el("div", { class: "req-purpose", text: pay ? `wants to pay ${p.merchant || "a merchant"}` + (p.purpose ? " · " + p.purpose : "") : "requests funds" + (purpose ? " · " + purpose : "") })),
-        el("div", { class: "req-amt" }, (pay ? "" : "+") + money(a.amount, cur), el("small", { text: cur }))),
+          el("div", { class: "req-purpose", text: pay ? `wants to pay ${p.merchant || "a merchant"}` + (p.purpose ? " · " + p.purpose : "") : (pol ? "wants a policy change" : "requests funds") + (purpose ? " · " + purpose : "") })),
+        pol ? el("div", { class: "req-amt" }, "Policy") : el("div", { class: "req-amt" }, (pay ? "" : "+") + money(a.amount, cur), el("small", { text: cur }))),
       whyRow, kv);
 
     if (!live) return card;
@@ -560,7 +599,7 @@
       return card;
     }
 
-    const approveBtn = el("button", { class: "approve-btn", text: pay ? `Approve & pay ${money(a.amount, cur)}` : `Approve ${money(a.amount, cur)}` });
+    const approveBtn = el("button", { class: "approve-btn", text: pay ? `Approve & pay ${money(a.amount, cur)}` : pol ? "Approve changes" : `Approve ${money(a.amount, cur)}` });
     const denyBtn = el("button", { class: "btn-deny", text: "Deny" });
     const picker = el("div", { class: "ns-switch one-wallets", role: "radiogroup", "aria-label": "Wallet" });
     let chosen = 0;
@@ -609,10 +648,10 @@
           approveBtn.textContent = "Declined by issuer";
           whyRow.className = "req-why no"; whyRow.lastChild.textContent = `ISSUER DECLINED · ${charge.decline_reason || "DECLINED"}`;
         } else {
-          approveBtn.textContent = pay ? "Paid ✓" : "Approved ✓"; approveBtn.style.background = "var(--success)";
+          approveBtn.textContent = pay ? "Paid ✓" : pol ? "Applied ✓" : "Approved ✓"; approveBtn.style.background = "var(--success)";
           const lim = res.card?.records?.["card.limit.monthly"];
           whyRow.className = "req-why ok";
-          whyRow.lastChild.textContent = (pay ? "PAID" : `APPROVED · allowance now ${money(lim, cur)}`) + ` · signed by ${who(a.approver)}`;
+          whyRow.lastChild.textContent = (pay ? "PAID" : pol ? "APPLIED" : `APPROVED · allowance now ${money(lim, cur)}`) + ` · signed by ${who(a.approver)}`;
         }
         picker.hidden = true;
         note.textContent = "Done. You can close this tab and go back to the chat.";

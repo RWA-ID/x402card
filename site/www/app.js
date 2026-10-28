@@ -417,6 +417,7 @@
     mcc: { st: "MCC_NOT_ALLOWED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
     hold: { st: "PENDING_HUMAN", c: "oklch(0.84 0.14 80)", bg: "oklch(0.84 0.14 80 / 0.1)" },
     // A logged escalation: it was sent to the human then; the decision is its own row.
+    policy: { st: "POLICY", c: "oklch(0.86 0.1 258)", bg: "oklch(0.74 0.19 258 / 0.14)" },
     esc: { st: "ESCALATED", c: "oklch(0.84 0.14 80)", bg: "oklch(0.84 0.14 80 / 0.1)" },
     fund: { st: "FUNDED", c: "oklch(0.86 0.1 258)", bg: "oklch(0.74 0.19 258 / 0.14)" },
     frz: { st: "FROZEN", c: "oklch(0.9 0.05 230)", bg: "oklch(0.9 0.05 230 / 0.1)" },
@@ -441,7 +442,7 @@
     ["travel-bot", "GeoTile · maps API", "$6.50", "ok"],
     ["pricing-bot", "LuxeGoods · retail", "$129.00", "mcc"],
   ];
-  const EVENT_KIND = { issued: "issued", charged: "ok", funded: "fund", escalated: "esc", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active" };
+  const EVENT_KIND = { issued: "issued", charged: "ok", funded: "fund", escalated: "esc", approved: "fund", denied: "denied", frozen: "frz", unfrozen: "active", policy: "policy" };
   // Declines show their rule: MCC declines get the MCC pill, the rest a generic DECLINED.
   // "blocked" = stopped by X Card's pre-check before reaching the card network.
   const eventKind = (e) => (e.kind === "declined" ? (/MERCHANT_CATEGORY_NOT_ALLOWED/.test(e.detail) ? "mcc" : "declined")

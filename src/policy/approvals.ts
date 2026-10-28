@@ -1,7 +1,9 @@
 // Escalated approvals. An approval is an HMAC over the exact
 // (name, amount, currency, approval id), so it can't be replayed for a
 // different card, a bigger amount or another currency. A held payment also
-// binds its merchant, so approving it can't pay someone else.
+// binds its merchant, so approving it can't pay someone else. A policy change
+// binds every record it changes, from and to.
+import type { PolicyChange } from "./changes.ts";
 
 export interface PendingApproval {
   id: string;
@@ -14,8 +16,10 @@ export interface PendingApproval {
   expiresAt: number;
   status: "pending" | "approved" | "denied" | "expired";
   /** Absent = funding (approvals stored before payments could be held). */
-  kind?: "funding" | "payment";
+  kind?: "funding" | "payment" | "policy";
   payment?: HeldPayment;
+  /** kind "policy": the changes approving applies (amount 0). */
+  policy?: { changes: PolicyChange[] };
 }
 
 /** A payment the payee gate held for a human; approving it makes the charge. */
@@ -54,10 +58,13 @@ export function newPendingApproval(
   };
 }
 
-type Signed = Pick<PendingApproval, "id" | "name" | "amount" | "currency" | "kind" | "payment">;
+type Signed = Pick<PendingApproval, "id" | "name" | "amount" | "currency" | "kind" | "payment" | "policy">;
 
 function canonical(a: Signed): string {
   const base = `${a.id}|${a.name.toLowerCase()}|${a.amount}|${a.currency.toUpperCase()}`;
+  if (a.kind === "policy") {
+    return `x402card-policy:v1|${base}|${JSON.stringify((a.policy?.changes ?? []).map((c) => [c.key, c.from, c.to]))}`;
+  }
   // Funding keeps the v1 string so approvals signed before payments existed still verify.
   if (a.kind !== "payment") return `x402card-approval:v1|${base}`;
   const p = a.payment;

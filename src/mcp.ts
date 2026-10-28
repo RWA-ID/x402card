@@ -6,6 +6,7 @@ import { CardService, ServiceError, describeError, fullName, normalizeLabel } fr
 import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 import { UI_MIME, approvalResource } from "./ui/approval.ts";
+import type { PolicyInput } from "./policy/changes.ts";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "x402card", title: "X Card", version: "0.4.0" };
@@ -44,6 +45,7 @@ export const TOOLS = [
           type: "object",
           properties: {
             limit_tx: { type: "number", description: "Max per transaction (major units)" },
+            limit_daily: { type: "number", description: "Max per day (major units); omit for none" },
             limit_monthly: { type: "number", description: "Monthly allowance (major units)" },
             currencies: { type: "array", items: { type: "string" }, description: "ISO codes; the first is the limit currency" },
             mcc_allow: { type: "array", items: { type: "string" }, description: "Allowed 4-digit merchant category codes; empty = any" },
@@ -132,6 +134,26 @@ export const TOOLS = [
     },
   },
   {
+    name: "update_policy",
+    _meta: approvalUi,
+    title: "Update card policy",
+    description:
+      "Change the card's limits (per transaction, daily, monthly), allowed merchant categories or payee rules. Pass only what changes. Tightening (lower limits, fewer categories, stricter payee checks) applies at once. If anything loosens the policy, nothing changes until card.approver signs the whole change with their wallet (decision pending_human, as with request_funding). For a one-off top-up of the monthly allowance prefer request_funding. The approver and currencies can't be changed here.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: nameProp,
+        limit_tx: { type: "number", exclusiveMinimum: 0, description: "Max per transaction (major units)" },
+        limit_daily: { type: "number", minimum: 0, description: "Max per day (major units); 0 removes the daily limit" },
+        limit_monthly: { type: "number", exclusiveMinimum: 0, description: "Monthly allowance (major units)" },
+        mcc_allow: { type: "array", items: { type: "string" }, description: "Allowed 4-digit merchant category codes, the whole list; [] = any" },
+        payee: { type: "string", enum: ["any", "verified-or-escalate", "verified-only"], description: "What a payment needs to know about its payee" },
+        payee_allow: { type: "array", items: { type: "string" }, description: "ENS names this card may pay, the whole list; [] = any verified payee" },
+        reason: { type: "string", description: "Why (shown to the approver)" },
+      },
+    },
+  },
+  {
     name: "get_approval",
     _meta: approvalUi,
     title: "Get an approval",
@@ -216,7 +238,7 @@ export class McpServer {
             capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
             serverInfo: SERVER_INFO,
             instructions:
-              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. A pending_human result is decided by card.approver, who signs it with their own wallet: apps that show the approval card let them approve right in the chat; otherwise give them approval_url. Then check get_approval. list_cards shows every card this connection can use. You never see card numbers.",
+              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. Use update_policy to change limits (incl. a daily limit), merchant categories or payee rules; tightening is immediate, loosening waits for a human. A pending_human result is decided by card.approver, who signs it with their own wallet: apps that show the approval card let them approve right in the chat; otherwise give them approval_url. Then check get_approval. list_cards shows every card this connection can use. You never see card numbers.",
           });
         }
         case "ping":
@@ -303,6 +325,22 @@ export class McpServer {
         if (!Number.isFinite(amount) || amount <= 0) throw toolError("bad_amount", "amount must be a positive number");
         return { ...(await this.svc.requestFunding(this.target(a), amount, str(a.currency, "currency"), optStr(a.purpose))) };
       }
+      case "update_policy": {
+        const input: PolicyInput = {};
+        const num = (v: unknown, f: string) => {
+          const n = Number(v);
+          if (!Number.isFinite(n) || n < 0) throw toolError("bad_input", `${f} must be a non-negative number`);
+          return n;
+        };
+        if (a.limit_tx !== undefined) input["card.limit.tx"] = String(num(a.limit_tx, "limit_tx"));
+        if (a.limit_daily !== undefined) input["card.limit.daily"] = num(a.limit_daily, "limit_daily") === 0 ? "" : String(num(a.limit_daily, "limit_daily"));
+        if (a.limit_monthly !== undefined) input["card.limit.monthly"] = String(num(a.limit_monthly, "limit_monthly"));
+        if (a.mcc_allow !== undefined) input["card.mcc.allow"] = list(a.mcc_allow, "mcc_allow");
+        if (a.payee !== undefined) input["card.payee"] = str(a.payee, "payee");
+        if (a.payee_allow !== undefined) input["card.payee.allow"] = list(a.payee_allow, "payee_allow").toLowerCase();
+        if (!Object.keys(input).length) throw toolError("bad_input", "pass at least one of limit_tx, limit_daily, limit_monthly, mcc_allow, payee, payee_allow");
+        return { ...(await this.svc.updatePolicy(this.target(a), input, { direct: this.caller.kind === "admin", purpose: optStr(a.reason) })) };
+      }
       case "get_approval": {
         const { typed_data: _td, ...view } = await this.svc.approvalView(str(a.approval_id, "approval_id"), this.scope());
         return { ...view };
@@ -362,6 +400,7 @@ function policyToRecords(p: unknown): TextRecords {
   const list = (v: unknown) => (Array.isArray(v) ? v.map(String).join(",") : typeof v === "string" ? v : "");
   return {
     "card.limit.tx": String(o.limit_tx ?? ""),
+    "card.limit.daily": o.limit_daily ? String(o.limit_daily) : "",
     "card.limit.monthly": String(o.limit_monthly ?? ""),
     "card.currencies": list(o.currencies),
     "card.mcc.allow": list(o.mcc_allow),
@@ -373,6 +412,11 @@ function policyToRecords(p: unknown): TextRecords {
 
 function toolError(code: string, message: string): ServiceError {
   return new ServiceError(code, message);
+}
+
+function list(v: unknown, field: string): string {
+  if (!Array.isArray(v)) throw toolError("bad_input", `${field} must be an array`);
+  return v.map((x) => String(x).trim()).filter(Boolean).join(",");
 }
 
 function str(v: unknown, field: string): string {

@@ -11,6 +11,7 @@
 import { getAddress, isAddress, type Address, type Hex, type PublicClient } from "viem";
 import { normalize } from "viem/ens";
 import type { PendingApproval } from "./approvals.ts";
+import { describeChanges } from "./changes.ts";
 
 export type Decision = "approve" | "deny";
 
@@ -37,8 +38,42 @@ export const APPROVAL_TYPES = {
   ],
 } as const;
 
+/** A policy change gets its own type: the wallet shows each change, not an amount. */
+export const POLICY_TYPES = {
+  EIP712Domain: APPROVAL_TYPES.EIP712Domain,
+  PolicyChange: [
+    { name: "id", type: "string" },
+    { name: "decision", type: "string" },
+    { name: "card", type: "string" },
+    { name: "changes", type: "string" },
+    { name: "approver", type: "string" },
+    { name: "expires", type: "uint256" },
+  ],
+} as const;
+
+function policyTypedData(a: PendingApproval, decision: Decision, card: string) {
+  return {
+    domain: APPROVAL_DOMAIN,
+    types: POLICY_TYPES,
+    primaryType: "PolicyChange" as const,
+    message: {
+      id: a.id,
+      decision,
+      card,
+      changes: describeChanges(a.policy?.changes ?? []),
+      approver: a.approver,
+      expires: Math.floor(a.expiresAt / 1000),
+    },
+  };
+}
+
 /** What the approver signs. Amount is a decimal string so no signer rounds it. */
 export function approvalTypedData(a: PendingApproval, decision: Decision, card: string) {
+  if (a.kind === "policy") return policyTypedData(a, decision, card);
+  return paymentTypedData(a, decision, card);
+}
+
+function paymentTypedData(a: PendingApproval, decision: Decision, card: string) {
   const p = a.payment;
   return {
     domain: APPROVAL_DOMAIN,
@@ -89,7 +124,8 @@ export function ensApproverAuth(client: PublicClient): ApproverAuth {
     },
     async verify(address, td, signature) {
       const { EIP712Domain: _domain, ...types } = td.types;
-      return client.verifyTypedData({ address, domain: td.domain, types, primaryType: td.primaryType, message: { ...td.message, expires: BigInt(td.message.expires) }, signature });
+      // Either typed-data shape (Approval or PolicyChange); viem checks it against its own types.
+      return client.verifyTypedData({ address, domain: td.domain, types, primaryType: td.primaryType, message: { ...td.message, expires: BigInt(td.message.expires) }, signature } as any);
     },
   };
 }

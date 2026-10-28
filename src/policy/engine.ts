@@ -48,6 +48,7 @@ export function toAuthorizationControls(p: CardPolicy): AuthorizationControls {
       currency,
       limits: [
         { interval: "PER_TRANSACTION", amount: roundMajor(p.limitTx, currency) },
+        ...(p.limitDaily !== undefined ? [{ interval: "DAILY" as const, amount: roundMajor(p.limitDaily, currency) }] : []),
         { interval: "MONTHLY", amount: roundMajor(p.limitMonthly, currency) },
       ],
     },
@@ -104,8 +105,8 @@ export type PaymentCheck = { ok: true } | { ok: false; code: string; reason: str
 
 /**
  * x402card's own check before a payment reaches the card network. The issuer
- * enforces the same controls again at authorization; the monthly allowance is
- * left to the issuer, which knows what has already been spent.
+ * enforces the same controls again at authorization; what's left of the daily
+ * and monthly limits is up to the issuer, which knows what has been spent.
  */
 export function precheckPayment(p: CardPolicy, req: PaymentRequest): PaymentCheck {
   const currency = req.currency.toUpperCase();
@@ -122,6 +123,9 @@ export function precheckPayment(p: CardPolicy, req: PaymentRequest): PaymentChec
   }
   if (req.amount > p.limitTx) {
     return { ok: false, code: "LIMIT_EXCEEDED", reason: `${req.amount} > card.limit.tx (${p.limitTx}); use request_funding for larger amounts` };
+  }
+  if (p.limitDaily !== undefined && req.amount > p.limitDaily) {
+    return { ok: false, code: "LIMIT_EXCEEDED", reason: `${req.amount} > card.limit.daily (${p.limitDaily}); use update_policy to ask for a higher daily limit` };
   }
   return { ok: true };
 }

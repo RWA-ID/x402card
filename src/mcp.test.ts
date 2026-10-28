@@ -47,7 +47,7 @@ test("protocol: initialize, tools/list, auth", async () => {
   assert.equal(init.result.protocolVersion, "2025-06-18");
   assert.ok(init.result.capabilities.tools);
   const list = await call(ADMIN, "tools/list");
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "list_cards", "get_card", "pay", "sign_request", "request_funding", "get_approval", "freeze", "list_transactions"]);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "list_cards", "get_card", "pay", "sign_request", "request_funding", "update_policy", "get_approval", "freeze", "list_transactions"]);
   assert.equal((await call("wrong", "tools/list")).status, 401);
   assert.equal((await call(ADMIN, "nope")).error.code, -32601);
 });
@@ -58,7 +58,7 @@ test("approval card: a ui:// resource linked from pay, request_funding and get_a
   assert.ok(init.result.capabilities.resources);
   const tools = (await call(ADMIN, "tools/list")).result.tools;
   const linked = tools.filter((t: any) => t._meta?.ui?.resourceUri === "ui://xcard/approval.html").map((t: any) => t.name);
-  assert.deepEqual(linked, ["pay", "request_funding", "get_approval"]);
+  assert.deepEqual(linked, ["pay", "request_funding", "update_policy", "get_approval"]);
   assert.deepEqual((await call(ADMIN, "resources/list")).result.resources.map((r: any) => r.uri), ["ui://xcard/approval.html"]);
   const [res] = (await call(ADMIN, "resources/read", { uri: "ui://xcard/approval.html" })).result.contents;
   assert.equal(res.mimeType, "text/html;profile=mcp-app");
