@@ -61,7 +61,7 @@ test("approval card: a ui:// resource linked from pay, request_funding and get_a
   assert.deepEqual(linked, ["pay", "request_funding", "update_policy", "get_approval"]);
   assert.deepEqual((await call(ADMIN, "resources/list")).result.resources.map((r: any) => r.uri), ["ui://xcard/approval.html", "ui://xcard/issue.html", "ui://xcard/card.html"]);
   const carded = tools.filter((t: any) => t._meta?.ui?.resourceUri === "ui://xcard/card.html").map((t: any) => t.name);
-  assert.deepEqual(carded, ["list_cards", "get_card", "freeze", "list_transactions"]);
+  assert.deepEqual(carded, ["list_cards", "get_card", "sign_request", "freeze", "list_transactions"]);
   const [form] = (await call(ADMIN, "resources/read", { uri: "ui://xcard/issue.html" })).result.contents;
   assert.match(form.text, /"5734","Software"/, "the category list is filled in");
   const [res] = (await call(ADMIN, "resources/read", { uri: "ui://xcard/approval.html" })).result.contents;

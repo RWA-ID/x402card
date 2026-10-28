@@ -112,6 +112,7 @@ export const TOOLS = [
   },
   {
     name: "sign_request",
+    _meta: cardUi,
     title: "Sign a request to a merchant (Visa TAP)",
     description:
       "Get Visa Trusted Agent Protocol headers (RFC 9421 Signature-Input and Signature) for your next HTTP request to url, so the merchant can tell a trusted agent from a bot. purpose browse (tag agent-browser-auth) works for any site, e.g. product pages. purpose checkout (tag agent-payer-auth) works only after pay approved a payment with this merchant_url's origin in the last 15 minutes. Send both headers unchanged on a request to exactly this host and path; they expire in 8 minutes and each works once.",

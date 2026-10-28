@@ -1,5 +1,5 @@
-// The card view: an MCP App (ui:// resource) for get_card, list_cards, freeze
-// and list_transactions, drawn like the agent cards on the home page (dark
+// The card view: an MCP App (ui:// resource) for get_card, list_cards, freeze,
+// list_transactions and sign_request (a Visa TAP signature), drawn like the agent cards on the home page (dark
 // face, mark, chip, masked number, name) with the policy as tags and as the
 // ENS text records it is published as. Everything comes from the tool result;
 // the view makes no requests of its own.
@@ -108,6 +108,19 @@ const HTML = /* html */ `<!doctype html>
   .tx .p { font: 500 10.5px var(--mono); letter-spacing: 0.06em; text-align: right; }
   .ok { color: var(--success); } .no { color: var(--error); }
   .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+
+  /* Visa TAP signature */
+  .tap-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .tap-kind { font: 600 17px var(--sans); letter-spacing: -0.01em; }
+  .tap-sub { color: var(--muted); font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
+  .badge { font: 500 10.5px var(--mono); letter-spacing: 0.08em; padding: 4px 8px; border-radius: 6px; white-space: nowrap; border: 1px solid oklch(0.74 0.19 258 / 0.5); background: var(--accent-soft); color: var(--accent-tag); }
+  .badge.pay { border-color: oklch(0.8 0.16 155 / 0.5); background: oklch(0.8 0.16 155 / 0.1); color: var(--success); }
+  .hdr { margin-top: 10px; }
+  .hdr .k { font: 500 10.5px var(--mono); letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+  .hdr pre { margin: 0; padding: 9px 11px; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; font: 11px/1.5 var(--mono); color: var(--text-2); white-space: pre-wrap; word-break: break-all; max-height: 92px; overflow: auto; }
+  .ttl { font: 500 12px var(--mono); color: var(--text-2); }
+  .ttl.gone { color: var(--error); }
+  .foot { margin-top: 12px; color: var(--muted); font-size: 12px; }
   .err { color: var(--error); font-size: 13px; }
 </style>
 </head>
@@ -253,6 +266,37 @@ const HTML = /* html */ `<!doctype html>
       rows.length ? el("div", {}, ...rows) : el("div", { class: "empty", text: "No transactions yet." })));
   }
 
+  let ttlTimer;
+  function tap(sc) {
+    clearInterval(ttlTimer);
+    const pay = sc.tag === "agent-payer-auth";
+    let origin = sc.url;
+    try { origin = new URL(sc.url).host; } catch {}
+    const ttl = el("span", { class: "ttl" });
+    const exp = Date.parse(sc.expires_at);
+    const tick = () => {
+      const s = Math.max(0, Math.round((exp - Date.now()) / 1000));
+      ttl.textContent = s ? "valid " + Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") + " · one use" : "expired";
+      ttl.className = "ttl" + (s ? "" : " gone");
+      if (!s) clearInterval(ttlTimer);
+    };
+    tick(); if (exp) ttlTimer = setInterval(tick, 1000);
+    const h = sc.headers || {};
+    root.textContent = "";
+    root.append(el("div", { class: "panel" },
+      el("div", { class: "tap-top" },
+        el("div", { style: "min-width:0" },
+          el("div", { class: "tap-kind", text: pay ? "Checkout signature" : "Browsing signature" }),
+          el("div", { class: "tap-sub", text: "Visa Trusted Agent Protocol · " + origin })),
+        el("span", { class: "badge" + (pay ? " pay" : ""), text: sc.tag || "" })),
+      el("div", { class: "row", style: "margin-top:14px;gap:10px;align-items:center;justify-content:space-between" },
+        el("div", { class: "rec", style: "padding:0;border:0;gap:10px" }, el("span", { text: "key" }), el("span", { text: (sc.keyid || "").slice(0, 16) + "…" })),
+        ttl),
+      el("div", { class: "hdr" }, el("div", { class: "k", text: "Signature-Input" }), el("pre", { text: h["Signature-Input"] || "" })),
+      el("div", { class: "hdr" }, el("div", { class: "k", text: "Signature" }), el("pre", { text: h.Signature || "" })),
+      el("div", { class: "foot", text: (pay ? "Proves to the merchant that this agent is paying with an approved X Card. " : "Proves to the merchant that this is a known agent, not a bot. ") + "Ed25519 (RFC 9421); the merchant checks it against " + (sc.keys_url || "the published key") + "." })));
+  }
+
   function onResult(res) {
     const sc = res.structuredContent || {};
     if (res.isError || sc.error) {
@@ -263,6 +307,7 @@ const HTML = /* html */ `<!doctype html>
     if (Array.isArray(sc.cards)) return many(sc.cards);
     if (sc.card) return one(sc.card);
     if (Array.isArray(sc.transactions)) return txs(sc.transactions);
+    if (sc.headers && sc.tag) return tap(sc);
   }
 })();
 </script>
