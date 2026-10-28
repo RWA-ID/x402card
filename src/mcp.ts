@@ -7,6 +7,7 @@ import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 import { UI_MIME, approvalResource } from "./ui/approval.ts";
 import { issueResource } from "./ui/issue.ts";
+import { cardResource } from "./ui/card.ts";
 import type { PolicyInput } from "./policy/changes.ts";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -31,6 +32,9 @@ const nameProp = {
 /** The approval card (MCP Apps): shown in the chat for results that wait on card.approver. */
 export const APPROVAL_UI = "ui://xcard/approval.html";
 const approvalUi = { ui: { resourceUri: APPROVAL_UI }, "ui/resourceUri": APPROVAL_UI };
+/** The card view (MCP Apps): the card face, its policy and records, like the home page. */
+export const CARD_UI = "ui://xcard/card.html";
+const cardUi = { ui: { resourceUri: CARD_UI }, "ui/resourceUri": CARD_UI };
 /** The issue form (MCP Apps): the person sets the policy and submits. */
 export const ISSUE_UI = "ui://xcard/issue.html";
 const issueUi = { ui: { resourceUri: ISSUE_UI }, "ui/resourceUri": ISSUE_UI };
@@ -69,6 +73,7 @@ export const TOOLS = [
   },
   {
     name: "list_cards",
+    _meta: cardUi,
     title: "List my cards",
     description: "Every card this connection can act for: name, status, last 4 digits, limits, currencies, approver and pending approvals.",
     inputSchema: { type: "object", properties: {} },
@@ -76,6 +81,7 @@ export const TOOLS = [
   },
   {
     name: "get_card",
+    _meta: cardUi,
     title: "Get card",
     description: "Card status, policy records and pending approvals. Never returns the card number.",
     inputSchema: { type: "object", properties: { name: nameProp } },
@@ -168,6 +174,7 @@ export const TOOLS = [
   },
   {
     name: "freeze",
+    _meta: cardUi,
     title: "Freeze card",
     description: "Freeze the card immediately and set card.status=frozen in ENS. Agents may freeze their own card; only a human can unfreeze.",
     inputSchema: { type: "object", properties: { name: nameProp, reason: { type: "string" } } },
@@ -175,6 +182,7 @@ export const TOOLS = [
   },
   {
     name: "list_transactions",
+    _meta: cardUi,
     title: "List transactions",
     description: "Recent authorizations and clearings. A charge succeeded only when type is CLEARING; declines carry decline_reason (e.g. MERCHANT_CATEGORY_NOT_ALLOWED).",
     inputSchema: { type: "object", properties: { name: nameProp } },
@@ -256,11 +264,13 @@ export class McpServer {
             resources: [
               { uri: APPROVAL_UI, name: "approval", title: "X Card approval", mimeType: UI_MIME },
               { uri: ISSUE_UI, name: "issue", title: "Issue an X Card", mimeType: UI_MIME },
+              { uri: CARD_UI, name: "card", title: "X Card", mimeType: UI_MIME },
             ],
           });
         case "resources/read": {
           if (msg.params?.uri === APPROVAL_UI) return rpc(msg.id, { contents: [approvalResource(this.origin)] });
           if (msg.params?.uri === ISSUE_UI) return rpc(msg.id, { contents: [issueResource()] });
+          if (msg.params?.uri === CARD_UI) return rpc(msg.id, { contents: [cardResource()] });
           return rpc(msg.id, undefined, { code: -32002, message: "resource not found" });
         }
         case "tools/call":
@@ -307,8 +317,11 @@ export class McpServer {
             status: c.status,
             ...(c.last4 ? { last4: c.last4 } : {}),
             limit_tx: c.records["card.limit.tx"],
+            ...(c.records["card.limit.daily"] ? { limit_daily: c.records["card.limit.daily"] } : {}),
             limit_monthly: c.records["card.limit.monthly"],
             currencies: c.records["card.currencies"],
+            mcc_allow: c.records["card.mcc.allow"],
+            payee: c.records["card.payee"],
             approver: c.records["card.approver"],
             pending_approvals: c.pending_approvals.length,
           })),
