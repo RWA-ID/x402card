@@ -214,6 +214,7 @@ test("namespaces: the same label under x402card.eth and xcard.eth are separate c
   for (const name of ["ai.xcard.eth", "demo.x402card.eth", "shop.xcard.eth"]) {
     assert.match((await tool(ADMIN, "issue_card", { name, policy })).content[0].text, /reserved/);
   }
+  assert.equal((await tool(ADMIN, "issue_card", { name: "demo.xcard.eth", policy })).structuredContent.card.name, "demo.xcard.eth");
   assert.match((await tool(ADMIN, "issue_card", { name: "scout.other.eth", policy })).content[0].text, /bad_name/);
 });
 

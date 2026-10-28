@@ -4,7 +4,7 @@ import { AirwallexClient, AirwallexError } from "./airwallex/client.ts";
 import { AirwallexSandboxSimulator } from "./airwallex/simulator.ts";
 import * as issuing from "./airwallex/issuing.ts";
 import type { AuthorizationControls, IssuingTransaction } from "./airwallex/issuing.ts";
-import { LEGACY_PARENT, PARENT_NAMES, RESERVED_LABELS, cardKeyOf, nameOfKey } from "./ens/gateway.ts";
+import { LEGACY_PARENT, PARENT_NAMES, RESERVED_KEYS, RESERVED_LABELS, cardKeyOf, nameOfKey } from "./ens/gateway.ts";
 import { DEFAULT_CONFIG, type EngineConfig, decideFunding, evaluateActivity, precheckPayment, roundMajor, toAuthorizationControls } from "./policy/engine.ts";
 import { newPendingApproval, signApproval, verifyApproval, type HeldPayment, type PendingApproval } from "./policy/approvals.ts";
 import { approvalTypedData, isSignableApprover, type ApprovalTypedData, type ApproverAuth } from "./policy/approver.ts";
@@ -210,7 +210,7 @@ export class CardService {
 
   async issueCard(name: string, records: TextRecords): Promise<CardView> {
     const label = normalizeLabel(name);
-    if (RESERVED_LABELS.has(labelOfKey(label))) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
+    if (RESERVED_LABELS.has(labelOfKey(label)) || RESERVED_KEYS.has(label)) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
     if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
 
     const policy = parseRecords({ "card.status": "active", ...records });

@@ -344,8 +344,10 @@
   // The namespace is picked here; the Worker gets the full name.
   const NS_KEY = "xcard.ns";
   const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-  const RESERVED = new Set(["demo", "ai", "www", "app", "api", "gateway"]);
-  const MCP_URL = API + "/mcp";
+  // Same as the Worker (ens/gateway.ts): demo is only reserved under x402card.eth, its hosted site.
+  const RESERVED = new Set(["ai", "www", "app", "api", "gateway", "shop"]);
+  const isReserved = (v, ns) => RESERVED.has(v) || (v === "demo" && ns === "x402card.eth");
+  const MCP_URL = API.replace("://api.", "://mcp.") + "/mcp";
   // Same shape the Worker checks for card.payee.allow (policy/records.ts).
   const PAYEE_NAME_RE = /^[^\s.,]+(\.[^\s.,]+)*\.eth$/;
 
@@ -380,7 +382,7 @@
     };
     const problem = (v) =>
       !v ? "" : !LABEL_RE.test(v) ? "Use lowercase letters, digits and hyphens (not at the start or end)."
-        : RESERVED.has(v) ? `${v} is reserved for the hosted sites.` : "";
+        : isReserved(v, ns) ? `${v}.${ns} is reserved.` : "";
     function refresh() {
       const v = label();
       const p = problem(v);
