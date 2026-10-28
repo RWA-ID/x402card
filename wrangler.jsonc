@@ -11,8 +11,18 @@
     // Base address for DELEGATE cardholders; +<label>-<ts> is appended.
     "CARDHOLDER_EMAIL": "agents@x402card.dev",
     // Returned to agents with escalated funding requests.
-    "APPROVAL_URL": "https://ai.xcard.eth.limo/approve.html#{id}"
+    "APPROVAL_URL": "https://x-card.dev/approve.html#{id}",
+    // shop.xcard.eth (the demo merchant) is verified on these too, not only on the gateway's origin.
+    "DEMO_MERCHANT_ORIGINS": "https://api.x-card.dev https://mcp.x-card.dev"
   },
+  // workers.dev must stay on: it's the CCIP gateway URL on-chain and in existing MCP client configs.
+  // With "routes" set and this left out, wrangler turns workers.dev OFF.
+  "workers_dev": true,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "mcp.x-card.dev", "custom_domain": true },
+    { "pattern": "api.x-card.dev", "custom_domain": true }
+  ],
   // Anomaly check across all cards.
   "triggers": { "crons": ["* * * * *"] },
   "kv_namespaces": [

@@ -23,7 +23,7 @@ const opt = (f: string, d?: string) => {
   const i = argv.indexOf(f);
   return i >= 0 && argv[i + 1] ? argv[i + 1] : d;
 };
-const API = (opt("--api", "https://x402card.dmpay.workers.dev") as string).replace(/\/$/, "");
+const API = (opt("--api", "https://api.x-card.dev") as string).replace(/\/$/, "");
 const LABEL = (opt("--name", "researcher") as string).toLowerCase();
 const NAME = `${LABEL}.x402card.eth`;
 const PACE = Number(opt("--pace", "1400"));
@@ -268,4 +268,4 @@ effect(after.decision === "approved" ? red("approved (unexpected)") : ice(`✕ $
 note("the issuer card is INACTIVE too, so a charge that bypassed x402card would also be declined");
 note("only a human can unfreeze: Unfreeze on the approval page, or POST /api/cards/:name/unfreeze");
 
-console.log(`\n${green("✓")} ${bold("demo complete")} ${dim(`· feed: ${LOCAL ? "http://127.0.0.1:8765/#feed" : "https://ai.xcard.eth.limo/#feed"}`)}\n`);
+console.log(`\n${green("✓")} ${bold("demo complete")} ${dim(`· feed: ${LOCAL ? "http://127.0.0.1:8765/#feed" : "https://x-card.dev/#feed"}`)}\n`);

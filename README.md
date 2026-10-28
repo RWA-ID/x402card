@@ -15,12 +15,13 @@ The policy is enforced twice: by X Card before anything is sent, and by the card
 
 | | |
 |---|---|
-| Demo site | https://ai.xcard.eth.limo (also https://demo.x402card.eth.limo) |
+| Site | https://x-card.dev (IPFS mirror: https://ai.xcard.eth.limo, https://demo.x402card.eth.limo) |
 | ENS resolver (mainnet, verified) | [`0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0`](https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code) |
 | CCIP-Read gateway | `https://x402card.dmpay.workers.dev/gateway/{sender}/{data}.json` |
-| MCP endpoint | `https://x402card.dmpay.workers.dev/mcp` |
-| Visa TAP public key | [`https://x402card.dmpay.workers.dev/keys`](https://x402card.dmpay.workers.dev/keys) (keyid `BCwc4nK__9sgdXJKh-4w_AV76G4lsBXaSDWvk5orgoY`) |
-| Demo merchant (verifies TAP) | `https://x402card.dmpay.workers.dev/demo-merchant/*` |
+| MCP endpoint | `https://mcp.x-card.dev/mcp` |
+| REST API | `https://api.x-card.dev` (also `https://x402card.dmpay.workers.dev`, which keeps working) |
+| Visa TAP public key | [`https://api.x-card.dev/keys`](https://api.x-card.dev/keys) (keyid `BCwc4nK__9sgdXJKh-4w_AV76G4lsBXaSDWvk5orgoY`) |
+| Demo merchant (verifies TAP) | `https://api.x-card.dev/demo-merchant/*` (`shop.xcard.eth` lists this origin and the workers.dev one) |
 | Card rails | [Airwallex Issuing](https://www.airwallex.com/docs/issuing) (sandbox) |
 
 > **Sandbox, no real money.** ENS resolution and the payee check are real (Ethereum mainnet), and so are the TAP signatures. Cards, charges and balances run on the Airwallex sandbox.
@@ -243,7 +244,7 @@ The payee gate tells the agent who the merchant is. [TAP](https://developer.visa
   },
   "keyid": "BCwc4nK__9sgdXJKh-4w_AV76G4lsBXaSDWvk5orgoY",
   "expires_at": "2026-10-27T04:16:03.000Z",
-  "keys_url": "https://x402card.dmpay.workers.dev/keys"
+  "keys_url": "https://api.x-card.dev/keys"
 }
 ```
 
@@ -261,7 +262,7 @@ A frozen card signs nothing (`frozen`), and a deployment without a key returns `
 1. Read the `sig2` member of `Signature-Input`. No `agent-browser-auth` / `agent-payer-auth` tag means it isn't a TAP agent; handle it as you do today.
 2. Require `created`, `expires`, `keyid` (or `keyId`), `alg`, `nonce` and `tag`, covering `("@authority" "@path")`.
 3. `created` must be in the past, `expires` in the future, at most 8 minutes apart.
-4. Fetch the key: `GET https://x402card.dmpay.workers.dev/keys?keyID=<keyid>` (cache it).
+4. Fetch the key: `GET https://api.x-card.dev/keys?keyID=<keyid>` (cache it).
 5. Rebuild the signature base and verify Ed25519:
    ```
    "@authority": api.modelhub.example
@@ -274,7 +275,7 @@ A frozen card signs nothing (`frozen`), and a deployment without a key returns `
 [`src/tap/verify.ts`](src/tap/verify.ts) implements these steps (with the nonce claimed only after the signature verifies, so a forged request can't burn a real agent's nonce). The Worker's `/demo-merchant/*` runs it:
 
 ```sh
-curl -s https://x402card.dmpay.workers.dev/demo-merchant/checkout \
+curl -s https://api.x-card.dev/demo-merchant/checkout \
   -H 'Signature-Input: sig2=(…)' -H 'Signature: sig2=:…:'
 # {"merchant":"demo","page":"/checkout","trusted_agent":true,"tag":"agent-payer-auth",
 #  "keyid":"BCwc…","message":"Trusted agent at checkout: express checkout offered."}
@@ -388,7 +389,7 @@ Amounts are major units (`300` = $300), rounded to the currency's decimals. A ch
 
 The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol versions `2025-06-18`, `2025-03-26`, `2024-11-05`) and takes a bearer token: an OAuth access token from signing in with your wallet, or one of the static tokens.
 
-- **OAuth, for Claude.ai, ChatGPT and other apps that add a connector by URL.** Add `https://x402card.dmpay.workers.dev/mcp` as a custom connector. The app finds the sign-in on its own (RFC 9728 metadata on the `401`, then dynamic client registration or a client ID metadata document, PKCE). You sign in with your wallet (Sign-In with Ethereum) and pick what to connect:
+- **OAuth, for Claude.ai, ChatGPT and other apps that add a connector by URL.** Add `https://mcp.x-card.dev/mcp` as a custom connector. The app finds the sign-in on its own (RFC 9728 metadata on the `401`, then dynamic client registration or a client ID metadata document, PKCE). You sign in with your wallet (Sign-In with Ethereum) and pick what to connect:
   - **a card whose `card.approver` resolves to your wallet.** The app acts as that card's agent, with the same tools and limits as its agent token.
   - **every card**, if your wallet is listed in the Worker's `OPERATORS`. Same as the admin token.
 
@@ -399,7 +400,7 @@ The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol ve
 ### Claude Code
 
 ```sh
-claude mcp add --transport http xcard https://x402card.dmpay.workers.dev/mcp \
+claude mcp add --transport http xcard https://mcp.x-card.dev/mcp \
   --header "Authorization: Bearer x4c_your_agent_token"
 ```
 
@@ -410,7 +411,7 @@ claude mcp add --transport http xcard https://x402card.dmpay.workers.dev/mcp \
   "mcpServers": {
     "xcard": {
       "type": "http",
-      "url": "https://x402card.dmpay.workers.dev/mcp",
+      "url": "https://mcp.x-card.dev/mcp",
       "headers": { "Authorization": "Bearer x4c_your_agent_token" }
     }
   }
@@ -418,12 +419,12 @@ claude mcp add --transport http xcard https://x402card.dmpay.workers.dev/mcp \
 ```
 
 For clients that only speak stdio, bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
-`npx mcp-remote https://x402card.dmpay.workers.dev/mcp --header "Authorization: Bearer x4c_…"`
+`npx mcp-remote https://mcp.x-card.dev/mcp --header "Authorization: Bearer x4c_…"`
 
 ### Raw JSON-RPC
 
 ```sh
-curl -s https://x402card.dmpay.workers.dev/mcp \
+curl -s https://mcp.x-card.dev/mcp \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"request_funding","arguments":{"amount":300,"currency":"USD","purpose":"dataset license"}}}'
 ```
@@ -474,7 +475,7 @@ w3.ens.get_text("researcher.x402card.eth", "card.status")  # ccip_read_enabled d
 **Plain HTTP** (no chain access; same data, unsigned)
 
 ```sh
-curl https://x402card.dmpay.workers.dev/public/cards/researcher.x402card.eth
+curl https://api.x-card.dev/public/cards/researcher.x402card.eth
 ```
 
 **Use it as a pre-flight check.** A merchant, marketplace or another agent can refuse to start work for `card.status != active`, or quote within `card.limit.tx`, before any payment is attempted.
@@ -500,7 +501,7 @@ Public, unauthenticated:
 | `GET` | `/keys`, `/keys/:keyid` | Visa TAP public key (see [Keys](#keys)) |
 | `GET` | `/demo-merchant/*` | A merchant that verifies TAP headers, for demos and integration tests |
 
-**Approval page:** [`ai.xcard.eth.limo/approve.html`](https://ai.xcard.eth.limo/approve.html) is a static UI over these endpoints. It shows pending requests (funding with an allowance preview; held payments with the checkout URL, payee name and its check, and an "Approve & pay" button), Approve/Deny, the fleet with Unfreeze, and decision history. Escalated `request_funding` and held `pay` results include an `approval_url` that deep-links to the request, so the agent can hand it to its human, who signs it with their wallet without signing in (see [Approving with a wallet](#approving-with-a-wallet)). The admin token is kept in the tab's session storage only. Add `?api=http://127.0.0.1:8787` to point the page at a local Worker.
+**Approval page:** [`x-card.dev/approve.html`](https://x-card.dev/approve.html) is a static UI over these endpoints. It shows pending requests (funding with an allowance preview; held payments with the checkout URL, payee name and its check, and an "Approve & pay" button), Approve/Deny, the fleet with Unfreeze, and decision history. Escalated `request_funding` and held `pay` results include an `approval_url` that deep-links to the request, so the agent can hand it to its human, who signs it with their wallet without signing in (see [Approving with a wallet](#approving-with-a-wallet)). The admin token is kept in the tab's session storage only. Add `?api=http://127.0.0.1:8787` to point the page at a local Worker.
 
 | Method | Path | Purpose |
 |---|---|---|

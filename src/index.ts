@@ -48,6 +48,8 @@ export interface Env {
   OAUTH_KV?: KVNamespace;
   /** Operator wallets, comma-separated: signing in with one grants every card over OAuth. */
   OPERATORS?: string;
+  /** More origins for shop.xcard.eth's org.x402.origins, space-separated (custom domains of this Worker). */
+  DEMO_MERCHANT_ORIGINS?: string;
 }
 
 // One fake per isolate, so local dev keeps state between requests.
@@ -110,7 +112,8 @@ export default {
     if (path.startsWith("/gateway")) {
       return gatewayResponse(req, path, store, env.GATEWAY_SIGNER_KEY as Hex, {
         parentAddr: env.PARENT_ADDR as Address | undefined,
-        selfOrigin: url.origin,
+        // The gateway is reached on the URL set on-chain, so list the custom domains too.
+        selfOrigin: [...new Set([url.origin, ...(env.DEMO_MERCHANT_ORIGINS ?? "").split(/\s+/).filter(Boolean)])].join(" "),
       });
     }
 

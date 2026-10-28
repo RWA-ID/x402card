@@ -4,7 +4,7 @@
 (() => {
   "use strict";
 
-  const API = "https://x402card.dmpay.workers.dev";
+  const API = "https://api.x-card.dev";
   const ROOT = "xcard.eth";
   const ROOTS = [ROOT, "x402card.eth"];
   const $ = (s, el = document) => el.querySelector(s);

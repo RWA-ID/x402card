@@ -4,7 +4,7 @@
 (() => {
   "use strict";
 
-  const API = new URLSearchParams(location.search).get("api") || "https://x402card.dmpay.workers.dev";
+  const API = new URLSearchParams(location.search).get("api") || "https://api.x-card.dev";
   const TOKEN_KEY = "x402card.admin";
   // Approvals carry the card key: a bare label for x402card.eth, the full name for xcard.eth.
   const fullName = (key) => (key.includes(".") ? key : key + ".x402card.eth");

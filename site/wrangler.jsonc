@@ -1,0 +1,12 @@
+{
+  // The X Card site on x-card.dev: site/www as static assets, no Worker code.
+  // Deploy: `npx wrangler deploy -c site/wrangler.jsonc`. The IPFS copy (scripts/pin-site.mjs) is the same files.
+  "name": "x-card-site",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./www", "html_handling": "auto-trailing-slash", "not_found_handling": "404-page" },
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "x-card.dev", "custom_domain": true },
+    { "pattern": "www.x-card.dev", "custom_domain": true }
+  ]
+}

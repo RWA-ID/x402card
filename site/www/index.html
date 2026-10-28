@@ -9,13 +9,13 @@
 <meta property="og:title" content="X Card: names, policy and trust for AI agent cards">
 <meta property="og:description" content="Give an agent a name, not a card number. Public spend policy in ENS, verified payees, Visa TAP signatures at checkout, and a human for the exceptions.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://ai.xcard.eth.limo/">
-<meta property="og:image" content="https://ai.xcard.eth.limo/og.png">
+<meta property="og:url" content="https://x-card.dev/">
+<meta property="og:image" content="https://x-card.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="X Card: give an agent a name, not a card number. Verified payees, Visa TAP at checkout, policy in ENS.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://ai.xcard.eth.limo/og.png">
+<meta name="twitter:image" content="https://x-card.dev/og.png">
 <link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="brand/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="brand/app-icon-180.png">
@@ -375,7 +375,7 @@
 <pre class="code"><span class="c">// MCP client config</span>
 { <span class="s">"xcard"</span>: {
     <span class="s">"type"</span>: <span class="s">"http"</span>,
-    <span class="s">"url"</span>: <span class="s">"https://x402card.dmpay.workers.dev/mcp"</span>,
+    <span class="s">"url"</span>: <span class="s">"https://mcp.x-card.dev/mcp"</span>,
     <span class="s">"headers"</span>: { <span class="s">"Authorization"</span>: <span class="s">"Bearer x4c_…"</span> } } }</pre>
       </div>
       <div class="hood-card">
@@ -388,7 +388,7 @@
         <div class="k">Agent identity · Visa TAP</div>
         <h3>Signed requests, published key</h3>
         <p>Ed25519 RFC 9421 signatures tagged agent-browser-auth or agent-payer-auth, 8 minutes, one use. The key is served as a JWK set and in the shape Visa’s reference merchant fetches; every signature is tested against a port of that verifier.</p>
-        <a class="addr" href="https://x402card.dmpay.workers.dev/keys" target="_blank" rel="noopener">x402card.dmpay.workers.dev/keys →</a>
+        <a class="addr" href="https://api.x-card.dev/keys" target="_blank" rel="noopener">api.x-card.dev/keys →</a>
       </div>
       <div class="hood-card">
         <div class="k">Governance · Safe 2-of-3</div>
