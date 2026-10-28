@@ -229,7 +229,7 @@ export class CardService {
   async issueTestCard(address: string, records: TextRecords): Promise<CardView> {
     if (!isAddress(address)) throw new ServiceError("bad_input", "not a wallet address");
     const me = getAddress(address);
-    const refs = await Promise.all((await this.store.listLabels()).map((l) => this.store.getCard(l)));
+    const refs = await Promise.all((await this.store.walletIndex(me)).map((l) => this.store.getCard(l)));
     if (refs.filter((r) => r?.issuedBy === me).length >= TEST_CARDS.perWallet) {
       throw new ServiceError("limit_reached", `a wallet can issue itself ${TEST_CARDS.perWallet} test cards`);
     }
@@ -280,6 +280,8 @@ export class CardService {
     });
     await this.store.putRecords(label, toRecords(policy));
     await this.store.clearRequestId("issue", label);
+    // An approver that's a plain address gets the card in its wallet index right away.
+    if (isAddress(policy.approver)) await this.store.addToWalletIndex(policy.approver, label);
     await this.store.addEvent(label, { at: Date.now(), kind: "issued", detail: "card issued" });
     return this.getCard(label);
   }

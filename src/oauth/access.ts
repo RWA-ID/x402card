@@ -54,7 +54,10 @@ export async function walletCards(address: Address, deps: Pick<AccessDeps, "stor
   const out: { label: string; approver: string }[] = [];
   // One ENS read per distinct approver, however many cards share it.
   const resolved = new Map<string, Promise<Address | null>>();
-  for (const label of await deps.store.listLabels()) {
+  // The index catches cards issued in the last minute that list() doesn't show yet;
+  // the approver check below still decides.
+  const labels = [...new Set([...(await deps.store.walletIndex(address)), ...(await deps.store.listLabels())])];
+  for (const label of labels) {
     const approver = (await deps.store.getRecords(label))?.["card.approver"]?.trim();
     if (!approver || !isSignableApprover(approver)) continue;
     if (!resolved.has(approver)) resolved.set(approver, deps.resolve(approver).catch(() => null));

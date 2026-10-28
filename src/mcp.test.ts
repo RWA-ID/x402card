@@ -422,6 +422,8 @@ test("issue_card from a wallet sign-in: the form first, then the next testN.xcar
   assert.equal(r.card.records["card.limit.daily"], "150");
   assert.ok(!("agent_token" in r), "the connection is the access; no token to leak into the chat");
   assert.equal((await store.getCard("test2.xcard.eth"))!.issuedBy, wallet);
+  // Indexed under the wallet at once: list() can lag new keys on Cloudflare.
+  assert.deepEqual(await store.walletIndex(wallet), ["test2.xcard.eth"]);
 
   assert.match((await owner("issue_card", { submit: true, policy: { limit_tx: 60, limit_monthly: 400 } })).content[0].text, /over_test_caps/);
   assert.match((await owner("issue_card", { submit: true, policy: { limit_tx: 10, limit_daily: 900, limit_monthly: 400 } })).content[0].text, /over_test_caps|bad_policy/);

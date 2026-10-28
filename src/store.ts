@@ -49,6 +49,18 @@ export class Store implements RecordSource {
   getCard(label: string) { return this.kv.get<CardRef>(`card:${label}`, "json"); }
   putCard(label: string, c: CardRef) { return this.kv.put(`card:${label}`, JSON.stringify(c)); }
 
+  /**
+   * Cards issued to a wallet, by key (lowercase address). A direct get, so a
+   * card shows up at once; list() can lag new keys by about a minute.
+   */
+  async walletIndex(address: string): Promise<string[]> {
+    return (await this.kv.get<string[]>(`wallet:${address.toLowerCase()}`, "json")) ?? [];
+  }
+  async addToWalletIndex(address: string, label: string): Promise<void> {
+    const have = await this.walletIndex(address);
+    if (!have.includes(label)) await this.kv.put(`wallet:${address.toLowerCase()}`, JSON.stringify([...have, label]));
+  }
+
   /** Next self-serve test number (test1, test2, …). Not atomic; the caller skips names already taken. */
   async nextTestNumber(): Promise<number> {
     const n = Number((await this.kv.get("seq:test")) ?? "0") + 1;
