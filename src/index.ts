@@ -203,7 +203,7 @@ export default {
           headers: { "Content-Type": "application/json", "WWW-Authenticate": "Bearer", ...CORS },
         });
       }
-      const res = await new McpServer(service(env, store, url.origin), store, caller).handle(req);
+      const res = await new McpServer(service(env, store, url.origin), store, caller, url.origin).handle(req);
       for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
       return res;
     }

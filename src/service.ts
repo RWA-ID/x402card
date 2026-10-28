@@ -324,7 +324,7 @@ export class CardService {
    * One approval for its approver. scope = the agent's own card: an agent
    * token sees only its card's approvals.
    */
-  async approvalView(approvalId: string, scope?: string): Promise<ApprovalView> {
+  async approvalView(approvalId: string, scope?: string | string[]): Promise<ApprovalView> {
     const a = await this.approvalFor(approvalId, scope);
     const { sig: _sig, ...approval } = a;
     const card = fullName(a.name);
@@ -376,10 +376,10 @@ export class CardService {
     return decided;
   }
 
-  private async approvalFor(approvalId: string, scope?: string) {
+  private async approvalFor(approvalId: string, scope?: string | string[]) {
     const a = await this.store.getApproval(approvalId);
     // Another card's approval looks the same as a missing one to an agent.
-    if (!a || (scope !== undefined && a.name !== scope)) throw new ServiceError("not_found", "no such approval");
+    if (!a || (scope !== undefined && !(Array.isArray(scope) ? scope.includes(a.name) : a.name === scope))) throw new ServiceError("not_found", "no such approval");
     if (a.status === "pending" && Date.now() > a.expiresAt) {
       const expired = { ...a, status: "expired" as const };
       await this.store.putApproval(expired);

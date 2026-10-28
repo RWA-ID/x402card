@@ -36,21 +36,35 @@ async function setup() {
 test("accessOptions: cards whose approver is this wallet; operators get the fleet", async () => {
   const { deps } = await setup();
   const a = await accessOptions(alice.address, deps);
-  assert.deepEqual(a.map((o) => o.id).sort(), ["card:researcher", "card:scout.xcard.eth"]);
-  assert.deepEqual(a.map((o) => o.name).sort(), ["researcher.x402card.eth", "scout.xcard.eth"]);
+  assert.equal(a[0].id, "wallet", "all my cards comes first");
+  assert.equal(a[0].name, "All my cards (2)");
+  assert.deepEqual(a.slice(1).map((o) => o.id).sort(), ["card:researcher", "card:scout.xcard.eth"]);
+  assert.deepEqual(a.slice(1).map((o) => o.name).sort(), ["researcher.x402card.eth", "scout.xcard.eth"]);
   assert.deepEqual((await accessOptions(op.address, deps)).map((o) => o.id), ["fleet"]);
   assert.deepEqual(await accessOptions(privateKeyToAccount(generatePrivateKey()).address, deps), []);
 });
 
 test("callerFor: a grant ends when the card's approver changes", async () => {
-  const { store } = await setup();
+  const { store, deps } = await setup();
   const p: GrantProps = { address: alice.address, grant: { kind: "card", card: "scout.xcard.eth" }, approver: "alice.eth" };
-  assert.deepEqual(await callerFor(p, store), { kind: "agent", label: "scout.xcard.eth" });
-  assert.deepEqual(await callerFor({ address: op.address, grant: { kind: "fleet" } }, store), { kind: "admin" });
+  assert.deepEqual(await callerFor(p, deps), { kind: "agent", label: "scout.xcard.eth" });
+  assert.deepEqual(await callerFor({ address: op.address, grant: { kind: "fleet" } }, deps), { kind: "admin" });
   const r = (await store.getRecords("scout.xcard.eth"))!;
   await store.putRecords("scout.xcard.eth", { ...r, "card.approver": "mallory.eth" });
-  assert.equal(await callerFor(p, store), null);
-  assert.equal(await callerFor({ ...p, grant: { kind: "card", card: "gone.xcard.eth" } }, store), null);
+  assert.equal(await callerFor(p, deps), null);
+  assert.equal(await callerFor({ ...p, grant: { kind: "card", card: "gone.xcard.eth" } }, deps), null);
+});
+
+test("callerFor: a wallet grant follows the cards the wallet approves now", async () => {
+  const { store, deps } = await setup();
+  const p: GrantProps = { address: alice.address, grant: { kind: "wallet" } };
+  const labels = async () => ((await callerFor(p, deps)) as { labels: string[] }).labels.sort();
+  assert.deepEqual(await labels(), ["researcher", "scout.xcard.eth"]);
+  // Issued later: joins. Reassigned: leaves.
+  await store.putCard("new.xcard.eth", { cardholderId: "h", cardId: "n", createdAt: 0 });
+  await store.putRecords("new.xcard.eth", { ...(await store.getRecords("scout.xcard.eth"))!, "card.approver": alice.address });
+  await store.putRecords("scout.xcard.eth", { ...(await store.getRecords("scout.xcard.eth"))!, "card.approver": "bob.eth" });
+  assert.deepEqual(await labels(), ["new.xcard.eth", "researcher"]);
 });
 
 test("verifySiwe: right wallet, this domain, this nonce, not expired", async () => {
@@ -106,7 +120,7 @@ test("/authorize: sign in with the wallet, pick a card, the client gets that car
   assert.match(message, /^mcp\.x-card\.dev wants you to sign in with your Ethereum account:/);
   assert.equal((await json("/authorize/verify", { handle: "h1", signature: await bob.signMessage({ message }) }, cookie)).status, 403);
   const v = (await (await json("/authorize/verify", { handle: "h1", signature: await alice.signMessage({ message }) }, cookie)).json()) as any;
-  assert.deepEqual(v.options.map((o: any) => o.id).sort(), ["card:researcher", "card:scout.xcard.eth"]);
+  assert.deepEqual(v.options.map((o: any) => o.id).sort(), ["card:researcher", "card:scout.xcard.eth", "wallet"]);
   // A signed-in session can't be re-pointed at another wallet.
   assert.equal((await json("/authorize/siwe", { handle: "h1", address: bob.address }, cookie)).status, 400);
 

@@ -2,6 +2,8 @@
 //
 // The person signs in with their wallet (Sign-In with Ethereum). What that
 // wallet may grant follows the card policy already on ENS:
+//   wallet = every card whose card.approver resolves to this wallet, read again
+//            on each request, so cards issued later join and reassigned ones leave.
 //   card  = a card whose card.approver resolves to this wallet. The client acts
 //           as that card's agent, exactly like its agent token.
 //   fleet = an operator wallet (OPERATORS): every card, plus issue_card, like
@@ -15,7 +17,7 @@ import { isSignableApprover } from "../policy/approver.ts";
 import { fullName } from "../service.ts";
 import type { Store } from "../store.ts";
 
-export type Grant = { kind: "fleet" } | { kind: "card"; card: string };
+export type Grant = { kind: "fleet" } | { kind: "wallet" } | { kind: "card"; card: string };
 
 /** What a token carries (encrypted by the OAuth library) and what the MCP handler turns into a Caller. */
 export interface GrantProps {
@@ -44,15 +46,12 @@ export interface AccessDeps {
   operators: string[];
 }
 
-export const grantId = (g: Grant) => (g.kind === "fleet" ? "fleet" : `card:${g.card}`);
+export const grantId = (g: Grant) => (g.kind === "card" ? `card:${g.card}` : g.kind);
 
-/** Every grant this wallet may make, operator first. */
-export async function accessOptions(address: Address, deps: AccessDeps): Promise<AccessOption[]> {
+/** The cards whose card.approver resolves to this wallet, with that approver. */
+export async function walletCards(address: Address, deps: Pick<AccessDeps, "store" | "resolve">): Promise<{ label: string; approver: string }[]> {
   const me = address.toLowerCase();
-  const out: AccessOption[] = [];
-  if (deps.operators.some((o) => o.trim().toLowerCase() === me)) {
-    out.push({ id: "fleet", grant: { kind: "fleet" }, name: "Every card (operator)", detail: "Issue cards and act for any card, like the admin token." });
-  }
+  const out: { label: string; approver: string }[] = [];
   // One ENS read per distinct approver, however many cards share it.
   const resolved = new Map<string, Promise<Address | null>>();
   for (const label of await deps.store.listLabels()) {
@@ -60,7 +59,28 @@ export async function accessOptions(address: Address, deps: AccessDeps): Promise
     if (!approver || !isSignableApprover(approver)) continue;
     if (!resolved.has(approver)) resolved.set(approver, deps.resolve(approver).catch(() => null));
     const addr = await resolved.get(approver)!;
-    if (addr?.toLowerCase() !== me) continue;
+    if (addr?.toLowerCase() === me) out.push({ label, approver });
+  }
+  return out;
+}
+
+/** Every grant this wallet may make: operator, then all its cards, then each card. */
+export async function accessOptions(address: Address, deps: AccessDeps): Promise<AccessOption[]> {
+  const me = address.toLowerCase();
+  const out: AccessOption[] = [];
+  if (deps.operators.some((o) => o.trim().toLowerCase() === me)) {
+    out.push({ id: "fleet", grant: { kind: "fleet" }, name: "Every card (operator)", detail: "Issue cards and act for any card, like the admin token." });
+  }
+  const cards = await walletCards(address, deps);
+  if (cards.length) {
+    out.push({
+      id: "wallet",
+      grant: { kind: "wallet" },
+      name: `All my cards (${cards.length})`,
+      detail: "Every card you approve, including cards issued to you later.",
+    });
+  }
+  for (const { label, approver } of cards) {
     const grant: Grant = { kind: "card", card: label };
     out.push({ id: grantId(grant), grant, name: fullName(label), detail: `You're its approver (${approver}).`, approver });
   }
@@ -70,10 +90,12 @@ export async function accessOptions(address: Address, deps: AccessDeps): Promise
 /**
  * The MCP caller for a token's props, checked against the card as it is now:
  * a card that's gone, or whose approver changed, no longer honours the grant.
+ * A wallet grant with no cards left still connects, and simply has no cards.
  */
-export async function callerFor(p: GrantProps, store: Store): Promise<Caller | null> {
+export async function callerFor(p: GrantProps, deps: Pick<AccessDeps, "store" | "resolve">): Promise<Caller | null> {
   if (p.grant.kind === "fleet") return { kind: "admin" };
-  const records = await store.getRecords(p.grant.card);
+  if (p.grant.kind === "wallet") return { kind: "owner", labels: (await walletCards(p.address, deps)).map((c) => c.label) };
+  const records = await deps.store.getRecords(p.grant.card);
   if (!records || (records["card.approver"] ?? "").trim() !== p.approver) return null;
   return { kind: "agent", label: p.grant.card };
 }

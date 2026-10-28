@@ -47,9 +47,25 @@ test("protocol: initialize, tools/list, auth", async () => {
   assert.equal(init.result.protocolVersion, "2025-06-18");
   assert.ok(init.result.capabilities.tools);
   const list = await call(ADMIN, "tools/list");
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "get_card", "pay", "sign_request", "request_funding", "get_approval", "freeze", "list_transactions"]);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "list_cards", "get_card", "pay", "sign_request", "request_funding", "get_approval", "freeze", "list_transactions"]);
   assert.equal((await call("wrong", "tools/list")).status, 401);
   assert.equal((await call(ADMIN, "nope")).error.code, -32601);
+});
+
+test("approval card: a ui:// resource linked from pay, request_funding and get_approval", async () => {
+  const { call } = setup();
+  const init = await call(ADMIN, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } });
+  assert.ok(init.result.capabilities.resources);
+  const tools = (await call(ADMIN, "tools/list")).result.tools;
+  const linked = tools.filter((t: any) => t._meta?.ui?.resourceUri === "ui://xcard/approval.html").map((t: any) => t.name);
+  assert.deepEqual(linked, ["pay", "request_funding", "get_approval"]);
+  assert.deepEqual((await call(ADMIN, "resources/list")).result.resources.map((r: any) => r.uri), ["ui://xcard/approval.html"]);
+  const [res] = (await call(ADMIN, "resources/read", { uri: "ui://xcard/approval.html" })).result.contents;
+  assert.equal(res.mimeType, "text/html;profile=mcp-app");
+  assert.match(res.text, /eth_signTypedData_v4/);
+  assert.ok(!res.text.includes("__API__"), "the API origin is filled in");
+  assert.ok(res._meta.ui.csp.connectDomains.length === 1);
+  assert.equal((await call(ADMIN, "resources/read", { uri: "ui://other" })).error.code, -32002);
 });
 
 test("demo script through MCP", async () => {
@@ -357,4 +373,26 @@ test("TAP: sign_request needs a configured key", async () => {
   const issued = await tool(ADMIN, "issue_card", { name: "nokey", policy: { limit_tx: 5, limit_monthly: 50, currencies: ["USD"], approver: "a.eth" } });
   const r = await tool(issued.structuredContent.agent_token, "sign_request", { url: "https://x.example/", purpose: "browse" });
   assert.match(r.content[0].text, /tap_not_configured/);
+});
+
+test("owner (wallet sign-in): list_cards, a name picks among several, others' cards are off limits", async () => {
+  const { tool, svc, store } = setup();
+  const policy = { limit_tx: 50, limit_monthly: 500, currencies: ["USD"], approver: "alice.eth" };
+  for (const name of ["a.xcard.eth", "b.xcard.eth", "c.xcard.eth"]) await tool(ADMIN, "issue_card", { name, policy });
+  const owner = (labels: string[]) => async (name: string, args: Record<string, unknown> = {}) => {
+    const req = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+    return ((await (await new McpServer(svc, store, { kind: "owner", labels }).handle(req)).json()) as any).result;
+  };
+  const two = owner(["a.xcard.eth", "b.xcard.eth"]);
+  assert.deepEqual((await two("list_cards")).structuredContent.cards.map((c: any) => c.name), ["a.xcard.eth", "b.xcard.eth"]);
+  assert.match((await two("get_card")).content[0].text, /name is required: one of a\.xcard\.eth, b\.xcard\.eth/);
+  assert.equal((await two("get_card", { name: "b.xcard.eth" })).structuredContent.card.name, "b.xcard.eth");
+  assert.match((await two("get_card", { name: "c.xcard.eth" })).content[0].text, /forbidden/);
+  // One card: the name may be left out.
+  assert.equal((await owner(["c.xcard.eth"])("get_card")).structuredContent.card.name, "c.xcard.eth");
+  // Approvals: only those of the owner's cards.
+  const asked = (await tool(ADMIN, "request_funding", { name: "c.xcard.eth", amount: 300, currency: "USD" })).structuredContent;
+  assert.equal(asked.decision, "pending_human");
+  assert.match((await two("get_approval", { approval_id: asked.approval_id })).content[0].text, /not_found/);
+  assert.equal((await owner(["c.xcard.eth"])("get_approval", { approval_id: asked.approval_id })).structuredContent.approval.status, "pending");
 });

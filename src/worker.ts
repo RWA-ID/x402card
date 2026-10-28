@@ -53,14 +53,15 @@ function rolesFor(origin: string) {
       async fetch(req, env, ctx) {
         const store = new Store(env.KV);
         const p = ctx.props;
-        const caller = "static" in p ? p.static : await callerFor(p, store);
+        const caller = "static" in p ? p.static : await callerFor(p, accessDeps(env, store));
         if (!caller) {
           return Response.json({ error: "this connection's card changed its approver or is gone; connect again" }, {
             status: 401,
             headers: { "WWW-Authenticate": 'Bearer error="invalid_token"' },
           });
         }
-        return new McpServer(service(env, store, new URL(req.url).origin), store, caller).handle(req);
+        const origin = new URL(req.url).origin;
+        return new McpServer(service(env, store, origin), store, caller, origin).handle(req);
       },
     },
   });

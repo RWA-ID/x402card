@@ -5,11 +5,13 @@
 import { CardService, ServiceError, describeError, fullName, normalizeLabel } from "./service.ts";
 import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
+import { UI_MIME, approvalResource } from "./ui/approval.ts";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "x402card", title: "X Card", version: "0.4.0" };
 
-export type Caller = { kind: "admin" } | { kind: "agent"; label: string };
+// owner = a wallet signed in over OAuth: the cards whose card.approver is that wallet.
+export type Caller = { kind: "admin" } | { kind: "agent"; label: string } | { kind: "owner"; labels: string[] };
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -20,8 +22,13 @@ interface JsonRpcRequest {
 
 const nameProp = {
   type: "string",
-  description: "Card name, e.g. researcher.xcard.eth or researcher.x402card.eth (a bare label means x402card.eth). Agent tokens may omit it.",
+  description:
+    "Card name, e.g. researcher.xcard.eth or researcher.x402card.eth (a bare label means x402card.eth). May be omitted when the connection has a single card; list_cards shows them.",
 };
+
+/** The approval card (MCP Apps): shown in the chat for results that wait on card.approver. */
+export const APPROVAL_UI = "ui://xcard/approval.html";
+const approvalUi = { ui: { resourceUri: APPROVAL_UI }, "ui/resourceUri": APPROVAL_UI };
 
 export const TOOLS = [
   {
@@ -55,6 +62,13 @@ export const TOOLS = [
     },
   },
   {
+    name: "list_cards",
+    title: "List my cards",
+    description: "Every card this connection can act for: name, status, last 4 digits, limits, currencies, approver and pending approvals.",
+    inputSchema: { type: "object", properties: {} },
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: "get_card",
     title: "Get card",
     description: "Card status, policy records and pending approvals. Never returns the card number.",
@@ -63,6 +77,7 @@ export const TOOLS = [
   },
   {
     name: "pay",
+    _meta: approvalUi,
     title: "Pay a merchant",
     description:
       "Pay a merchant with this card. x402card checks the ENS policy first (status, card.limit.tx, card.currencies, card.mcc.allow) and refuses before anything reaches the card network (decision: blocked); the issuer then enforces the same limits plus the monthly allowance (decision: declined). Pass merchant_url and payee_name so x402card can check the checkout really belongs to that ENS name: a name that doesn't list the URL's origin is blocked (PAYEE_MISMATCH), and depending on card.payee an unverified payee is blocked or held for card.approver (decision: pending_human; the charge happens when they approve). You never handle the card number. Pass the same request_id when retrying so a payment can't go through twice.",
@@ -101,6 +116,7 @@ export const TOOLS = [
   },
   {
     name: "request_funding",
+    _meta: approvalUi,
     title: "Request funding",
     description:
       "Ask to raise the card's monthly allowance. Within card.limit.tx and above the wallet reserve it is approved at once; otherwise it waits for the human in card.approver. The approval is bound to this exact name, amount and currency.",
@@ -117,6 +133,7 @@ export const TOOLS = [
   },
   {
     name: "get_approval",
+    _meta: approvalUi,
     title: "Get an approval",
     description:
       "Status of a request waiting for card.approver (from pay or request_funding with decision pending_human): pending, approved, denied or expired, with what it would do. The approver decides it themselves on approval_url by signing with their own wallet; you can't approve it, so give them the link and check back here.",
@@ -164,11 +181,14 @@ export class McpServer {
   private svc: CardService;
   private store: Store;
   private caller: Caller;
+  /** This server's origin: the approval card calls the API here. */
+  private origin: string;
 
-  constructor(svc: CardService, store: Store, caller: Caller) {
+  constructor(svc: CardService, store: Store, caller: Caller, origin = "https://api.x-card.dev") {
     this.svc = svc;
     this.store = store;
     this.caller = caller;
+    this.origin = origin;
   }
 
   async handle(req: Request): Promise<Response> {
@@ -193,10 +213,10 @@ export class McpServer {
           const asked = String(msg.params?.protocolVersion ?? "");
           return rpc(msg.id, {
             protocolVersion: SUPPORTED_VERSIONS.includes(asked) ? asked : SUPPORTED_VERSIONS[0],
-            capabilities: { tools: { listChanged: false } },
+            capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
             serverInfo: SERVER_INFO,
             instructions:
-              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. A pending_human result is decided by card.approver, who signs it with their own wallet on approval_url: give them the link and check get_approval. You never see card numbers.",
+              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. A pending_human result is decided by card.approver, who signs it with their own wallet: apps that show the approval card let them approve right in the chat; otherwise give them approval_url. Then check get_approval. list_cards shows every card this connection can use. You never see card numbers.",
           });
         }
         case "ping":
@@ -205,6 +225,12 @@ export class McpServer {
           return rpc(msg.id, {
             tools: this.caller.kind === "admin" ? TOOLS : TOOLS.filter((t) => t.name !== "issue_card"),
           });
+        case "resources/list":
+          return rpc(msg.id, { resources: [{ uri: APPROVAL_UI, name: "approval", title: "X Card approval", mimeType: UI_MIME }] });
+        case "resources/read": {
+          if (msg.params?.uri !== APPROVAL_UI) return rpc(msg.id, undefined, { code: -32002, message: "resource not found" });
+          return rpc(msg.id, { contents: [approvalResource(this.origin)] });
+        }
         case "tools/call":
           return rpc(msg.id, await this.callTool(String(msg.params?.name ?? ""), (msg.params?.arguments ?? {}) as Record<string, unknown>));
         default:
@@ -232,6 +258,22 @@ export class McpServer {
       case "issue_card": {
         if (this.caller.kind !== "admin") throw toolError("forbidden", "issue_card needs the admin token");
         return { ...(await issueWithToken(this.svc, this.store, str(a.name, "name"), a.policy)) };
+      }
+      case "list_cards": {
+        const labels = this.caller.kind === "admin" ? await this.store.listLabels() : this.caller.kind === "agent" ? [this.caller.label] : this.caller.labels;
+        const cards = await Promise.all(labels.map((l) => this.svc.getCard(l)));
+        return {
+          cards: cards.map((c) => ({
+            name: c.name,
+            status: c.status,
+            ...(c.last4 ? { last4: c.last4 } : {}),
+            limit_tx: c.records["card.limit.tx"],
+            limit_monthly: c.records["card.limit.monthly"],
+            currencies: c.records["card.currencies"],
+            approver: c.records["card.approver"],
+            pending_approvals: c.pending_approvals.length,
+          })),
+        };
       }
       case "get_card":
         return { card: await this.svc.getCard(this.target(a)) };
@@ -266,7 +308,7 @@ export class McpServer {
         return { ...view };
       }
       case "freeze": {
-        const by = this.caller.kind === "admin" ? "admin" : "agent";
+        const by = this.caller.kind === "admin" ? "admin" : this.caller.kind === "owner" ? "owner" : "agent";
         return { card: await this.svc.freeze(this.target(a), optStr(a.reason) || `frozen by ${by}`) };
       }
       case "list_transactions":
@@ -276,9 +318,9 @@ export class McpServer {
     }
   }
 
-  /** An agent token only reaches its own card's approvals. */
-  private scope(): string | undefined {
-    return this.caller.kind === "agent" ? this.caller.label : undefined;
+  /** An agent token only reaches its own card's approvals; an owner, their cards'. */
+  private scope(): string | string[] | undefined {
+    return this.caller.kind === "agent" ? this.caller.label : this.caller.kind === "owner" ? this.caller.labels : undefined;
   }
 
   /** Agents act on their own card only. */
@@ -287,6 +329,15 @@ export class McpServer {
     if (this.caller.kind === "agent") {
       if (given && given !== this.caller.label) throw toolError("forbidden", `this token is for ${fullName(this.caller.label)}`);
       return this.caller.label;
+    }
+    if (this.caller.kind === "owner") {
+      const mine = this.caller.labels;
+      if (given) {
+        if (!mine.includes(given)) throw toolError("forbidden", `${fullName(given)} isn't one of this connection's cards (${mine.map(fullName).join(", ") || "none"})`);
+        return given;
+      }
+      if (mine.length === 1) return mine[0];
+      throw toolError("bad_name", mine.length ? `name is required: one of ${mine.map(fullName).join(", ")}` : "this wallet approves no cards yet");
     }
     if (!given) throw toolError("bad_name", "name is required");
     return given;

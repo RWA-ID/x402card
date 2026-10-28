@@ -464,17 +464,27 @@
 
     function showIssued(name, tok) {
       const cmd = `claude mcp add --transport http ${name.split(".")[0]} ${MCP_URL} \\\n  --header "Authorization: Bearer ${tok}"`;
+      // Masked until asked: the page is often on a shared screen or a recording.
+      const masked = (t) => t.replaceAll(tok, tok.slice(0, 4) + "•".repeat(12));
       const copy = (text) => el("button", { type: "button", class: "btn-xs", text: "Copy", onclick: async (e) => {
-        try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; } catch { e.target.textContent = "Select and copy"; }
+        try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; } catch { e.target.textContent = "Reveal to copy"; }
       } });
+      const secret = (tag, cls, text) => {
+        const n = el(tag, { class: cls, text: masked(text) });
+        let shown = false;
+        const reveal = el("button", { type: "button", class: "btn-xs", text: "Reveal", onclick: () => {
+          shown = !shown; n.textContent = shown ? text : masked(text); reveal.textContent = shown ? "Hide" : "Reveal";
+        } });
+        return [n, reveal];
+      };
       out.textContent = "";
       out.append(
         el("div", { class: "issued-head" }, pill("active"), el("span", { class: "mono issued-name", text: name }),
           el("button", { type: "button", class: "issued-x", "aria-label": "Dismiss", text: "×", onclick: () => { out.hidden = true; out.textContent = ""; } })),
-        el("p", { text: "Agent token: shown once. It only works for this card. Store it now." }),
-        el("div", { class: "issued-line" }, el("code", { class: "mono", text: tok }), copy(tok)),
+        el("p", { text: "Agent token: shown once, for Claude Code, Cursor and scripts (Claude.ai and ChatGPT sign in with your wallet instead). It only works for this card. Store it now." }),
+        el("div", { class: "issued-line" }, ...secret("code", "mono", tok), copy(tok)),
         el("p", { text: "Give the agent this card over MCP:" }),
-        el("div", { class: "issued-line" }, el("pre", { class: "code", text: cmd }), copy(cmd.replace("\\\n  ", ""))));
+        el("div", { class: "issued-line" }, ...secret("pre", "code", cmd), copy(cmd.replace("\\\n  ", ""))));
       out.hidden = false;
       out.scrollIntoView({ block: "nearest", behavior: R ? "auto" : "smooth" });
     }
@@ -605,7 +615,7 @@
           whyRow.lastChild.textContent = (pay ? "PAID" : `APPROVED · allowance now ${money(lim, cur)}`) + ` · signed by ${who(a.approver)}`;
         }
         picker.hidden = true;
-        note.textContent = "Done. The agent sees the decision the next time it checks.";
+        note.textContent = "Done. You can close this tab and go back to the chat.";
         if (token) { lastSig = ""; load(); }
       } catch (e) {
         btn.textContent = label;
