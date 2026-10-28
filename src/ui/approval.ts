@@ -272,11 +272,20 @@ const HTML = /* html */ `<!doctype html>
         err.textContent = e && e.code === 4001 ? "You cancelled in your wallet. Nothing was decided." : (e && e.message) || String(e);
       }
     };
-    const decideInTab = async () => {
-      const url = v.approval_url || API + "/approve.html#" + a.id;
-      try { await request("ui/open-link", { url }); } catch { window.open(url, "_blank", "noopener"); }
+    // No wallet in this frame (extensions don't inject into the chat's sandbox):
+    // a small popup on the approval page, which asks the wallet right away and
+    // closes itself; a tab if the host blocks popups.
+    const decideInTab = async (approve) => {
+      const u = new URL(v.approval_url || API + "/approve.html#" + a.id);
+      if (u.pathname.endsWith(".html")) u.pathname = u.pathname.slice(0, -5);
+      u.searchParams.set("popup", approve ? "approve" : "deny");
+      const w = 460, h = 640;
+      const left = Math.max(0, Math.round((screen.availWidth - w) / 2)), top = Math.max(0, Math.round((screen.availHeight - h) / 3));
+      let win = null;
+      try { win = window.open(u.href, "xcard-approve", "popup=yes,width=" + w + ",height=" + h + ",left=" + left + ",top=" + top); } catch {}
+      if (!win) { try { await request("ui/open-link", { url: u.href }); } catch { window.open(u.href, "_blank"); } }
       approveBtn.textContent = "Waiting for your signature…"; approveBtn.disabled = denyBtn.disabled = true;
-      note.textContent = "Sign in the tab that opened. This card updates when you're done.";
+      note.textContent = win ? "Sign in your wallet. This card updates when you're done." : "Sign in the tab that opened. This card updates when you're done.";
       startPoll();
     };
     const startPoll = () => {
@@ -292,13 +301,13 @@ const HTML = /* html */ `<!doctype html>
       }, 3000);
     };
 
-    approveBtn.addEventListener("click", () => (inFrame() ? decideHere(true) : decideInTab()));
-    denyBtn.addEventListener("click", () => (inFrame() ? decideHere(false) : decideInTab()));
+    approveBtn.addEventListener("click", () => (inFrame() ? decideHere(true) : decideInTab(true)));
+    denyBtn.addEventListener("click", () => (inFrame() ? decideHere(false) : decideInTab(false)));
     // Extensions announce late; settle the note once they've had a moment.
     setTimeout(() => {
       note.textContent = inFrame()
         ? "Your wallet asks you to sign: free, nothing is sent on-chain. Sign with " + who(a.approver) + "."
-        : "Opens your wallet's signing page in a new tab: free, nothing is sent on-chain. Sign with " + who(a.approver) + ".";
+        : "Your wallet opens in a small window to sign: free, nothing is sent on-chain. Sign with " + who(a.approver) + ".";
     }, 400);
     root.append(el("div", { class: "actions" }, approveBtn, denyBtn), note, err);
     // Decided elsewhere (the approvals page, another chat)? Follow it.

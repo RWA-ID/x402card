@@ -463,3 +463,8 @@ td.name { color: var(--text); }
   .issued-line { flex-direction: column; }
   .issued-line > code, .issued-line > pre.code { align-self: stretch; }
 }
+
+/* approve.html?popup=approve|deny: a small window from the chat's approval card. */
+html.popup .nav, html.popup footer, html.popup main > :not([data-one]) { display: none !important; }
+html.popup main.page { padding-top: 20px; padding-bottom: 20px; }
+html.popup [data-one] .block-head .count { display: none; }

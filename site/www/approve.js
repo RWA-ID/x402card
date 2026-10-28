@@ -6,6 +6,8 @@
 
   const API = new URLSearchParams(location.search).get("api") || "https://api.x-card.dev";
   const TOKEN_KEY = "x402card.admin";
+  // Opened by the chat's approval card: decide this one request with the wallet, then close.
+  const POPUP = new URLSearchParams(location.search).get("popup");
   // Approvals carry the card key: a bare label for x402card.eth, the full name for xcard.eth.
   const fullName = (key) => (key.includes(".") ? key : key + ".x402card.eth");
   const POLL_MS = 5000;
@@ -654,7 +656,9 @@
           whyRow.lastChild.textContent = (pay ? "PAID" : pol ? "APPLIED" : `APPROVED · allowance now ${money(lim, cur)}`) + ` · signed by ${who(a.approver)}`;
         }
         picker.hidden = true;
-        note.textContent = "Done. You can close this tab and go back to the chat.";
+        note.textContent = POPUP ? "Done. Closing…" : "Done. You can close this tab and go back to the chat.";
+        // A tab the host opened can't be closed by script; say so if it's still here.
+        if (POPUP) setTimeout(() => { window.close(); setTimeout(() => { note.textContent = "Done. You can close this tab and go back to the chat."; }, 400); }, 1200);
         if (token) { lastSig = ""; load(); }
       } catch (e) {
         btn.textContent = label;
@@ -667,11 +671,18 @@
     // Wallets that announce late (extensions) still make the picker.
     window.addEventListener("eip6963:announceProvider", () => setTimeout(drawPicker));
     card.append(el("div", { class: "req-actions" }, approveBtn, denyBtn, picker), note, err);
+    // From the chat: the click there was the decision, so go straight to the wallet
+    // (after extensions have announced themselves). The wallet prompt is the confirmation.
+    if ((POPUP === "approve" || POPUP === "deny") && !autoStarted) {
+      autoStarted = true;
+      setTimeout(() => decide(POPUP === "approve"), 400);
+    }
     return card;
   }
 
+  let autoStarted = false;
   window.addEventListener("hashchange", () => { focusId = location.hash.slice(1); lastSig = ""; load(); loadOne(); });
   loadOne();
   initIssue();
-  token ? start() : showSignin();
+  if (!POPUP) token ? start() : showSignin();
 })();
