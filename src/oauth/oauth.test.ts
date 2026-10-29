@@ -183,7 +183,8 @@ test("/authorize: sign in by email code; the grant covers that email's cards", a
   const done = await go("/authorize", { method: "POST", body: new URLSearchParams({ handle: "h1", decision: "approve", choice: "wallet" }) }, cookie);
   assert.equal(done.status, 302);
   assert.deepEqual(completed[0].props, { email: "maria@acme.com", grant: { kind: "wallet" } });
-  assert.equal(completed[0].userId, "email:maria@acme.com");
+  // The OAuth library splits tokens on ":" and rejects a userId containing one; and no raw email in tokens.
+  assert.match(completed[0].userId, /^email-[0-9a-f]{40}$/);
   const caller = await callerFor(completed[0].props, deps);
   assert.deepEqual(caller, { kind: "owner", email: "maria@acme.com", labels: ["maria.xcard.eth", "dev-ana.xcard.eth"] });
 });

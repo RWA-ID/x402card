@@ -169,7 +169,8 @@ async function decide(req: Request, api: ConsentApi, deps: AccessDeps): Promise<
   const props: GrantProps = { ...who, grant: choice.grant, ...(choice.approver ? { approver: choice.approver } : {}) };
   const { redirectTo } = await api.completeAuthorization({
     request: approved.request,
-    userId: "email" in who ? `email:${who.email}` : who.address.toLowerCase(),
+    // The library builds tokens as userId:grantId:secret, so no ":" here; and a hash, so the email isn't in tokens.
+    userId: "email" in who ? `email-${(await sha256Hex(`xcard-user|${who.email}`)).slice(0, 40)}` : who.address.toLowerCase(),
     metadata: { grant: choice.id, client: s.client },
     scope: [SCOPE],
     props,
