@@ -118,6 +118,9 @@ test("a demo account issues a named card, approves it by email, and the public s
   assert.equal(view.body.email_approver, true);
   assert.equal(view.body.signable, false);
   assert.equal(view.body.approval.approver, "m•••@acme.com");
+  // Over the card's own connection, get_approval shows the approver in full.
+  const ga = await call("POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_approval", arguments: { approval_id: res.approval_id } } }, issued.body.agent_token);
+  assert.equal(ga.body.result.structuredContent.approval.approver, "maria@acme.com");
 
   // Someone else signed in can't decide it; the approver can.
   const bob = await signIn("bob@acme.com");

@@ -388,6 +388,8 @@ export class McpServer {
       }
       case "get_approval": {
         const { typed_data: _td, ...view } = await this.svc.approvalView(str(a.approval_id, "approval_id"), this.scope());
+        // The public link masks an email approver; this connection already reaches the card, so it sees it in full.
+        if (view.email_approver) view.approval.approver = (await this.store.getApproval(view.approval.id))?.approver ?? view.approval.approver;
         return { ...view };
       }
       case "freeze": {

@@ -88,8 +88,11 @@ const HTML = /* html */ `<!doctype html>
   .records-head { display: flex; justify-content: space-between; padding: 8px 12px; background: var(--surface); color: var(--muted); font-size: 10.5px; letter-spacing: 0.08em; border-bottom: 1px solid var(--line); }
   .rec { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; border-top: 1px solid var(--line); }
   .rec:first-of-type { border-top: 0; }
-  .rec span:first-child { color: var(--muted); }
-  .rec span:last-child { color: var(--text); text-align: right; overflow-wrap: anywhere; }
+  .rec > span:first-child { color: var(--muted); }
+  .rec > span:last-child { color: var(--text); text-align: right; overflow-wrap: anywhere; }
+  /* An email breaks only at its "@", never mid-word. */
+  .rec > span.addr { overflow-wrap: normal; }
+  .addr span { white-space: nowrap; }
 
   /* several cards */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
@@ -229,16 +232,22 @@ const HTML = /* html */ `<!doctype html>
     const c = norm(raw);
     const r = c.records || {};
     const keys = ["card.limit.tx", "card.limit.daily", "card.limit.monthly", "card.currencies", "card.mcc.allow", "card.payee", "card.payee.allow", "card.approver", "card.status"];
-    const shown = (k, v) => (k === "card.approver" ? short(v) : v ? v : k === "card.limit.daily" ? "none" : k.endsWith("allow") ? "any" : "—");
+    const shown = (k, v) => (v ? v : k === "card.limit.daily" ? "none" : k.endsWith("allow") ? "any" : "—");
+    // The approver's value: an email as two unbreakable halves, so a narrow column wraps at the "@".
+    const approverEl = (v) => {
+      const x = short(v || "");
+      const at = x.indexOf("@");
+      return at > 0 ? el("span", { class: "addr", title: x }, el("span", { text: x.slice(0, at) }), document.createElement("wbr"), el("span", { text: x.slice(at) })) : el("span", { text: x });
+    };
     root.textContent = "";
     root.append(el("div", { class: "panel" },
       el("div", { class: "row" }, face(c, true),
         el("div", { class: "side" }, status(c), tags(c),
-          el("div", { class: "rec", style: "padding:0;border:0" }, el("span", { text: "approver" }), el("span", { text: short(c.approver) })),
+          el("div", { class: "rec", style: "padding:0;border:0" }, el("span", { text: "approver" }), approverEl(c.approver)),
           c.pending ? el("div", { class: "pending", text: c.pending + " request" + (c.pending > 1 ? "s" : "") + " waiting for approval" }) : null)),
       el("div", { class: "records" },
         el("div", { class: "records-head" }, el("span", { text: c.name }), el("span", { text: "ENS TEXT" })),
-        ...keys.filter((k) => k in r).map((k) => el("div", { class: "rec" }, el("span", { text: k }), el("span", { text: shown(k, r[k]) }))))));
+        ...keys.filter((k) => k in r).map((k) => el("div", { class: "rec" }, el("span", { text: k }), k === "card.approver" ? approverEl(r[k]) : el("span", { text: shown(k, r[k]) }))))));
   }
 
   function many(list) {

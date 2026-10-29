@@ -155,7 +155,9 @@ const HTML = /* html */ `<!doctype html>
   function onResult(res) {
     const sc = res.structuredContent || {};
     const id = sc.approval_id || (sc.approval && sc.approval.id);
-    if (id) return loadApproval(id);
+    // The tool result reached this signed-in connection, so it carries the approver in full;
+    // the public approval link (fetched below) masks an email approver.
+    if (id) return loadApproval(id, sc.approver || (sc.approval && sc.approval.approver));
     if (res.isError || sc.error) return summary("no", "Blocked", (sc.error && sc.error.message) || "The request was refused.");
     if (sc.decision === "approved") return summary("ok", "Approved", sc.reason || "Within the card's policy.");
     if (sc.decision === "applied") return summary("ok", "Policy updated", sc.changes || "");
@@ -169,12 +171,15 @@ const HTML = /* html */ `<!doctype html>
     root.append(el("div", { class: "top" }, brand(), el("span", { class: "pill " + tone, text: label })), el("div", { class: "what", text }));
   }
 
-  async function loadApproval(id) {
+  let fullApprover = "";
+  async function loadApproval(id, approver) {
     root.hidden = false;
+    if (approver && approver.includes("@") && !approver.includes("•")) fullApprover = approver;
     try {
       const r = await fetch(API + "/approvals/" + encodeURIComponent(id));
       const v = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error((v.error && v.error.message) || "HTTP " + r.status);
+      if (v.email_approver && fullApprover) v.approval.approver = fullApprover;
       render(v);
     } catch (e) {
       summary("no", "Unavailable", "Couldn't load the request: " + e.message);
