@@ -35,14 +35,14 @@ async function setup() {
 
 test("accessOptions: cards whose approver is this wallet; operators get the fleet", async () => {
   const { deps } = await setup();
-  const a = await accessOptions(alice.address, deps);
+  const a = await accessOptions({ address: alice.address }, deps);
   assert.equal(a[0].id, "wallet", "all my cards comes first");
   assert.equal(a[0].name, "All my cards (2)");
   assert.deepEqual(a.slice(1).map((o) => o.id).sort(), ["card:researcher", "card:scout.xcard.eth"]);
   assert.deepEqual(a.slice(1).map((o) => o.name).sort(), ["researcher.x402card.eth", "scout.xcard.eth"]);
-  assert.deepEqual((await accessOptions(op.address, deps)).map((o) => o.id), ["fleet", "wallet"]);
+  assert.deepEqual((await accessOptions({ address: op.address }, deps)).map((o) => o.id), ["fleet", "wallet"]);
   // A wallet with no cards can still connect, to issue itself a test card.
-  const fresh = await accessOptions(privateKeyToAccount(generatePrivateKey()).address, deps);
+  const fresh = await accessOptions({ address: privateKeyToAccount(generatePrivateKey()).address }, deps);
   assert.deepEqual(fresh.map((o) => [o.id, o.name]), [["wallet", "My cards (none yet)"]]);
 });
 
@@ -145,4 +145,45 @@ test("/authorize: deny needs no sign-in and goes back to the client", async () =
   assert.equal(r.status, 302);
   assert.match(r.headers.get("Location")!, /error=access_denied/);
   assert.equal(completed.length, 0);
+});
+
+test("/authorize: sign in by email code; the grant covers that email's cards", async () => {
+  const { store, deps } = await setup();
+  // The email's cards: one it approves, one it issued for a colleague to approve, one it has nothing to do with.
+  const rec = (approver: string) => ({ "card.limit.tx": "50", "card.limit.monthly": "500", "card.currencies": "USD", "card.status": "active", "card.approver": approver });
+  for (const [label, approver, issuedBy] of [["maria.xcard.eth", "maria@acme.com", "maria@acme.com"], ["dev-ana.xcard.eth", "lead@acme.com", "maria@acme.com"], ["other.xcard.eth", "x@y.io", "x@y.io"]]) {
+    await store.putCard(label, { cardholderId: "h", cardId: label, createdAt: 0, issuedBy });
+    await store.putRecords(label, rec(approver));
+    await store.addToAccountIndex(issuedBy, label);
+  }
+  const codes: string[] = [];
+  deps.email = {
+    start: async () => ({ sent: true }),
+    check: async (email, code) => { codes.push(String(code)); if (code !== "123456") throw new Error("wrong"); return String(email); },
+  };
+  const { api, completed } = fakeApi();
+  const go = (path: string, init: RequestInit = {}, cookie?: string) =>
+    handleAuthorize(new Request(ORIGIN + path, { ...init, headers: { ...(init.headers as object), ...(cookie ? { Cookie: cookie } : {}) } }), api, errors, deps);
+  const json = (path: string, body: object, cookie?: string) => go(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, cookie);
+
+  const pageRes = await go("/authorize?client_id=claude");
+  assert.match(await pageRes.text(), /Continue with email/);
+  const cookie = pageRes.headers.get("Set-Cookie")!.split(";")[0];
+  assert.equal((await json("/authorize/email/verify", { handle: "h1", code: "123456" }, cookie)).status, 400, "a code before asking for one");
+  assert.equal((await json("/authorize/email/start", { handle: "h1", email: "Maria@Acme.com" })).status, 400, "needs this browser's cookie");
+  assert.equal((await json("/authorize/email/start", { handle: "h1", email: "Maria@Acme.com" }, cookie)).status, 200);
+  const v = (await (await json("/authorize/email/verify", { handle: "h1", code: "123456" }, cookie)).json()) as any;
+  assert.equal(v.email, "maria@acme.com");
+  // All my cards, plus a single-card grant only for the card she approves.
+  assert.deepEqual(v.options.map((o: any) => o.id), ["wallet", "card:maria.xcard.eth"]);
+  assert.equal(v.options[0].name, "All my cards (2)");
+  // Signed in: no switching to a wallet on this page.
+  assert.equal((await json("/authorize/siwe", { handle: "h1", address: alice.address }, cookie)).status, 400);
+
+  const done = await go("/authorize", { method: "POST", body: new URLSearchParams({ handle: "h1", decision: "approve", choice: "wallet" }) }, cookie);
+  assert.equal(done.status, 302);
+  assert.deepEqual(completed[0].props, { email: "maria@acme.com", grant: { kind: "wallet" } });
+  assert.equal(completed[0].userId, "email:maria@acme.com");
+  const caller = await callerFor(completed[0].props, deps);
+  assert.deepEqual(caller, { kind: "owner", email: "maria@acme.com", labels: ["maria.xcard.eth", "dev-ana.xcard.eth"] });
 });

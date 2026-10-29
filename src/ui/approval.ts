@@ -220,25 +220,26 @@ const HTML = /* html */ `<!doctype html>
       approveBtn.disabled = denyBtn.disabled = true;
       if (ok) { approveBtn.textContent = pay ? "Paid ✓" : pol ? "Applied ✓" : "Approved ✓"; approveBtn.classList.add("done"); denyBtn.hidden = true; }
       else { denyBtn.textContent = "Denied"; approveBtn.hidden = true; }
-      note.textContent = "Signed by " + who(a.approver) + ". Nothing was sent on-chain.";
+      note.textContent = v.email_approver ? "Confirmed by " + who(a.approver) + " by email." : "Signed by " + who(a.approver) + ". Nothing was sent on-chain.";
       const what = pay ? "the " + money(a.amount, cur) + " payment to " + (p.merchant || "the merchant")
         : pol ? "the policy change (" + changes.map((c) => c.key + " " + show(c.key, c.from) + " → " + show(c.key, c.to)).join("; ") + ")"
         : "the " + money(a.amount, cur) + " funding request";
-      tell("I " + (ok ? "approved " : "denied ") + what + " for " + v.card + " with my wallet (approval " + a.id + ").");
+      tell("I " + (ok ? "approved " : "denied ") + what + " for " + v.card + (v.email_approver ? " by email" : " with my wallet") + " (approval " + a.id + ").");
     };
 
     if (!live) {
       if (a.status !== "pending") { note.textContent = "Decided by " + (a.decidedBy || who(a.approver)) + "."; root.append(note); }
       return;
     }
-    if (!v.signable || !v.typed_data) {
+    if (!v.email_approver && (!v.signable || !v.typed_data)) {
       note.textContent = "This card's approver can't sign with a wallet, so the operator decides it.";
       root.append(note);
       return;
     }
 
     // In-frame signing when a wallet is here; otherwise the approval page in a new tab.
-    const inFrame = () => !!wallet();
+    // An email approver confirms on the approval page (a code to their inbox), never in the frame.
+    const inFrame = () => !v.email_approver && !!wallet();
     const decideHere = async (approve) => {
       const w = wallet();
       const btn = approve ? approveBtn : denyBtn, label = btn.textContent;
@@ -284,8 +285,10 @@ const HTML = /* html */ `<!doctype html>
       let win = null;
       try { win = window.open(u.href, "xcard-approve", "popup=yes,width=" + w + ",height=" + h + ",left=" + left + ",top=" + top); } catch {}
       if (!win) { try { await request("ui/open-link", { url: u.href }); } catch { window.open(u.href, "_blank"); } }
-      approveBtn.textContent = "Waiting for your signature…"; approveBtn.disabled = denyBtn.disabled = true;
-      note.textContent = win ? "Sign in your wallet. This card updates when you're done." : "Sign in the tab that opened. This card updates when you're done.";
+      approveBtn.textContent = v.email_approver ? "Waiting for your confirmation…" : "Waiting for your signature…"; approveBtn.disabled = denyBtn.disabled = true;
+      note.textContent = v.email_approver
+        ? "Confirm in the " + (win ? "window" : "tab") + " that opened, with the code we email you. This card updates when you're done."
+        : win ? "Sign in your wallet. This card updates when you're done." : "Sign in the tab that opened. This card updates when you're done.";
       startPoll();
     };
     const startPoll = () => {
@@ -305,7 +308,9 @@ const HTML = /* html */ `<!doctype html>
     denyBtn.addEventListener("click", () => (inFrame() ? decideHere(false) : decideInTab(false)));
     // Extensions announce late; settle the note once they've had a moment.
     setTimeout(() => {
-      note.textContent = inFrame()
+      note.textContent = v.email_approver
+        ? "You confirm in a small window, signed in with a code sent to " + who(a.approver) + "."
+        : inFrame()
         ? "Your wallet asks you to sign: free, nothing is sent on-chain. Sign with " + who(a.approver) + "."
         : "Your wallet opens in a small window to sign: free, nothing is sent on-chain. Sign with " + who(a.approver) + ".";
     }, 400);

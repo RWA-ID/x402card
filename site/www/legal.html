@@ -24,7 +24,7 @@
     </div>
     <div class="nav-links">
       <a href="index.html" class="hide-sm">Overview</a>
-      <a href="approve.html" class="hide-sm">Approvals</a>
+      <a href="console" class="hide-sm">Console</a>
       <a href="legal.html" class="here">Legal</a>
     </div>
   </div>
@@ -58,19 +58,21 @@
 
   <section id="privacy" class="legal-sec">
     <h2>Privacy</h2>
-    <p class="lead">This site has no accounts, cookies, analytics or ad trackers. Here is everything that touches data.</p>
+    <p class="lead">This site has no cookies, analytics or ad trackers. Demo accounts are just an email address. Here is everything that touches data.</p>
 
     <h3>When you visit this site</h3>
     <ul>
       <li><b>Hosting.</b> The site is static files served by Cloudflare at x-card.dev, with the same files on IPFS through gateways such as eth.limo. The host or gateway you use receives your IP address and request details under its own policy.</li>
       <li><b>Fonts.</b> Pages load the Geist fonts from Google Fonts, so Google receives your IP address and browser details.</li>
       <li><b>Live data.</b> The home page asks the X Card API (a Cloudflare Worker at <span class="mono">api.x-card.dev</span>) for public card records and the public activity feed. Cloudflare processes these requests, including your IP address, under its own policy. We don't store your IP address or build a profile of you.</li>
-      <li><b>Approvals page.</b> If you sign in, your admin token is kept only in this browser tab's session storage, is sent only to the X Card API, and is cleared when you close the tab or sign out.</li>
+      <li><b>Demo accounts.</b> When you sign in with your email, we send a 6-digit code from <span class="mono">login@x-card.dev</span> through Resend, our email provider, which receives your address to deliver it. The code is stored only as a hash, for 10 minutes. Your session token is kept in this browser's local storage for up to 7 days, and signing out deletes it on both sides.</li>
+      <li><b>Operator token.</b> If you sign in on the console with the admin token, it is kept only in this browser tab's session storage, is sent only to the X Card API, and is cleared when you close the tab or sign out.</li>
     </ul>
 
     <h3>What the X Card service stores</h3>
     <ul>
-      <li><b>Public policy records</b> for each name (limits, currencies, merchant categories, status, approver). These are public by design and can be read by anyone over ENS.</li>
+      <li><b>Public policy records</b> for each name (limits, currencies, merchant categories, status, approver). These are public by design and can be read by anyone over ENS. An approver named by email is shown masked there (m•••@company.com); the full address is used only to email and sign in that approver.</li>
+      <li><b>Your email</b>, if you made a demo account: to sign you in, to list the cards you issued or approve, and to send you approval requests for cards that name you as approver.</li>
       <li><b>Activity events</b> for the public feed: payments, blocks, top-ups, escalations, approvals and freezes, with the merchant name, amount and the name of the person who decided an approval. The most recent 50 per card are kept.</li>
       <li><b>Approval requests</b>, including the purpose an agent gave.</li>
       <li><b>Private card references</b> (card program IDs, last four digits), never served publicly.</li>

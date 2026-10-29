@@ -109,7 +109,8 @@ export interface ApproverAuth {
 /** Can this card.approver value ever sign? (An ENS name or an address.) */
 export function isSignableApprover(approver: string): boolean {
   const v = approver.trim();
-  return isAddress(v) || /^[^\s.,]+(\.[^\s.,]+)*\.[a-z]{2,}$/i.test(v);
+  // An email approver decides by email sign-in instead (auth/email.ts).
+  return isAddress(v) || (!v.includes("@") && /^[^\s.,]+(\.[^\s.,]+)*\.[a-z]{2,}$/i.test(v));
 }
 
 export function ensApproverAuth(client: PublicClient): ApproverAuth {

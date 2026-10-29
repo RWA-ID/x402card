@@ -13,6 +13,11 @@
 //   tapn:<nonce>      TAP nonce seen by the demo merchant (8 min)
 //   authz:<handle>    an MCP client sign-in in progress on /authorize (10 min; see oauth/authorize.ts)
 //   awx:token         cached Airwallex token (see airwallex/client.ts)
+//   otp:<sha256(email)>      a sign-in code in flight: { hash, tries } (10 min; see auth/email.ts)
+//   otprl:<sha256(email)>    sign-in codes sent to this email this hour (rate limit)
+//   otpip:<ip>               sign-in codes requested from this IP this hour
+//   sess:<sha256>            email session token -> { email, createdAt } (7 days)
+//   acct:<email>             cards an email account issued or approves, by key (like wallet:)
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
 import type { RecordSource } from "./ens/gateway.ts";
@@ -22,7 +27,7 @@ export interface CardRef {
   cardId: string;
   last4?: string;
   createdAt: number;
-  /** The wallet that issued it for itself (self-serve test cards); absent = the operator. */
+  /** Who issued it for themselves: a wallet (connector test cards) or an email (demo accounts); absent = the operator. */
   issuedBy?: string;
 }
 
@@ -60,6 +65,32 @@ export class Store implements RecordSource {
     const have = await this.walletIndex(address);
     if (!have.includes(label)) await this.kv.put(`wallet:${address.toLowerCase()}`, JSON.stringify([...have, label]));
   }
+
+  /** Cards an email account issued or approves, by key. Direct get, like walletIndex. */
+  async accountIndex(email: string): Promise<string[]> {
+    return (await this.kv.get<string[]>(`acct:${email.toLowerCase()}`, "json")) ?? [];
+  }
+  async addToAccountIndex(email: string, label: string): Promise<void> {
+    const have = await this.accountIndex(email);
+    if (!have.includes(label)) await this.kv.put(`acct:${email.toLowerCase()}`, JSON.stringify([...have, label]));
+  }
+
+  getOtp(key: string) { return this.kv.get<{ hash: string; tries: number }>(`otp:${key}`, "json"); }
+  putOtp(key: string, v: { hash: string; tries: number }) { return this.kv.put(`otp:${key}`, JSON.stringify(v), { expirationTtl: 10 * 60 }); }
+  deleteOtp(key: string) { return this.kv.delete(`otp:${key}`); }
+
+  /** Counts one more hit on a rate-limit key; returns the count including it (window = 1 hour). */
+  async hit(key: string): Promise<number> {
+    const n = Number((await this.kv.get(key)) ?? "0") + 1;
+    await this.kv.put(key, String(n), { expirationTtl: 3600 });
+    return n;
+  }
+
+  getSession(hash: string) { return this.kv.get<{ email: string; createdAt: number }>(`sess:${hash}`, "json"); }
+  putSession(hash: string, email: string) {
+    return this.kv.put(`sess:${hash}`, JSON.stringify({ email, createdAt: Date.now() }), { expirationTtl: 7 * 24 * 3600 });
+  }
+  deleteSession(hash: string) { return this.kv.delete(`sess:${hash}`); }
 
   /** Next self-serve test number (test1, test2, …). Not atomic; the caller skips names already taken. */
   async nextTestNumber(): Promise<number> {

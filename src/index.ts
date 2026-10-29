@@ -1,9 +1,15 @@
 // The app: every route except OAuth (worker.ts wraps it and owns /mcp in production).
 //   /gateway/...           CCIP-Read gateway for *.x402card.eth and *.xcard.eth (public)
 //   /mcp                   MCP server for agents (bearer token)
-//   /api/approvals[/:id]   list / decide escalated funding (admin token)
-//   /api/cards             GET fleet: every card with records + pending count; POST issue a card {name, policy} (admin token)
-//   /api/cards/:name/unfreeze   human-only unfreeze (admin token)
+//   /auth/email/start      POST {email}: mail a 6-digit sign-in code (demo accounts, email approvers)
+//   /auth/email/verify     POST {email, code}: a session token (xs_…) for the console
+//   /auth/signout          POST: end the session in the Bearer header
+//   /api/*                 the console. Admin token = every card; a session (xs_…) = that account's cards:
+//   /api/me                who the session is, and the demo caps
+//   /api/names/:name       is this card name free?
+//   /api/approvals[/:id]   list / decide escalated requests (an account decides those whose approver is its email)
+//   /api/cards             GET cards with records + pending count; POST issue a card {name, policy}
+//   /api/cards/:name/unfreeze   human-only unfreeze
 //   /api/cards/:name/simulate   sandbox: a merchant charges the card directly, skipping the pre-check (admin token)
 //   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
@@ -17,13 +23,17 @@ import { createPublicClient, http, type Address, type Hex, type PublicClient } f
 import { mainnet } from "viem/chains";
 import { viemReader } from "@x402identity/payee";
 import { AirwallexClient, KvTokenStore } from "./airwallex/client.ts";
-import { gatewayResponse } from "./ens/gateway.ts";
-import { McpServer, authenticate, issueWithToken } from "./mcp.ts";
+import { AuthError, EmailAuth } from "./auth/email.ts";
+import { FROM_APPROVALS, approvalEmail, resendMailer, type Mailer } from "./auth/mail.ts";
+import { RESERVED_KEYS, RESERVED_LABELS, gatewayResponse } from "./ens/gateway.ts";
+import { McpServer, authenticate, issueAccountWithToken, issueWithToken } from "./mcp.ts";
 import { ensApproverAuth } from "./policy/approver.ts";
+import { describeChanges } from "./policy/changes.ts";
+import { isEmail, maskEmail, publicRecords } from "./policy/records.ts";
 import { ensPayeeChecker } from "./policy/payee.ts";
 import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
 import { verifyTap } from "./tap/verify.ts";
-import { AirwallexIssuer, CardService, describeError, fullName, normalizeLabel } from "./service.ts";
+import { AirwallexIssuer, CardService, DEMO_CARDS, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer } from "./testing.ts";
 
@@ -50,6 +60,19 @@ export interface Env {
   OPERATORS?: string;
   /** More origins for shop.xcard.eth's org.x402.origins, space-separated (custom domains of this Worker). */
   DEMO_MERCHANT_ORIGINS?: string;
+  /** Resend, for sign-in codes and approval emails from x-card.dev. Without it (local dev only) codes come back in the response. */
+  RESEND_API_KEY?: string;
+}
+
+/** The mailer, or undefined in local dev; a deployed Worker without a key refuses to sign anyone in. */
+function mailer(env: Env): Mailer | undefined {
+  if (env.RESEND_API_KEY) return resendMailer(env.RESEND_API_KEY);
+  if (env.ISSUER === "fake") return undefined;
+  throw new AuthError("mail_unavailable", "email sign-in isn't configured on this deployment", 503);
+}
+
+export function emailAuth(env: Env, store: Store): EmailAuth {
+  return new EmailAuth({ store, mailer: mailer(env), secret: env.APPROVAL_SECRET });
 }
 
 // One fake per isolate, so local dev keeps state between requests.
@@ -85,7 +108,27 @@ export function service(env: Env, store: Store, origin?: string): CardService {
           new AirwallexClient({ clientId: env.AWX_CLIENT_ID, apiKey: env.AWX_API_KEY, tokenStore: new KvTokenStore(env.KV) }),
         );
   const eth = ethClient(env);
+  const send = env.RESEND_API_KEY ? resendMailer(env.RESEND_API_KEY) : undefined;
   return new CardService(store, issuer, {
+    ...(send ? {
+      notify: async (a, card) => {
+        const [why, ...rest] = a.reason.split(" · ");
+        await send({ from: FROM_APPROVALS, ...approvalEmail({
+          to: a.approver,
+          card: card.name,
+          last4: card.last4,
+          kind: a.kind ?? "funding",
+          amount: a.amount,
+          currency: a.currency,
+          why,
+          purpose: a.payment ? a.payment.purpose : rest.join(" · ") || undefined,
+          merchant: a.payment?.merchant,
+          changes: a.policy ? describeChanges(a.policy.changes) : undefined,
+          url: card.approvalUrl ?? `https://x-card.dev/approve#${a.id}`,
+          expiresAt: a.expiresAt,
+        }) });
+      },
+    } : {}),
     approvalSecret: env.APPROVAL_SECRET,
     cardholderEmail: env.CARDHOLDER_EMAIL ?? "agents@x402card.dev",
     approvalUrl: env.APPROVAL_URL,
@@ -110,7 +153,9 @@ export default {
     if (path === "/health") return json({ ok: true });
 
     if (path.startsWith("/gateway")) {
-      return gatewayResponse(req, path, store, env.GATEWAY_SIGNER_KEY as Hex, {
+      // ENS records are public: an email approver is served masked.
+      const masked = { getRecords: async (k: string) => publicRecords(await store.getRecords(k)) };
+      return gatewayResponse(req, path, masked, env.GATEWAY_SIGNER_KEY as Hex, {
         parentAddr: env.PARENT_ADDR as Address | undefined,
         // The gateway is reached on the URL set on-chain, so list the custom domains too.
         selfOrigin: [...new Set([url.origin, ...(env.DEMO_MERCHANT_ORIGINS ?? "").split(/\s+/).filter(Boolean)])].join(" "),
@@ -160,7 +205,7 @@ export default {
         } catch {
           return json({ error: "bad name" }, 400);
         }
-        const records = await store.getRecords(label);
+        const records = publicRecords(await store.getRecords(label));
         if (!records) return json({ name: fullName(label), exists: false }, 404);
         return json({ name: fullName(label), exists: true, records });
       }
@@ -208,11 +253,36 @@ export default {
       return res;
     }
 
+    if (path.startsWith("/auth/") && req.method === "POST") {
+      try {
+        const auth = emailAuth(env, store);
+        const b = (await req.json().catch(() => ({}))) as { email?: unknown; code?: unknown };
+        if (path === "/auth/email/start") return json(await auth.start(b.email, req.headers.get("CF-Connecting-IP") ?? "local"));
+        if (path === "/auth/email/verify") return json(await auth.verify(b.email, b.code));
+        if (path === "/auth/signout") {
+          await auth.signOut(bearer(req));
+          return json({ ok: true });
+        }
+        return json({ error: "not found" }, 404);
+      } catch (e) {
+        if (e instanceof AuthError) return json({ error: { code: e.code, message: e.message } }, e.status);
+        throw e;
+      }
+    }
+
     if (path.startsWith("/api/")) {
       const caller = await authenticate(req, store, env.MCP_ADMIN_TOKEN);
-      if (caller?.kind !== "admin") return json({ error: "admin token required" }, 401);
+      if (caller?.kind !== "admin") {
+        // Not the operator: a demo account's session, or nothing.
+        const email = caller ? null : await new EmailAuth({ store, secret: env.APPROVAL_SECRET }).session(bearer(req));
+        if (!email) return json({ error: "sign in first" }, 401);
+        return accountApi(req, path, env, store, email);
+      }
       const svc = service(env, store);
       try {
+        if (path === "/api/me" && req.method === "GET") return json({ admin: true, caps: DEMO_CARDS });
+        const n = path.match(/^\/api\/names\/([^/]+)$/);
+        if (n && req.method === "GET") return json(await nameStatus(store, decodeURIComponent(n[1])));
         if (path === "/api/approvals" && req.method === "GET") {
           return json({ approvals: (await store.listApprovals()).map(({ sig: _sig, ...a }) => a) });
         }
@@ -260,3 +330,67 @@ export default {
     ctx.waitUntil(service(env, new Store(env.KV)).checkAll());
   },
 } satisfies ExportedHandler<Env>;
+
+function bearer(req: Request): string {
+  return (req.headers.get("Authorization") ?? "").match(/^Bearer\s+(\S+)$/i)?.[1] ?? "";
+}
+
+/** Is name free for a new card? Accepts a label (under xcard.eth) or a full name. */
+async function nameStatus(store: Store, name: string): Promise<{ name: string; available: boolean; reason?: string }> {
+  const n = name.trim().toLowerCase();
+  const full = n.includes(".") ? n : `${n}.${DEMO_CARDS.parent}`;
+  let key: string;
+  try {
+    key = normalizeLabel(full);
+  } catch {
+    return { name: full, available: false, reason: "Use lowercase letters, digits and hyphens (not at the start or end)." };
+  }
+  if (RESERVED_LABELS.has(labelOfKey(key)) || RESERVED_KEYS.has(key)) return { name: full, available: false, reason: `${full} is reserved.` };
+  if (await store.getCard(key)) return { name: full, available: false, reason: `${full} already has a card.` };
+  return { name: full, available: true };
+}
+
+/**
+ * The console for a demo account (email session): its own cards, issuing
+ * within DEMO_CARDS, and deciding requests whose approver is this email.
+ */
+async function accountApi(req: Request, path: string, env: Env, store: Store, email: string): Promise<Response> {
+  const svc = service(env, store);
+  try {
+    if (path === "/api/me" && req.method === "GET") return json({ email, caps: DEMO_CARDS });
+    const n = path.match(/^\/api\/names\/([^/]+)$/);
+    if (n && req.method === "GET") return json(await nameStatus(store, decodeURIComponent(n[1])));
+    const cards = await svc.accountCards(email);
+    const mine = new Set(cards.map((c) => normalizeLabel(c.name)));
+
+    if (path === "/api/cards" && req.method === "GET") return json({ cards });
+    if (path === "/api/cards" && req.method === "POST") {
+      const b = (await req.json().catch(() => ({}))) as { name?: unknown; policy?: unknown };
+      if (typeof b.name !== "string" || !b.name.trim()) return json({ error: { code: "bad_input", message: "name is required" } }, 400);
+      return json(await issueAccountWithToken(svc, store, email, b.name, b.policy), 201);
+    }
+    if (path === "/api/approvals" && req.method === "GET") {
+      const all = await store.listApprovals();
+      const approvals = all
+        .filter((a) => a.approver === email || mine.has(a.name))
+        .map(({ sig: _sig, ...a }) => ({ ...a, approver: a.approver === email || !isEmail(a.approver) ? a.approver : maskEmail(a.approver), can_decide: a.approver === email }));
+      return json({ approvals });
+    }
+    const m = path.match(/^\/api\/approvals\/([0-9a-f-]{36})$/);
+    if (m && req.method === "POST") {
+      const b = (await req.json().catch(() => ({}))) as { approve?: unknown };
+      if (typeof b.approve !== "boolean") return json({ error: { code: "bad_input", message: "body must be {approve: boolean}" } }, 400);
+      const approval = await svc.decideByEmail(m[1], b.approve, email);
+      return json({ approval, card: await svc.getCard(approval.name) });
+    }
+    const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/unfreeze$/);
+    if (u && req.method === "POST") {
+      if (!mine.has(normalizeLabel(u[1]))) return json({ error: { code: "not_found", message: "not one of your cards" } }, 404);
+      return json({ card: await svc.unfreeze(u[1], maskEmail(email)) });
+    }
+    return json({ error: "not found" }, 404);
+  } catch (e) {
+    const err = describeError(e);
+    return json({ error: err }, err.code === "not_found" ? 404 : err.code === "not_approver" ? 403 : 400);
+  }
+}

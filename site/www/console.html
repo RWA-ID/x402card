@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console · X Card</title>
+<meta name="description" content="The X Card console: issue cards by name, set their spend policy, name who approves, and decide what their agents ask for.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0a0b0d">
+<link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="brand/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="brand/app-icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <div class="nav-left">
+      <a href="index.html" class="wordmark" style="color:var(--text)" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
+      <div class="pill-sandbox">SANDBOX</div>
+    </div>
+    <div class="nav-links">
+      <a href="index.html" class="hide-sm">Overview</a>
+      <a href="console" class="here">Console</a>
+      <a href="legal.html" class="hide-sm">Legal</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap page">
+  <div class="page-head">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="kicker"><span class="n">→</span><span>Card console</span></div>
+      <h1>Console</h1>
+      <p class="page-sub">Issue a card to a name, set its policy, choose who approves. What the card’s agent asks for beyond its policy waits here, and in the approver’s inbox.</p>
+    </div>
+    <div class="page-meta" data-meta hidden>
+      <span class="who" data-who></span>
+      <span data-updated>—</span>
+      <button data-refresh>↻ refresh</button>
+      <button data-signout>sign out</button>
+    </div>
+  </div>
+
+  <section class="block one" data-one hidden>
+    <div class="block-head"><h2>Your decision</h2><span class="count" data-one-how></span></div>
+    <div data-one-body aria-live="polite"></div>
+  </section>
+
+  <section class="wizard" data-wizard aria-label="How an approval works">
+    <div class="wiz-stage">
+      <div class="floor-glow"></div>
+      <div class="wiz-req" data-w="req"><b>+$300</b><span data-w="reqtxt">request_funding · dataset license</span></div>
+      <div class="tilt wiz-tilt" data-wiz-tilt>
+        <div class="card hero-card wiz-card" data-w="card">
+          <div class="sheen-clip"><div class="sheen" data-wiz-sheen></div></div>
+          <div class="card-top"><div class="wordmark"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</div><div class="card-kind">AGENT · VIRTUAL</div></div>
+          <div class="wiz-mid">
+            <div class="chip"></div>
+            <div class="wiz-right">
+              <div class="wiz-status" data-w="status">ACTIVE</div>
+              <div class="wiz-seal" data-w="seal"><span>SEALED</span><span>researcher · 300 · USD · 24h</span></div>
+            </div>
+          </div>
+          <div class="card-bottom">
+            <div class="card-num">•••• •••• •••• 4021</div>
+            <div class="card-name">researcher.xcard.eth</div>
+          </div>
+          <div class="hero-glow" data-w="glow"></div>
+        </div>
+      </div>
+      <div class="wiz-meter">
+        <div class="allow-top"><span>Monthly allowance</span><span class="mono" data-w="allow">$500</span></div>
+        <div class="track"><div class="fill-next" data-w="next"></div><div class="fill" data-w="fill"></div></div>
+        <div class="allow-foot"><span data-w="rec">card.limit.monthly = 500</span><span data-w="ens"></span></div>
+      </div>
+    </div>
+    <div class="wiz-steps">
+      <div class="kicker"><span class="n">→</span><span>How an approval works</span></div>
+      <ol class="wiz-list" data-wiz-list></ol>
+      <div class="wiz-nav">
+        <button class="btn-deny" data-wiz-back>Back</button>
+        <span class="mono wiz-count" data-wiz-count>1 / 6</span>
+        <button class="approve-btn" data-wiz-next>Next</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="signin" data-signin hidden>
+    <h2>Sign in to the console</h2>
+    <p>A demo account takes an email and a 6-digit code: no password, no wallet. Issue cards to names, set their limits, and approve what their agents ask for. Sandbox money only.</p>
+    <div><button class="btn-primary" type="button" data-email-signin>Create a demo account or sign in</button></div>
+    <div class="err" data-signin-err></div>
+    <details class="op">
+      <summary>Operator? Use the admin token</summary>
+      <p>The token sees every card. It stays in this tab only (session storage) and is sent only to the X Card API.</p>
+      <form class="field" data-signin-form>
+        <input type="password" data-token autocomplete="off" spellcheck="false" placeholder="admin token" aria-label="Admin token">
+        <button class="btn-sm" type="submit">Connect</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="block" data-app hidden>
+    <div class="block-head"><h2>Waiting for you</h2><span class="count" data-pending-count></span></div>
+    <div class="req-list" data-pending></div>
+  </section>
+
+  <section class="block" data-app data-issue-block hidden>
+    <div class="block-head"><h2 data-issue-title>Issue a card</h2><span class="count" data-issue-avail-wrap><span class="issue-avail" data-issue-avail></span></span></div>
+    <form class="issue" data-issue-form novalidate>
+      <div class="issue-row">
+        <label class="issue-f issue-name">
+          <span>Name <i>the card’s whole interface: an employee, a team or an agent</i></span>
+          <div class="field">
+            <input data-issue-label required maxlength="63" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="maria" aria-label="Name">
+            <span class="ns-fixed mono" data-ns-fixed hidden>.xcard.eth</span>
+            <div class="ns-switch" role="radiogroup" aria-label="Namespace" data-ns-switch>
+              <button type="button" role="radio" data-ns="xcard.eth" aria-checked="true">.xcard.eth</button>
+              <button type="button" role="radio" data-ns="x402card.eth" aria-checked="false">.x402card.eth</button>
+            </div>
+          </div>
+        </label>
+      </div>
+      <div class="issue-grid">
+        <label class="issue-f"><span>Per transaction</span><div class="field"><input data-issue="limit_tx" type="number" min="0" step="any" value="100" required></div></label>
+        <label class="issue-f"><span>Daily limit <i>empty = none</i></span><div class="field"><input data-issue="limit_daily" type="number" min="0" step="any" value="500"></div></label>
+        <label class="issue-f"><span>Monthly allowance</span><div class="field"><input data-issue="limit_monthly" type="number" min="0" step="any" value="2000" required></div></label>
+        <label class="issue-f"><span>Currencies</span><div class="field"><input data-issue="currencies" value="USD" spellcheck="false" required></div></label>
+        <label class="issue-f"><span>Allowed MCCs <i>empty = any</i></span><div class="field"><input data-issue="mcc_allow" value="5734,7372" spellcheck="false"></div></label>
+      </div>
+      <p class="issue-hint" data-caps hidden></p>
+      <div class="issue-row issue-payee">
+        <div class="issue-f">
+          <span id="approver-mode-l">Approver</span>
+          <div class="ns-switch" role="radiogroup" aria-labelledby="approver-mode-l" data-approver-switch>
+            <button type="button" role="radio" data-ap="email" aria-checked="true">email</button>
+            <button type="button" role="radio" data-ap="wallet" aria-checked="false">wallet or ENS</button>
+          </div>
+        </div>
+        <label class="issue-f issue-allow"><span>Who approves <i>requests over the limits wait for them</i></span><div class="field"><input data-issue="approver" type="email" placeholder="manager@company.com" spellcheck="false" autocapitalize="off" required></div></label>
+        <p class="issue-hint" data-approver-hint></p>
+      </div>
+      <div class="issue-row issue-payee">
+        <div class="issue-f">
+          <span id="payee-mode-l">Payee check</span>
+          <div class="ns-switch" role="radiogroup" aria-labelledby="payee-mode-l" data-payee-switch>
+            <button type="button" role="radio" data-payee="verified-or-escalate" aria-checked="true">verified or ask</button>
+            <button type="button" role="radio" data-payee="verified-only" aria-checked="false">verified only</button>
+            <button type="button" role="radio" data-payee="any" aria-checked="false">any</button>
+          </div>
+        </div>
+        <label class="issue-f issue-allow"><span>Allowed payees <i>empty = any verified</i></span><div class="field"><input data-issue="payee_allow" placeholder="modelhub.eth, shop.xcard.eth" spellcheck="false" autocapitalize="off"></div></label>
+        <p class="issue-hint" data-payee-hint></p>
+      </div>
+      <div class="issue-foot">
+        <div class="issue-preview mono" data-issue-preview aria-live="polite"></div>
+        <button class="btn-sm" type="submit" data-issue-submit disabled>Issue card</button>
+      </div>
+      <div class="err" data-issue-err></div>
+    </form>
+    <div class="issued" data-issued hidden></div>
+  </section>
+
+  <section class="block" data-app hidden>
+    <div class="block-head"><h2>Cards</h2><span class="count" data-fleet-count></span></div>
+    <div data-fleet></div>
+  </section>
+
+  <section class="block" data-app hidden>
+    <div class="block-head"><h2>History</h2><span class="count" data-history-count></span></div>
+    <div data-history></div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-main">
+      <a href="index.html" class="wordmark" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
+      <a class="gh" href="https://github.com/RWA-ID/x402card" target="_blank" rel="noopener" aria-label="X Card on GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>RWA-ID/x402card</span></a>
+    </div>
+    <div class="foot-links">
+      <a href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">resolver ↗</a>
+      <a href="legal.html#disclaimer">Disclaimer</a>
+      <a href="legal.html#privacy">Privacy</a>
+      <a href="legal.html#terms">Terms</a>
+      <span>Sandbox demo, no real money.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="wizard.js" defer></script>
+<script src="auth.js" defer></script>
+<script src="console.js" defer></script>
+</body>
+</html>

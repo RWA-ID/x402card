@@ -2,7 +2,7 @@
 // Auth: Bearer token. The admin token can do everything; each issued card
 // gets an agent token that only works for its own name. Agents never see
 // card numbers, Airwallex IDs or keys.
-import { CardService, ServiceError, TEST_CARDS, describeError, fullName, normalizeLabel } from "./service.ts";
+import { CardService, DEMO_CARDS, ServiceError, TEST_CARDS, describeError, fullName, normalizeLabel } from "./service.ts";
 import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 import { UI_MIME, approvalResource } from "./ui/approval.ts";
@@ -13,8 +13,8 @@ import type { PolicyInput } from "./policy/changes.ts";
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 const SERVER_INFO = { name: "x402card", title: "X Card", version: "0.4.0" };
 
-// owner = a wallet signed in over OAuth: the cards whose card.approver is that wallet.
-export type Caller = { kind: "admin" } | { kind: "agent"; label: string } | { kind: "owner"; address: string; labels: string[] };
+// owner = a person signed in over OAuth, by wallet or by email: the cards they approve or issued.
+export type Caller = { kind: "admin" } | { kind: "agent"; label: string } | { kind: "owner"; address?: string; email?: string; labels: string[] };
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -45,11 +45,11 @@ export const TOOLS = [
     _meta: issueUi,
     title: "Issue an agent card",
     description:
-      "Issue a virtual card with a spend policy published as ENS text records. Signed in with a wallet: call it with no arguments (or with a suggested policy) and the person fills in the policy on a form in the chat and submits it; they get the next free testN.xcard.eth, approved by their own wallet, within test caps ($50/transaction, $200/day, $500/month, USD, 3 cards per wallet). Never set submit yourself. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
+      "Issue a virtual card with a spend policy published as ENS text records. Signed in (email or wallet): call it with no arguments, or with a suggested name and policy, and the person fills in the form in the chat and submits it: the limits, merchant categories, payee check and the approver (an email, a wallet or an ENS name; by default themselves). Signed in by email they name the card (<name>.xcard.eth; caps $500/transaction, $2,000/day, $5,000/month, USD, 5 cards); by wallet they get the next free testN.xcard.eth (caps $50/transaction, $200/day, $500/month, USD, 3 cards). Never set submit yourself. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string", description: "Label or full name, e.g. researcher" },
+        name: { type: "string", description: "Label or full name, e.g. maria (email sign-in and operator; a wallet sign-in gets testN)" },
         policy: {
           type: "object",
           properties: {
@@ -58,7 +58,7 @@ export const TOOLS = [
             limit_monthly: { type: "number", description: "Monthly allowance (major units)" },
             currencies: { type: "array", items: { type: "string" }, description: "ISO codes; the first is the limit currency" },
             mcc_allow: { type: "array", items: { type: "string" }, description: "Allowed 4-digit merchant category codes; empty = any" },
-            approver: { type: "string", description: "Who approves escalations, e.g. alice.eth" },
+            approver: { type: "string", description: "Who approves escalations: an email (they confirm by email), an ENS name or a wallet address (they sign), e.g. maria@acme.com or alice.eth" },
             payee: {
               type: "string",
               enum: ["any", "verified-or-escalate", "verified-only"],
@@ -169,7 +169,7 @@ export const TOOLS = [
     _meta: approvalUi,
     title: "Get an approval",
     description:
-      "Status of a request waiting for card.approver (from pay or request_funding with decision pending_human): pending, approved, denied or expired, with what it would do. The approver decides it themselves on approval_url by signing with their own wallet; you can't approve it, so give them the link and check back here.",
+      "Status of a request waiting for card.approver (from pay, request_funding or update_policy with decision pending_human): pending, approved, denied or expired, with what it would do. The approver decides it themselves on approval_url: an email approver gets the request by email and confirms signed in with a code; a wallet or ENS approver signs with their wallet. You can't approve it, so give them the link and check back here.",
     inputSchema: { type: "object", properties: { approval_id: { type: "string" } }, required: ["approval_id"] },
     annotations: { readOnlyHint: true },
   },
@@ -251,7 +251,7 @@ export class McpServer {
             capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
             serverInfo: SERVER_INFO,
             instructions:
-              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. Use update_policy to change limits (incl. a daily limit), merchant categories or payee rules; tightening is immediate, loosening waits for a human. A pending_human result is decided by card.approver, who signs it with their own wallet: apps that show the approval card let them approve right in the chat; otherwise give them approval_url. Then check get_approval. list_cards shows every card this connection can use. You never see card numbers.",
+              "x402card: the name and policy layer for AI agent cards (<name>.xcard.eth or <name>.x402card.eth). Policy lives in ENS text records. Use pay to pay a merchant; it is checked against the policy before it reaches the card network. Use request_funding when you need more allowance; amounts above card.limit.tx wait for a human. Use update_policy to change limits (incl. a daily limit), merchant categories or payee rules; tightening is immediate, loosening waits for a human. A pending_human result is decided by card.approver, who signs it with their own wallet: apps that show the approval card let them approve right in the chat; otherwise give them approval_url. Then check get_approval. An approver named by email gets the request by email and confirms it signed in with a code. list_cards shows every card this connection can use. You never see card numbers.",
           });
         }
         case "ping":
@@ -301,13 +301,27 @@ export class McpServer {
       case "issue_card": {
         if (this.caller.kind === "admin") return { ...(await issueWithToken(this.svc, this.store, str(a.name, "name"), a.policy)) };
         if (this.caller.kind !== "owner") throw toolError("forbidden", "an agent token can't issue cards");
+        const { email, address } = this.caller;
+        const me = email ? { email } : { address };
         // The form shows first; the person submits it (submit: true) from the chat.
         if (a.submit !== true) {
-          return { decision: "form", caps: TEST_CARDS, defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy) } };
+          return {
+            decision: "form",
+            caps: email ? DEMO_CARDS : TEST_CARDS,
+            me,
+            defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy), ...(email && typeof a.name === "string" ? { name: a.name.trim().toLowerCase().replace(/\.xcard\.eth$/, "") } : {}) },
+          };
         }
-        const records = policyToRecords({ ...TEST_DEFAULTS, ...pickPolicy(a.policy), currencies: ["USD"], approver: this.caller.address });
-        const card = await this.svc.issueTestCard(this.caller.address, records);
-        return { decision: "issued", card, note: `${card.name} is yours: you're its approver, and this connection can use it now.` };
+        const picked = pickPolicy(a.policy);
+        const records = policyToRecords({ ...TEST_DEFAULTS, ...picked, currencies: ["USD"], approver: optStr(picked.approver) || email || address });
+        const card = email
+          ? await this.svc.issueAccountCard(email, str(a.name, "name"), records)
+          : await this.svc.issueTestCard(address!, records);
+        // It joins this connection's cards now (the grant re-reads them on the next request).
+        this.caller.labels = [...new Set([...this.caller.labels, normalizeLabel(card.name)])];
+        const approver = card.records["card.approver"];
+        const mine = approver === email || approver === address;
+        return { decision: "issued", card, note: `${card.name} is yours and this connection can use it now. ${mine ? "You're its approver." : `${approver} approves anything over its limits.`}` };
       }
       case "list_cards": {
         const labels = this.caller.kind === "admin" ? await this.store.listLabels() : this.caller.kind === "agent" ? [this.caller.label] : this.caller.labels;
@@ -425,6 +439,18 @@ export async function issueWithToken(svc: CardService, store: Store, name: strin
   return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
 }
 
+/** A demo account issues a card on the console, with an agent token for it (shown once). */
+export async function issueAccountWithToken(svc: CardService, store: Store, email: string, name: string, policy: unknown) {
+  const records = policyToRecords({ currencies: ["USD"], ...(policy && typeof policy === "object" ? policy : {}) });
+  // An empty approver means "me": the record defaults to the account's own email.
+  if (!records["card.approver"]) delete records["card.approver"];
+  const card = await svc.issueAccountCard(email, name, records);
+  const label = normalizeLabel(card.name);
+  const token = randomToken();
+  await store.putToken(await sha256Hex(token), label);
+  return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
+}
+
 /** What the issue form starts from for a self-serve test card. */
 const TEST_DEFAULTS = { limit_tx: 25, limit_daily: 100, limit_monthly: 250, mcc_allow: ["5734", "7372"], payee: "verified-or-escalate" };
 
@@ -433,7 +459,7 @@ function pickPolicy(p: unknown): Record<string, unknown> {
   if (!p || typeof p !== "object") return {};
   const o = p as Record<string, unknown>;
   const out: Record<string, unknown> = {};
-  for (const k of ["limit_tx", "limit_daily", "limit_monthly", "mcc_allow", "payee", "payee_allow"]) if (o[k] !== undefined) out[k] = o[k];
+  for (const k of ["limit_tx", "limit_daily", "limit_monthly", "mcc_allow", "payee", "payee_allow", "approver"]) if (o[k] !== undefined) out[k] = o[k];
   return out;
 }
 

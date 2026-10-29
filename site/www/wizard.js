@@ -36,7 +36,7 @@
     },
     {
       title: "A human approves or denies",
-      body: "The approver opens the link and decides. In this sandbox that's the operator's admin token; next, it's a signature from the wallet or Safe named in card.approver, so no shared secret can approve on its own.",
+      body: "The approver gets the request by email, opens the link and decides, signed in with a code sent to that address. An approver named by wallet or ENS signs instead, free and off-chain. Either way only card.approver can decide; a forwarded link can't.",
       code: 'POST /api/approvals/:id\n{ approve: true, by: "alice.eth" }',
       status: ["WAITING · alice.eth", AMBER], req: "300 > card.limit.tx (50)", reqTone: "amber", seal: true, monthly: 500, approve: true,
     },

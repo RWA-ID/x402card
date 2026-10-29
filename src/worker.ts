@@ -4,7 +4,7 @@
 //                                          admin token and agent tokens (x4c_…) for Claude Code and scripts.
 //   /.well-known/oauth-protected-resource  RFC 9728 metadata: where to get a token for /mcp
 //   /.well-known/oauth-authorization-server, /oauth/*   discovery, client registration, tokens
-//   /authorize                             wallet sign-in + consent (oauth/authorize.ts)
+//   /authorize                             email or wallet sign-in + consent (oauth/authorize.ts)
 //   everything else                        the app (index.ts)
 //
 // The issuer is the origin the request came in on, so the same code serves
@@ -16,7 +16,7 @@ import {
   OAuthAuthorizationServer,
   OAuthResourceServer,
 } from "@cloudflare/workers-oauth-provider";
-import app, { CORS, ethClient, service, type Env } from "./index.ts";
+import app, { CORS, emailAuth, ethClient, service, type Env } from "./index.ts";
 import { McpServer, authenticate, type Caller } from "./mcp.ts";
 import { callerFor, type AccessDeps, type GrantProps } from "./oauth/access.ts";
 import { SCOPE, handleAuthorize } from "./oauth/authorize.ts";
@@ -77,6 +77,8 @@ function accessDeps(env: Env, store: Store): AccessDeps {
     resolve: ensApproverAuth(eth).resolve,
     verifyMessage: (address, message, signature) => eth.verifyMessage({ address, message, signature }),
     operators: (env.OPERATORS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+    // Email sign-in on the consent page, unless this deployment can't send mail.
+    ...(env.RESEND_API_KEY || env.ISSUER === "fake" ? { email: emailAuth(env, store) } : {}),
   };
 }
 

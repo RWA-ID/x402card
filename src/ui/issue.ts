@@ -1,8 +1,9 @@
 // The issue form: an MCP App (ui:// resource) for issue_card. The tool's
 // first result carries the defaults and caps; the person sets the policy here
 // and submits, which calls issue_card again through the host (tools/call,
-// submit: true). The card is the next testN.xcard.eth, approved by the wallet
-// that signed in; the server enforces the caps whatever this form sends.
+// submit: true). A wallet sign-in gets the next testN.xcard.eth; an email
+// sign-in names its card. The approver is an email, wallet or ENS name
+// (default: whoever signed in); the server enforces the caps whatever this form sends.
 import { UI_MIME } from "./approval.ts";
 
 const FONTS = ["https://fonts.googleapis.com", "https://fonts.gstatic.com"];
@@ -61,6 +62,10 @@ const HTML = /* html */ `<!doctype html>
   .money { display: flex; align-items: center; background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; }
   .money:focus-within { border-color: var(--accent); }
   .money b { color: var(--muted); font-weight: 400; }
+  .text { display: flex; align-items: center; background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; }
+  .text:focus-within { border-color: var(--accent); }
+  .text input { width: 100%; min-width: 0; background: transparent; border: 0; color: var(--text); font: 500 14px var(--mono); padding: 9px 2px; outline: none; }
+  .text em { font: 500 13px var(--mono); font-style: normal; color: var(--muted); flex: none; }
   input[type=number] { width: 100%; background: transparent; border: 0; color: var(--text); font: 500 15px var(--sans); padding: 9px 6px; outline: none; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .chip { font: 500 12.5px var(--sans); padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text-2); cursor: pointer; }
@@ -141,7 +146,7 @@ const HTML = /* html */ `<!doctype html>
 
   function onResult(res) {
     const sc = res.structuredContent || {};
-    if (sc.decision === "form") return form(sc.defaults || {}, sc.caps || {});
+    if (sc.decision === "form") return form(sc.defaults || {}, sc.caps || {}, sc.me || {});
     if (sc.card) return issued(sc.card);
     const msg = (sc.error && sc.error.message) || (res.content && res.content[0] && res.content[0].text) || "Couldn't issue the card.";
     root.textContent = "";
@@ -154,7 +159,20 @@ const HTML = /* html */ `<!doctype html>
     return { key, input, node: el("label", { class: "f" }, el("span", {}, label + " ", cap ? el("i", { text: "max " + usd(cap) }) : null), el("div", { class: "money" }, el("b", { text: "$" }), input)) };
   }
 
-  function form(d, caps) {
+  // me: who signed in, {email} or {address}. An email account names its card; a wallet gets the next testN.
+  function form(d, caps, me) {
+    const account = !!me.email;
+    const nameIn = el("input", { value: d.name || "", placeholder: "maria", spellcheck: "false", autocapitalize: "off", "aria-label": "Name", maxlength: "63" });
+    const nameField = account ? el("label", { class: "f", style: "margin-bottom:12px" }, el("span", { text: "Name" }), el("div", { class: "text" }, nameIn, el("em", { text: ".xcard.eth" }))) : null;
+    // Who approves: an email (confirms by email) or a wallet / ENS name (signs). Defaults to whoever signed in.
+    const approverIn = el("input", { value: d.approver || me.email || me.address || "", placeholder: "manager@company.com or alice.eth", spellcheck: "false", autocapitalize: "off", "aria-label": "Approver" });
+    const apHint = el("p", { class: "note", style: "margin-top:6px" });
+    const hintAp = () => {
+      const v = approverIn.value.trim();
+      apHint.textContent = v.includes("@") ? "They get each request by email and confirm it with a code." : v ? "They sign each decision with that wallet: free, nothing goes on-chain." : "";
+    };
+    approverIn.addEventListener("input", hintAp); hintAp();
+    const approverField = el("div", { class: "row" }, el("label", { class: "f" }, el("span", {}, "Approver ", el("i", { text: "email, wallet or ENS name" })), el("div", { class: "text" }, approverIn)), apHint);
     const fields = [
       money("limit_tx", "Per transaction", d.limit_tx, caps.tx),
       money("limit_daily", "Daily", d.limit_daily, caps.daily, true),
@@ -176,16 +194,24 @@ const HTML = /* html */ `<!doctype html>
     const go = el("button", { class: "go", type: "submit", text: "Issue card" });
     const err = el("div", { class: "err" });
     const f = el("form", { novalidate: "" },
+      nameField,
       el("div", { class: "grid" }, ...fields.map((x) => x.node)),
       el("div", { class: "row" }, el("div", { class: "lbl", text: "Where it can pay" }), el("div", { class: "chips" }, ...chips)),
       el("div", { class: "row" }, el("div", { class: "lbl", text: "Payee check" }), el("div", { class: "chips" }, ...payeeChips)),
+      approverField,
       el("div", { class: "actions" }, go),
-      el("p", { class: "note", text: "You'll get the next free test name (testN.xcard.eth) on a sandbox virtual Visa. Your wallet is its approver: anything over these limits waits for your signature." }),
+      el("p", { class: "note", text: account
+        ? "A sandbox virtual Visa under your name. Anything over these limits waits for the approver."
+        : "You'll get the next free test name (testN.xcard.eth) on a sandbox virtual Visa. Anything over these limits waits for the approver." }),
       err);
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
       err.textContent = "";
-      const policy = { mcc_allow: [...chosen], payee };
+      const approver = approverIn.value.trim();
+      if (!/^([^\s@]+@[^\s@]+\.[a-z]{2,}|0x[0-9a-fA-F]{40}|[^\s.,@]+(\.[^\s.,@]+)*\.[a-z]{2,})$/i.test(approver)) { err.textContent = "The approver is an email, a 0x address or an ENS name."; return; }
+      const name = nameIn.value.trim().toLowerCase().replace(/\.xcard\.eth$/, "");
+      if (account && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) { err.textContent = "Pick a name: lowercase letters, digits and hyphens."; return; }
+      const policy = { mcc_allow: [...chosen], payee, approver };
       for (const x of fields) {
         const raw = x.input.value.trim();
         if (!raw) { if (x.key === "limit_daily") continue; err.textContent = "Set every limit except daily."; return; }
@@ -199,7 +225,7 @@ const HTML = /* html */ `<!doctype html>
       if (policy.limit_tx > policy.limit_monthly) { err.textContent = "Per transaction can't be more than monthly."; return; }
       go.disabled = true; go.textContent = "Issuing…";
       try {
-        const r = await request("tools/call", { name: "issue_card", arguments: { policy, submit: true } }, 60000);
+        const r = await request("tools/call", { name: "issue_card", arguments: { ...(account ? { name } : {}), policy, submit: true } }, 60000);
         const sc = (r && r.structuredContent) || {};
         if (r && r.isError || !sc.card) throw new Error((sc.error && sc.error.message) || (r && r.content && r.content[0] && r.content[0].text) || "not issued");
         issued(sc.card);
@@ -211,7 +237,7 @@ const HTML = /* html */ `<!doctype html>
     });
     root.textContent = "";
     root.append(el("div", { class: "top" }, brand(), el("span", { class: "pill", text: "New card" })),
-      el("h2", { text: "Issue an agent card" }), el("p", { class: "sub", text: "Set what your agent may spend. You can tighten it any time; loosening needs your wallet." }), f);
+      el("h2", { text: "Issue a card" }), el("p", { class: "sub", text: "Set what it may spend and who approves the rest. Tightening applies at once; loosening waits for the approver." }), f);
   }
 
   function issued(card) {

@@ -1,14 +1,16 @@
 # X Card
 
-**Names, policy and trust for AI agent cards.**
-Pay by name. Trust runs both ways.
+**Company cards you run by name.**
+Every card has a name. Run them all from your AI app.
 
-X Card is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). X Card sits on top of them and adds the parts an AI agent needs before anyone should let it spend:
+X Card is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). X Card gives each card a company issues, to an employee, a team or an AI agent, a name with its spend policy on it. The name is the whole interface: a manager says "give maria.xcard.eth $300 for the offsite" or "freeze sam's card" to their AI app, and anything over the limits goes to the card's approver by email (or to their wallet). Nobody handles a card number.
+
+X Card adds the parts a card needs before anyone should let a person or an agent spend with it:
 
 - **A name.** Each agent card gets a human-readable ENS name such as `researcher.xcard.eth` (or `researcher.x402card.eth`: you pick the namespace) that stays the same when the card underneath is reissued, rotated or moved to another program.
 - **A public policy.** Limits, currencies, allowed merchant categories, status and approver are ENS text records. Anyone (a merchant, another agent, an auditor) can check them with any ENS client, and every answer is signed and verified on-chain.
 - **No credentials in the agent.** The agent works through an MCP server with a token scoped to its own card. It never sees the card number, CVC, card ID or an issuer API key.
-- **A human in the loop.** Spending inside policy goes through. Funding requests above policy, and payments to merchants X Card can't verify, wait for the named approver. An anomaly freezes the card, flips `card.status` to `frozen` in ENS, and only a human can unfreeze it.
+- **A human in the loop.** Spending inside policy goes through. Funding requests above policy, and payments to merchants X Card can't verify, wait for the named approver: an email (they confirm with a code sent to it) or a wallet / ENS name (they sign). An anomaly freezes the card, flips `card.status` to `frozen` in ENS, and only a human can unfreeze it.
 - **Trust in both directions.** Before a payment, X Card checks that the checkout really belongs to the merchant the agent means to pay ([verified payee](#verified-payee), using the open x402 `payee-name` records). At checkout, X Card signs the agent's request with [Visa's Trusted Agent Protocol](#visa-trusted-agent-protocol-tap) so the merchant can tell a trusted agent from a bot. Both checks are about the same domain.
 
 The policy is enforced twice: by X Card before anything is sent, and by the card program's own authorization controls when the charge reaches the network.
@@ -43,6 +45,7 @@ The policy is enforced twice: by X Card before anything is sent, and by the card
 - [Policy engine](#policy-engine)
 - [Integrate: agents (MCP)](#integrate-agents-over-mcp)
 - [Integrate: read policy from any ENS client](#integrate-read-a-cards-policy-from-any-ens-client)
+- [Demo accounts and email approvals](#demo-accounts-and-email-approvals)
 - [Integrate: platforms (approvals API)](#integrate-platforms-approvals-and-oversight)
 - [Integrate: bring your own card issuer](#integrate-bring-your-own-card-issuer)
 - [Compatibility](#compatibility)
@@ -320,8 +323,8 @@ Who can change what, and what it takes:
 | `OffchainResolver` owner | change the gateway URL (`setUrl`) and trusted signers (`setSigner`), i.e. decide which answers count as valid | [2-of-3 Safe](https://app.safe.global/home?safe=eth:0x5A578eDdD28Bac066464BB2462ff052a65103602) ([tx](https://etherscan.io/tx/0x054742a8579fdb91d8ab7a9ad43199b5338934b0cb9c76483dc6e5375c033d30)) |
 | Gateway signing key | sign record answers, valid 5 minutes each | Worker secret; separate from the owner key, revocable by the owner |
 | TAP signing key | sign agents' requests to merchants (8 minutes, one use) | Worker secret `TAP_PRIVATE_KEY`; separate from every on-chain key; rotated with one secret update |
-| Approvals | raise limits, release held payments | `card.approver`'s wallet signature (EIP-712; ERC-1271 for a Safe), or the Worker admin token |
-| Unfreeze, policy edits | unfreeze cards, publish records | Worker admin token → moving to wallet signatures |
+| Approvals | raise limits, release held payments, loosen policy | `card.approver`: an email approver signed in with a code to that address, or a wallet signature (EIP-712; ERC-1271 for a Safe); or the Worker admin token |
+| Unfreeze | unfreeze cards | the card's demo account (its issuer or approver, signed in by email), or the Worker admin token |
 | Agent token | its own card only: read, pay, sign requests, request funding, freeze | the agent |
 
 **Target model**
@@ -351,6 +354,7 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 | Verified payee (payee gate, `card.payee`, held payments) | ✅ live; tested end to end, verifier checked against mainnet ENS. Not yet exercised on a live card (needs Airwallex issuance). |
 | Visa TAP signing (`sign_request`, `/keys`, demo merchant) | ✅ live; signatures verified by a port of Visa's reference merchant |
 | TAP body objects (consumer recognition, payment container) | ⏳ need Visa Intelligent Commerce onboarding |
+| Demo accounts (email code sign-in), the console (`/console`), email approvers with branded approval emails | ✅ built 2026-10-29; codes and approval emails from `x-card.dev` via Resend; approver emails masked on every public surface |
 | Wallet-signed approvals (EIP-712 / ERC-1271) | ✅ built: `approval_url` opens the request on the approval page, which signs with the approver's own wallet and posts to `/approvals/:id`; tested with real signatures, in a browser, and checked against mainnet ENS. Unfreeze still needs the admin token. |
 
 ## ENS records (the policy)
@@ -515,6 +519,31 @@ curl https://api.x-card.dev/public/cards/researcher.x402card.eth
 
 **Use it as a pre-flight check.** A merchant, marketplace or another agent can refuse to start work for `card.status != active`, or quote within `card.limit.tx`, before any payment is attempted.
 
+## Demo accounts and email approvals
+
+Card programs and finance teams aren't crypto teams, so nothing on the main path needs a wallet.
+
+- **Sign in with an email.** "Create a demo account" on [x-card.dev](https://x-card.dev) asks for an email and mails a 6-digit code from `login@x-card.dev`. The code is stored only as a keyed hash, works once, for 10 minutes, with 5 tries; sending is limited to 5 codes per address and 20 per IP an hour. A good code returns a 7-day session token (`xs_…`), which the site keeps in local storage and sends as a Bearer token.
+- **The console** ([x-card.dev/console](https://x-card.dev/console)) is where cards are managed. A demo account picks a name under `xcard.eth` (the name check shows whether it's free), sets the per-transaction, daily and monthly limits, merchant categories and payee rule, and names the approver: its own email by default, a colleague's email, or a wallet / ENS name. Caps: $500 per transaction, $2,000 a day, $5,000 a month, USD, 5 cards per account. Every card comes with an agent token for it (shown once). The account sees the cards it issued and the cards it approves, as a grid of card faces, with pending requests and history.
+- **Email approvers.** When an agent asks for more than a card allows and `card.approver` is an email, X Card emails them (`approvals@x-card.dev`) the card, the amount, the rule it hit and a "Review and decide" link to `x-card.dev/approve#<id>`. The decision only counts if they're signed in as that email, so a forwarded email can't approve anything. Someone else signed in gets `403 not_approver`.
+- **Privacy.** ENS records are public, so an email approver is masked everywhere public: the gateway answer, `/public/cards`, the public approval link and the feed show `m•••@acme.com`. The full address stays private and is used only to email and sign in that approver.
+- **Wallets still work.** A card whose approver is a wallet or an ENS name is approved with an EIP-712 signature exactly as before ([Approving with a wallet](#approving-with-a-wallet)).
+
+Endpoints (no token for the first two; `Authorization: Bearer xs_…` for the rest):
+
+| Method | Path | Body | Purpose |
+|---|---|---|---|
+| `POST` | `/auth/email/start` | `{ "email": "maria@acme.com" }` | Mail a sign-in code |
+| `POST` | `/auth/email/verify` | `{ "email", "code" }` | `{ token, email }`: a 7-day session |
+| `POST` | `/auth/signout` | | End the session |
+| `GET` | `/api/me` | | `{ email, caps }` |
+| `GET` | `/api/names/:name` | | `{ name, available, reason? }` |
+| `GET` | `/api/cards` | | The account's cards (issued or approved), `issued_by_me` on its own |
+| `POST` | `/api/cards` | `{ "name": "maria", "policy": { limit_tx, limit_daily?, limit_monthly, mcc_allow[], approver?, payee?, payee_allow[]? } }` | Issue under `xcard.eth` within the caps; returns `card` and `agent_token` |
+| `GET` | `/api/approvals` | | Requests on the account's cards or naming it as approver, each with `can_decide` |
+| `POST` | `/api/approvals/:id` | `{ "approve": true \| false }` | Decide, as the email approver |
+| `POST` | `/api/cards/:name/unfreeze` | | Unfreeze one of the account's cards |
+
 ## Integrate: platforms (approvals and oversight)
 
 Admin endpoints (`Authorization: Bearer <admin token>`):
@@ -536,7 +565,7 @@ Public, unauthenticated:
 | `GET` | `/keys`, `/keys/:keyid` | Visa TAP public key (see [Keys](#keys)) |
 | `GET` | `/demo-merchant/*` | A merchant that verifies TAP headers, for demos and integration tests |
 
-**Approval page:** [`x-card.dev/approve.html`](https://x-card.dev/approve.html) is a static UI over these endpoints. It shows pending requests (funding with an allowance preview; held payments with the checkout URL, payee name and its check, and an "Approve & pay" button), Approve/Deny, the fleet with Unfreeze, and decision history. Escalated `request_funding` and held `pay` results include an `approval_url` that deep-links to the request, so the agent can hand it to its human, who signs it with their wallet without signing in (see [Approving with a wallet](#approving-with-a-wallet)). The admin token is kept in the tab's session storage only. Add `?api=http://127.0.0.1:8787` to point the page at a local Worker.
+**Console:** [`x-card.dev/console`](https://x-card.dev/console) is a static UI over these endpoints (and the [account endpoints](#demo-accounts-and-email-approvals)). Signed in with the admin token, it shows every card and decides any request. It shows pending requests (funding with an allowance preview; held payments with the checkout URL, payee name and its check, and an "Approve & pay" button), Approve/Deny, the fleet with Unfreeze, and decision history. Escalated `request_funding` and held `pay` results include an `approval_url` that deep-links to the request, so the agent can hand it to its human. That link opens `x-card.dev/approve#<id>`, a page with just that request: an email approver confirms signed in with a code, a wallet approver signs (see [Approving with a wallet](#approving-with-a-wallet)). The admin token is kept in the tab's session storage only. Add `?api=http://127.0.0.1:8787` to point the page at a local Worker.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -561,7 +590,7 @@ Approval(string id, string decision, string card, string kind, string amount, st
 
 **In the chat.** In apps that show [in-chat views](#in-chat-views-mcp-apps), the approval card's Approve button starts this same signature: with the wallet in the frame if there is one, otherwise in a small popup on the approval page (`approve?popup=approve#<id>`) that shows only that request, asks the wallet at once and closes when done. A policy change is signed as `PolicyChange` typed data (see [Changing the policy](#changing-the-policy)).
 
-**On the approval page.** `pending_human` results carry an `approval_url` (`approve.html#<id>`). The page loads the request from `GET /approvals/:id` with no sign-in, shows exactly what it would do, and asks the approver's wallet to sign it with `eth_signTypedData_v4` (free, nothing goes on-chain). It checks the connected account is the one `card.approver` resolves to and posts the signature to `POST /approvals/:id`. On a phone, open the link in a wallet app's browser.
+**On the approval page.** `pending_human` results carry an `approval_url` (`approve#<id>`). The page loads the request from `GET /approvals/:id` with no sign-in, shows exactly what it would do, and asks the approver's wallet to sign it with `eth_signTypedData_v4` (free, nothing goes on-chain). It checks the connected account is the one `card.approver` resolves to and posts the signature to `POST /approvals/:id`. On a phone, open the link in a wallet app's browser.
 
 **Not through the agent.** The MCP server has no tool to submit an approval, and `get_approval` returns status but not the typed data. That only means something if the approver's key is out of the agent's reach. So `card.approver` should be a wallet you sign with yourself (a browser or hardware wallet, or a Safe), never an agent wallet that signs on its own, like a PayBox wallet in autonomous mode.
 
@@ -641,7 +670,7 @@ hash     = keccak256(0x1900 ‖ sender ‖ expires ‖ keccak256(callData) ‖ k
 ## Security model
 
 - **Agents never see card credentials.** Tools return policy, status, last 4 and transactions; Airwallex IDs stay in a private KV prefix the gateway never serves. A test asserts the card ID never appears in tool output.
-- **Scoped tokens.** Agent tokens are random 256-bit values stored only as SHA-256 hashes and accepted only for their own name. Only the admin token can issue cards, decide approvals or unfreeze.
+- **Scoped tokens.** Agent tokens are random 256-bit values stored only as SHA-256 hashes and accepted only for their own name. Only a human can issue cards, decide approvals or unfreeze: the admin token, a demo account signed in by email (its own cards), or the approver themselves.
 - **Approvals can't be retargeted.** Each pending approval is HMAC-signed over `(id, name, amount, currency)`, plus `(mcc, merchant, merchant URL, payee name)` for a held payment, and re-verified at decision time; it's marked decided before it is applied, so a double click applies once.
 - **The payee gate fails closed.** A failed ENS read is `unverified`, never `verified`: the payment is held or blocked, not passed. Lookalike checkouts count toward freezing the card.
 - **A payer signature follows an approval.** `sign_request(checkout)` works only for an origin the card paid with policy approval in the last 15 minutes. Signatures expire in 8 minutes and carry a random nonce; the verifier claims the nonce only after the signature checks out. The demo merchant's nonce store is KV, which is eventually consistent, so two replays racing within a second could both pass there; a production merchant should use a strongly consistent store.
@@ -719,7 +748,7 @@ npm run typecheck
 
 # Full stack locally, no Airwallex: in-memory issuer + throwaway admin token
 npx wrangler dev --var ISSUER:fake --var MCP_ADMIN_TOKEN:local-test
-(cd site/www && python3 -m http.server 8765)   # open /approve.html?api=http://127.0.0.1:8787
+(cd site/www && python3 -m http.server 8765)   # open /console.html?api=http://127.0.0.1:8787 (with ISSUER=fake and no RESEND_API_KEY, sign-in codes come back in the response)
 cd contracts && npx hardhat node &          # then, from the repo root:
 node scripts/e2e-resolver.ts                # resolver + gateway end to end on a local chain
 ```

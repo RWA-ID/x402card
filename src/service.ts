@@ -11,7 +11,7 @@ import { newPendingApproval, signApproval, verifyApproval, type HeldPayment, typ
 import { approvalTypedData, isSignableApprover, type ApprovalTypedData, type ApproverAuth } from "./policy/approver.ts";
 import { decidePayee, toOrigin, type PayeeCheck, type PayeeChecker } from "./policy/payee.ts";
 import type { TapSigner, TapTag } from "./tap/sign.ts";
-import { type CardPolicy, PolicyError, type TextRecords, parseRecords, toRecords } from "./policy/records.ts";
+import { type CardPolicy, PolicyError, type TextRecords, isEmail, maskEmail, parseRecords, toRecords } from "./policy/records.ts";
 import { describeChanges, planChanges, type PolicyChange, type PolicyInput } from "./policy/changes.ts";
 import type { Store } from "./store.ts";
 
@@ -81,6 +81,12 @@ export class AirwallexIssuer implements Issuer {
 /** Self-serve test cards: what any signed-in wallet may issue itself. */
 export const TEST_CARDS = { tx: 50, daily: 200, monthly: 500, perWallet: 3 } as const;
 
+/** Demo accounts (email sign-in): cards a tester issues on the console, named by them, under xcard.eth. */
+export const DEMO_CARDS = { tx: 500, daily: 2000, monthly: 5000, perAccount: 5, parent: "xcard.eth" } as const;
+
+/** Approval emails to one approver address an hour; the rest wait on the console. */
+const APPROVAL_MAILS_PER_HOUR = 10;
+
 export class ServiceError extends Error {
   code: string;
   constructor(code: string, message: string) {
@@ -117,6 +123,8 @@ export interface CardView {
   last4?: string;
   records: TextRecords;
   pending_approvals: { id: string; kind: "funding" | "payment" | "policy"; amount: number; currency: string; reason: string; merchant?: string }[];
+  /** On a demo account's own list: this account issued the card (it may also just approve others'). */
+  issued_by_me?: boolean;
 }
 
 export interface SafeTransaction {
@@ -185,6 +193,8 @@ export interface ServiceOptions {
   tapKeysUrl?: string;
   /** Resolves card.approver and checks its wallet signature (policy/approver.ts). Without it only the admin token decides. */
   approverAuth?: ApproverAuth;
+  /** Tells an email approver a request is waiting (auth/mail.ts). Best effort: a failed send never fails the request. */
+  notify?: (a: PendingApproval, card: { name: string; last4?: string; approvalUrl?: string }) => Promise<void>;
 }
 
 /** An approval as the approver sees it, with the typed data to sign either way. */
@@ -193,6 +203,8 @@ export interface ApprovalView {
   card: string;
   /** card.approver is an ENS name or an address, so a wallet signature can decide it. */
   signable: boolean;
+  /** card.approver is an email: they decide signed in with a code sent to it. approval.approver is masked. */
+  email_approver: boolean;
   /** The address card.approver resolves to now; the one signature that counts. */
   approver_address?: string;
   approval_url?: string;
@@ -224,7 +236,8 @@ export class CardService {
 
   /**
    * A wallet issues itself a test card over the connector: the next free
-   * testN.xcard.eth, approved by that same wallet, within TEST_CARDS' caps.
+   * testN.xcard.eth, within TEST_CARDS' caps, approved by that wallet unless
+   * the records name another approver (an email, wallet or ENS name).
    */
   async issueTestCard(address: string, records: TextRecords): Promise<CardView> {
     if (!isAddress(address)) throw new ServiceError("bad_input", "not a wallet address");
@@ -235,7 +248,7 @@ export class CardService {
     }
     let policy: CardPolicy;
     try {
-      policy = parseRecords({ "card.currencies": "USD", "card.payee": "verified-or-escalate", ...records, "card.approver": me, "card.status": "active" });
+      policy = parseRecords({ "card.currencies": "USD", "card.payee": "verified-or-escalate", ...records, "card.approver": records["card.approver"]?.trim() || me, "card.status": "active" });
     } catch (e) {
       if (e instanceof PolicyError) throw new ServiceError("bad_policy", e.message);
       throw e;
@@ -254,6 +267,51 @@ export class CardService {
       return this.issueCard(label, toRecords(policy), { issuedBy: me });
     }
     throw new ServiceError("busy", "couldn't find a free test name; try again");
+  }
+
+  /**
+   * A demo account (signed in by email) issues a card on the console: a name
+   * they pick under xcard.eth, any approver (their own email by default, a
+   * colleague's email, a wallet or an ENS name), within DEMO_CARDS' caps.
+   */
+  async issueAccountCard(email: string, name: string, records: TextRecords): Promise<CardView> {
+    const me = email.toLowerCase();
+    const full = name.trim().toLowerCase();
+    const label = full.endsWith(`.${DEMO_CARDS.parent}`) ? full : `${full}.${DEMO_CARDS.parent}`;
+    if (label.split(".").length !== 3) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${DEMO_CARDS.parent}`);
+    const refs = await Promise.all((await this.store.accountIndex(me)).map((l) => this.store.getCard(l)));
+    if (refs.filter((r) => r?.issuedBy === me).length >= DEMO_CARDS.perAccount) {
+      throw new ServiceError("limit_reached", `a demo account can issue ${DEMO_CARDS.perAccount} cards`);
+    }
+    let policy: CardPolicy;
+    try {
+      policy = parseRecords({ "card.currencies": "USD", "card.payee": "verified-or-escalate", "card.approver": me, ...records, "card.status": "active" });
+    } catch (e) {
+      if (e instanceof PolicyError) throw new ServiceError("bad_policy", e.message);
+      throw e;
+    }
+    // No daily limit asked for: the most the demo allows, never above the monthly one.
+    policy.limitDaily ??= Math.min(policy.limitMonthly, DEMO_CARDS.daily);
+    const over = [
+      policy.limitTx > DEMO_CARDS.tx && `per transaction max ${DEMO_CARDS.tx}`,
+      (policy.limitDaily ?? Infinity) > DEMO_CARDS.daily && `daily max ${DEMO_CARDS.daily}`,
+      policy.limitMonthly > DEMO_CARDS.monthly && `monthly max ${DEMO_CARDS.monthly}`,
+      policy.currencies.join(",") !== "USD" && "USD only",
+    ].filter(Boolean);
+    if (over.length) throw new ServiceError("over_demo_caps", `demo cards: ${over.join(", ")}`);
+    return this.issueCard(label, toRecords(policy), { issuedBy: me });
+  }
+
+  /** The cards an email account issued or approves, as it is now. */
+  async accountCards(email: string): Promise<CardView[]> {
+    const me = email.toLowerCase();
+    const out: CardView[] = [];
+    for (const label of await this.store.accountIndex(me)) {
+      const [ref, rec] = await Promise.all([this.store.getCard(label), this.store.getRecords(label)]);
+      if (!ref || !rec || (ref.issuedBy !== me && rec["card.approver"] !== me)) continue;
+      out.push({ ...(await this.getCard(label)), ...(ref.issuedBy === me ? { issued_by_me: true } : {}) });
+    }
+    return out;
   }
 
   async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string } = {}): Promise<CardView> {
@@ -282,6 +340,10 @@ export class CardService {
     await this.store.clearRequestId("issue", label);
     // An approver that's a plain address gets the card in its wallet index right away.
     if (isAddress(policy.approver)) await this.store.addToWalletIndex(policy.approver, label);
+    // Likewise an email approver's account, and the account that issued it.
+    if (isEmail(policy.approver)) await this.store.addToAccountIndex(policy.approver, label);
+    if (opts.issuedBy && isEmail(opts.issuedBy)) await this.store.addToAccountIndex(opts.issuedBy, label);
+    if (opts.issuedBy && isAddress(opts.issuedBy)) await this.store.addToWalletIndex(opts.issuedBy, label);
     await this.store.addEvent(label, { at: Date.now(), kind: "issued", detail: "card issued" });
     return this.getCard(label);
   }
@@ -321,7 +383,7 @@ export class CardService {
     }
 
     const pending = newPendingApproval(label, amount, cur, purpose ? `${d.reason} · ${purpose}` : d.reason, policy.approver);
-    await this.store.putApproval({ ...pending, sig: await signApproval(this.opts.approvalSecret, pending) });
+    await this.escalate(pending);
     await this.store.addEvent(label, { at: Date.now(), kind: "escalated", detail: pending.reason, amount, currency: cur });
     return {
       decision: "pending_human",
@@ -357,7 +419,7 @@ export class CardService {
     const why = `loosens the policy (${plan.changes.filter((c) => c.loosens).map((c) => c.key).join(", ")})`;
     const reason = `${why}${opts.purpose ? ` · ${opts.purpose}` : ""}`;
     const pending = { ...newPendingApproval(label, 0, policy.currencies[0], reason, policy.approver), kind: "policy" as const, policy: { changes: plan.changes } };
-    await this.store.putApproval({ ...pending, sig: await signApproval(this.opts.approvalSecret, pending) });
+    await this.escalate(pending);
     await this.store.addEvent(label, { at: Date.now(), kind: "escalated", detail: `policy change · ${changes}` });
     return { decision: "pending_human", reason: why, changes, approval_id: pending.id, approver: policy.approver, ...this.approvalLink(pending.id) };
   }
@@ -388,6 +450,21 @@ export class CardService {
     await this.issuer.updateCard(ref.cardId, { controls: toAuthorizationControls(next) });
     await this.store.putRecords(label, toRecords(next));
     await this.store.addEvent(label, { at: Date.now(), kind: "policy", detail });
+  }
+
+  /** Stores a request for card.approver and, for an email approver, emails them. */
+  private async escalate(pending: PendingApproval) {
+    await this.store.putApproval({ ...pending, sig: await signApproval(this.opts.approvalSecret, pending) });
+    if (!this.opts.notify || !isEmail(pending.approver)) return;
+    // Anyone signed in can name any email as approver, so the mails to one address are capped.
+    if ((await this.store.hit(`apml:${pending.approver}`)) > APPROVAL_MAILS_PER_HOUR) return;
+    try {
+      const ref = await this.store.getCard(pending.name);
+      await this.opts.notify(pending, { name: fullName(pending.name), last4: ref?.last4, approvalUrl: this.approvalLink(pending.id).approval_url });
+    } catch (e) {
+      // The request stands; the approver can still find it on the console.
+      console.error("approval mail", e instanceof Error ? e.message : e);
+    }
   }
 
   private approvalLink(id: string): { approval_url?: string } {
@@ -442,12 +519,16 @@ export class CardService {
     const { sig: _sig, ...approval } = a;
     const card = fullName(a.name);
     const signable = isSignableApprover(a.approver);
+    // The view is public by link, so an email approver shows masked.
+    const email_approver = isEmail(a.approver);
+    if (email_approver) approval.approver = maskEmail(a.approver);
     // Best effort: the page uses it to pick the right account. decideSigned resolves again.
     const approver_address = signable && a.status === "pending" ? await this.opts.approverAuth?.resolve(a.approver).catch(() => null) : null;
     return {
       approval,
       card,
       signable,
+      email_approver,
       ...(approver_address ? { approver_address } : {}),
       ...this.approvalLink(a.id),
       ...(signable ? { typed_data: { approve: approvalTypedData(a, "approve", card), deny: approvalTypedData(a, "deny", card) } } : {}),
@@ -486,6 +567,20 @@ export class CardService {
     if (!ok) throw new ServiceError("bad_signature", `not signed by ${a.approver} (${address}) for this exact ${approve ? "approval" : "denial"}`);
     // decide() hands back the stored approval, HMAC included; callers never need it.
     const { sig: _sig, ...decided } = { sig: "", ...(await this.decide(a.id, approve, `${a.approver} (signed)`)) };
+    return decided;
+  }
+
+  /**
+   * A decision by an email approver, signed in with a code sent to that
+   * address (auth/email.ts). The session's email must be card.approver as it
+   * was when the request was made.
+   */
+  async decideByEmail(approvalId: string, approve: boolean, email: string) {
+    const a = await this.approvalFor(approvalId);
+    if (a.status !== "pending") throw new ServiceError("already_decided", `approval already ${a.status}`);
+    if (!isEmail(a.approver)) throw new ServiceError("not_email_approver", "this card's approver decides with a wallet signature, not by email");
+    if (a.approver !== email.toLowerCase()) throw new ServiceError("not_approver", `you're signed in as ${email}, but this card's approver is ${maskEmail(a.approver)}`);
+    const { sig: _sig, ...decided } = { sig: "", ...(await this.decide(a.id, approve, `${maskEmail(a.approver)} (email)`)) };
     return decided;
   }
 
@@ -648,7 +743,7 @@ export class CardService {
     };
     const reason = `${why} · pay ${p.merchant}${p.purpose ? ` · ${p.purpose}` : ""}`;
     const pending = newPendingApproval(label, p.amount, currency, reason, approver, Date.now(), held);
-    await this.store.putApproval({ ...pending, sig: await signApproval(this.opts.approvalSecret, pending) });
+    await this.escalate(pending);
     await this.store.addEvent(label, { at: Date.now(), kind: "escalated", detail: reason, amount: p.amount, currency });
     return { decision: "pending_human" as const, reason: why, approval_id: pending.id, approver, ...this.approvalLink(pending.id) };
   }

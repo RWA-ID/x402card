@@ -430,15 +430,15 @@
   };
   const SAMPLE = [
     ["researcher", "ModelHub API (modelhub.eth ✓) · inference", "$4.12", "ok"],
-    ["scout", "Vectorbase · storage", "$11.00", "ok"],
+    ["maria", "Hotel Avenida · offsite", "$186.00", "ok"],
     ["travel-bot", "SkyFare · airline", "$389.00", "hold"],
     ["ops-copilot", "Computa · GPU hours", "$27.40", "ok"],
     ["pricing-bot", "SpinPalace · gambling", "$18.00", "mcc"],
-    ["researcher", "alice.eth · top-up", "+$300.00", "fund"],
-    ["scout", "DataLoom · datasets", "$46.00", "ok"],
+    ["dev-ana", "approved by l•••@acme.com · top-up", "+$500.00", "fund"],
+    ["marketing", "AdGrid · ads", "$46.00", "ok"],
     ["ledger-bot", "velocity anomaly", "—", "frz"],
     ["scout", "modelhub-pay.example · lookalike checkout", "$20.00", "payee"],
-    ["ops-copilot", "MailRelay · email API", "$2.80", "ok"],
+    ["sam", "contract ended · frozen by manager", "—", "frz"],
     ["travel-bot", "GeoTile · maps API", "$6.50", "ok"],
     ["pricing-bot", "LuxeGoods · retail", "$129.00", "mcc"],
   ];
@@ -513,15 +513,39 @@
     void dotAnim;
   }
 
-  // ---------- CTAs ----------
-  function initCtas() {
-    $$("[data-cta]").forEach((b) => b.addEventListener("click", () => {
-      window.scrollTo({ top: 0, behavior: R ? "auto" : "smooth" });
-      const q = $("[data-hero-q]");
-      heroStop = true;
-      setTimeout(() => { q.value = ""; q.dispatchEvent(new Event("input")); q.focus(); }, R ? 0 : 450);
+  // ---------- Demo account ----------
+  // Signed in already: the buttons go straight to the console.
+  function initSignup() {
+    const Auth = window.XCardAuth;
+    const signedIn = () => !!Auth?.session();
+    const label = () => $$("[data-signup]").forEach((b) => {
+      b.textContent = signedIn() ? (b.classList.contains("btn-nav") ? "Open console" : "Open your console") : (b.classList.contains("btn-nav") ? "Create demo account" : "Create a demo account");
+    });
+    label();
+    $$("[data-signup]").forEach((b) => b.addEventListener("click", async () => {
+      if (signedIn()) { location.href = "console" + location.search; return; }
+      const s = await Auth.open({});
+      if (s) location.href = "console" + location.search;
     }));
+    window.addEventListener("storage", label);
   }
 
-  initTilt(); initHero(); initBeats(); initFeed(); initCtas();
+  // ---------- Manage-by-name chat ----------
+  // Messages appear in order once the panel is in view.
+  function initChat() {
+    const chat = $("[data-chat]");
+    if (!chat) return;
+    const items = $$("[data-c]", chat).sort((a, b) => a.dataset.c - b.dataset.c);
+    if (R) { items.forEach((n) => n.classList.add("on")); return; }
+    const io = new IntersectionObserver((es) => {
+      if (!es.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      const gaps = [0, 700, 600, 1300, 900, 500, 500, 1600];
+      let t = 200;
+      items.forEach((n, i) => { t += gaps[i] ?? 600; setTimeout(() => n.classList.add("on"), t); });
+    }, { threshold: 0.35 });
+    io.observe(chat);
+  }
+
+  initTilt(); initHero(); initBeats(); initFeed(); initSignup(); initChat();
 })();

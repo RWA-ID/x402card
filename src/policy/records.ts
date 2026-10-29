@@ -26,7 +26,7 @@ export interface CardPolicy {
   /** Empty = any MCC. */
   mccAllow: string[];
   status: "active" | "frozen";
-  /** Who may approve escalations (ENS name or address). */
+  /** Who may approve escalations: an ENS name or address (signs) or an email (signs in by code). */
   approver: string;
   /**
    * What a payment needs to know about who it pays (see policy/payee.ts).
@@ -66,8 +66,13 @@ export function parseRecords(r: TextRecords): CardPolicy {
   const status = (r["card.status"] ?? "active").trim();
   if (status !== "active" && status !== "frozen") throw new PolicyError("card.status must be active|frozen");
 
-  const approver = (r["card.approver"] ?? "").trim();
+  let approver = (r["card.approver"] ?? "").trim();
   if (!approver) throw new PolicyError("card.approver is required");
+  // An email approver decides by email sign-in; kept lowercase so it matches the session.
+  if (approver.includes("@")) {
+    if (!isEmail(approver)) throw new PolicyError(`card.approver "${approver}" is not a valid email`);
+    approver = approver.toLowerCase();
+  }
 
   // Absent = any, so cards issued before the payee gate keep paying as they did.
   const payee = (r["card.payee"] ?? "").trim() || "any";
@@ -85,6 +90,25 @@ export function parseRecords(r: TextRecords): CardPolicy {
 
 // The verifier only reads .eth names; anything else could never match.
 const ENS_NAME = /^[^\s.,]+(\.[^\s.,]+)*\.eth$/;
+
+const EMAIL = /^[^\s@,;<>"]+@[^\s@,;<>"]+\.[a-z]{2,}$/i;
+export const isEmail = (v: string) => v.length <= 254 && EMAIL.test(v.trim());
+
+/** "maria@acme.com" -> "m•••@acme.com": how an email approver appears anywhere public. */
+export function maskEmail(v: string): string {
+  const [user, domain] = v.split("@");
+  return `${user.slice(0, 1)}•••@${domain}`;
+}
+
+/**
+ * Records as the public sees them (ENS gateway, /public/*): an email approver
+ * is masked. ENS records are readable by anyone, and an employee's address
+ * shouldn't be one lookup away.
+ */
+export function publicRecords<T extends TextRecords | null>(r: T): T {
+  const a = r?.["card.approver"];
+  return r && a && isEmail(a) ? { ...r, "card.approver": maskEmail(a) } : r;
+}
 
 export function toRecords(p: CardPolicy): Required<TextRecords> {
   return {

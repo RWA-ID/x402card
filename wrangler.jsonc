@@ -11,7 +11,7 @@
     // Base address for DELEGATE cardholders; +<label>-<ts> is appended.
     "CARDHOLDER_EMAIL": "agents@x402card.dev",
     // Returned to agents with escalated funding requests.
-    "APPROVAL_URL": "https://x-card.dev/approve.html#{id}",
+    "APPROVAL_URL": "https://x-card.dev/approve#{id}",
     // shop.xcard.eth (the demo merchant) is verified on these too, not only on the gateway's origin.
     "DEMO_MERCHANT_ORIGINS": "https://api.x-card.dev https://mcp.x-card.dev"
   },
@@ -32,5 +32,5 @@
     { "binding": "OAUTH_KV", "id": "ebfa28d0bffd4d2eb6c438aef68b31c6" }
   ]
   // Secrets (wrangler secret put): GATEWAY_SIGNER_KEY, AWX_CLIENT_ID, AWX_API_KEY, MCP_ADMIN_TOKEN, APPROVAL_SECRET,
-  // ETH_RPC_URL, TAP_PRIVATE_KEY. Optional var OPERATORS: wallets that may connect an MCP client to every card.
+  // ETH_RPC_URL, TAP_PRIVATE_KEY, RESEND_API_KEY. Optional var OPERATORS: wallets that may connect an MCP client to every card.
 }

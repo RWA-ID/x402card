@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Approvals · X Card</title>
-<meta name="description" content="How a human approves an AI agent's funding request on X Card, step by step, and the operator console for pending requests.">
+<title>Approve a request · X Card</title>
+<meta name="description" content="Decide one request from an X Card: confirm by email or sign with your wallet.">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0a0b0d">
 <link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
@@ -27,8 +27,7 @@
     </div>
     <div class="nav-links">
       <a href="index.html" class="hide-sm">Overview</a>
-      <a href="approve.html" class="here">Approvals</a>
-      <a href="legal.html" class="hide-sm">Legal</a>
+      <a href="console">Console</a>
     </div>
   </div>
 </nav>
@@ -37,128 +36,14 @@
   <div class="page-head">
     <div style="display:flex;flex-direction:column;gap:18px">
       <div class="kicker"><span class="n">→</span><span>Human in the loop</span></div>
-      <h1>Approvals</h1>
-      <p class="page-sub">When an agent asks for more than its policy allows, the request waits here for the person named in <span class="mono">card.approver</span>.</p>
-    </div>
-    <div class="page-meta" data-meta hidden>
-      <span data-updated>—</span>
-      <button data-refresh>↻ refresh</button>
-      <button data-signout>sign out</button>
+      <h1>A card is asking</h1>
+      <p class="page-sub">Its agent wants more than the card’s policy allows, so nothing happens until the approver decides.</p>
     </div>
   </div>
 
   <section class="block one" data-one hidden>
-    <div class="block-head"><h2>Your decision</h2><span class="count">signed with your wallet</span></div>
+    <div class="block-head"><h2>Your decision</h2><span class="count" data-one-how></span></div>
     <div data-one-body aria-live="polite"></div>
-  </section>
-
-  <section class="wizard" data-wizard aria-label="How an approval works">
-    <div class="wiz-stage">
-      <div class="floor-glow"></div>
-      <div class="wiz-req" data-w="req"><b>+$300</b><span data-w="reqtxt">request_funding · dataset license</span></div>
-      <div class="tilt wiz-tilt" data-wiz-tilt>
-        <div class="card hero-card wiz-card" data-w="card">
-          <div class="sheen-clip"><div class="sheen" data-wiz-sheen></div></div>
-          <div class="card-top"><div class="wordmark"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</div><div class="card-kind">AGENT · VIRTUAL</div></div>
-          <div class="wiz-mid">
-            <div class="chip"></div>
-            <div class="wiz-right">
-              <div class="wiz-status" data-w="status">ACTIVE</div>
-              <div class="wiz-seal" data-w="seal"><span>SEALED</span><span>researcher · 300 · USD · 24h</span></div>
-            </div>
-          </div>
-          <div class="card-bottom">
-            <div class="card-num">•••• •••• •••• 4021</div>
-            <div class="card-name">researcher.xcard.eth</div>
-          </div>
-          <div class="hero-glow" data-w="glow"></div>
-        </div>
-      </div>
-      <div class="wiz-meter">
-        <div class="allow-top"><span>Monthly allowance</span><span class="mono" data-w="allow">$500</span></div>
-        <div class="track"><div class="fill-next" data-w="next"></div><div class="fill" data-w="fill"></div></div>
-        <div class="allow-foot"><span data-w="rec">card.limit.monthly = 500</span><span data-w="ens"></span></div>
-      </div>
-    </div>
-    <div class="wiz-steps">
-      <div class="kicker"><span class="n">→</span><span>How an approval works</span></div>
-      <ol class="wiz-list" data-wiz-list></ol>
-      <div class="wiz-nav">
-        <button class="btn-deny" data-wiz-back>Back</button>
-        <span class="mono wiz-count" data-wiz-count>1 / 6</span>
-        <button class="approve-btn" data-wiz-next>Next</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="signin" data-signin hidden>
-    <h2>Sign in</h2>
-    <p>Paste the X Card admin token. It stays in this tab only (session storage) and is sent only to the X Card API.</p>
-    <form class="field" data-signin-form>
-      <input type="password" data-token autocomplete="off" spellcheck="false" placeholder="admin token" aria-label="Admin token">
-      <button class="btn-sm" type="submit" style="cursor:pointer">Connect</button>
-    </form>
-    <div class="err" data-signin-err></div>
-    <p style="font-size:12.5px;color:var(--dim)">Approving one request? Open the link the agent gave you: it signs with the wallet in <span class="mono">card.approver</span>, no token needed. The operator console here is for issuing cards and the whole fleet.</p>
-  </section>
-
-  <section class="block" data-app hidden>
-    <div class="block-head"><h2>Waiting for you</h2><span class="count" data-pending-count></span></div>
-    <div class="req-list" data-pending></div>
-  </section>
-
-  <section class="block" data-app hidden>
-    <div class="block-head"><h2>Issue a card</h2><span class="count">operator</span></div>
-    <form class="issue" data-issue-form novalidate>
-      <div class="issue-row">
-        <label class="issue-f issue-name">
-          <span>Name</span>
-          <div class="field">
-            <input data-issue-label required maxlength="63" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="scout" aria-label="Label">
-            <div class="ns-switch" role="radiogroup" aria-label="Namespace" data-ns-switch>
-              <button type="button" role="radio" data-ns="xcard.eth" aria-checked="true">.xcard.eth</button>
-              <button type="button" role="radio" data-ns="x402card.eth" aria-checked="false">.x402card.eth</button>
-            </div>
-          </div>
-        </label>
-      </div>
-      <div class="issue-grid">
-        <label class="issue-f"><span>Per transaction</span><div class="field"><input data-issue="limit_tx" type="number" min="0" step="any" value="50" required></div></label>
-        <label class="issue-f"><span>Daily limit <i>empty = none</i></span><div class="field"><input data-issue="limit_daily" type="number" min="0" step="any" value="200"></div></label>
-        <label class="issue-f"><span>Monthly allowance</span><div class="field"><input data-issue="limit_monthly" type="number" min="0" step="any" value="500" required></div></label>
-        <label class="issue-f"><span>Currencies</span><div class="field"><input data-issue="currencies" value="USD" spellcheck="false" required></div></label>
-        <label class="issue-f"><span>Allowed MCCs <i>empty = any</i></span><div class="field"><input data-issue="mcc_allow" value="5734,7372" spellcheck="false"></div></label>
-        <label class="issue-f"><span>Approver</span><div class="field"><input data-issue="approver" placeholder="alice.eth" spellcheck="false" required></div></label>
-      </div>
-      <div class="issue-row issue-payee">
-        <div class="issue-f">
-          <span id="payee-mode-l">Payee check</span>
-          <div class="ns-switch" role="radiogroup" aria-labelledby="payee-mode-l" data-payee-switch>
-            <button type="button" role="radio" data-payee="verified-or-escalate" aria-checked="true">verified or ask</button>
-            <button type="button" role="radio" data-payee="verified-only" aria-checked="false">verified only</button>
-            <button type="button" role="radio" data-payee="any" aria-checked="false">any</button>
-          </div>
-        </div>
-        <label class="issue-f issue-allow"><span>Allowed payees <i>empty = any verified</i></span><div class="field"><input data-issue="payee_allow" placeholder="modelhub.eth, shop.xcard.eth" spellcheck="false" autocapitalize="off"></div></label>
-        <p class="issue-hint" data-payee-hint></p>
-      </div>
-      <div class="issue-foot">
-        <div class="issue-preview mono" data-issue-preview aria-live="polite"></div>
-        <button class="btn-sm" type="submit" data-issue-submit disabled>Issue card</button>
-      </div>
-      <div class="err" data-issue-err></div>
-    </form>
-    <div class="issued" data-issued hidden></div>
-  </section>
-
-  <section class="block" data-app hidden>
-    <div class="block-head"><h2>Fleet</h2><span class="count" data-fleet-count></span></div>
-    <div data-fleet></div>
-  </section>
-
-  <section class="block" data-app hidden>
-    <div class="block-head"><h2>History</h2><span class="count" data-history-count></span></div>
-    <div data-history></div>
   </section>
 </main>
 
@@ -166,11 +51,8 @@
   <div class="wrap">
     <div class="foot-main">
       <a href="index.html" class="wordmark" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
-      <a class="gh" href="https://github.com/RWA-ID/x402card" target="_blank" rel="noopener" aria-label="X Card on GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>RWA-ID/x402card</span></a>
     </div>
     <div class="foot-links">
-      <a href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">resolver ↗</a>
-      <a href="legal.html#disclaimer">Disclaimer</a>
       <a href="legal.html#privacy">Privacy</a>
       <a href="legal.html#terms">Terms</a>
       <span>Sandbox demo, no real money.</span>
@@ -178,7 +60,7 @@
   </div>
 </footer>
 
-<script src="wizard.js" defer></script>
-<script src="approve.js" defer></script>
+<script src="auth.js" defer></script>
+<script src="console.js" defer></script>
 </body>
 </html>

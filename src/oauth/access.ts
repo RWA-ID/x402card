@@ -1,11 +1,12 @@
 // Who may connect an MCP client (Claude, ChatGPT, Grok) over OAuth, and as what.
 //
-// The person signs in with their wallet (Sign-In with Ethereum). What that
-// wallet may grant follows the card policy already on ENS:
-//   wallet = every card whose card.approver resolves to this wallet, read again
-//            on each request, so cards issued later join and reassigned ones leave.
-//   card  = a card whose card.approver resolves to this wallet. The client acts
-//           as that card's agent, exactly like its agent token.
+// The person signs in with their email (a code, auth/email.ts) or their wallet
+// (Sign-In with Ethereum). What they may grant follows the card policy already on ENS:
+//   wallet = "all my cards": every card whose card.approver is this email or
+//            resolves to this wallet, plus the cards it issued, read again on
+//            each request, so cards issued later join and reassigned ones leave.
+//   card  = a card whose card.approver is this person. The client acts as that
+//           card's agent, exactly like its agent token.
 //   fleet = an operator wallet (OPERATORS): every card, plus issue_card, like
 //           the admin token.
 // Approvals are not part of any grant: they still need card.approver's own
@@ -21,7 +22,9 @@ export type Grant = { kind: "fleet" } | { kind: "wallet" } | { kind: "card"; car
 
 /** What a token carries (encrypted by the OAuth library) and what the MCP handler turns into a Caller. */
 export interface GrantProps {
-  address: Address;
+  /** Exactly one of address (wallet sign-in) and email (code sign-in). */
+  address?: Address;
+  email?: string;
   grant: Grant;
   /** card.approver when the grant was made; a different approver now ends the grant. */
   approver?: string;
@@ -44,14 +47,16 @@ export interface AccessDeps {
   verifyMessage(address: Address, message: string, signature: Hex): Promise<boolean>;
   /** Operator wallets (lowercase or checksummed). */
   operators: string[];
+  /** Email sign-in by code (auth/email.ts). Without it the consent page offers wallets only. */
+  email?: { start(email: unknown, ip: string): Promise<{ sent: true; dev_code?: string }>; check(email: unknown, code: unknown): Promise<string> };
 }
 
 export const grantId = (g: Grant) => (g.kind === "card" ? `card:${g.card}` : g.kind);
 
 /** The cards whose card.approver resolves to this wallet, with that approver. */
-export async function walletCards(address: Address, deps: Pick<AccessDeps, "store" | "resolve">): Promise<{ label: string; approver: string }[]> {
+export async function walletCards(address: Address, deps: Pick<AccessDeps, "store" | "resolve">): Promise<{ label: string; approver: string; issuedOnly?: boolean }[]> {
   const me = address.toLowerCase();
-  const out: { label: string; approver: string }[] = [];
+  const out: { label: string; approver: string; issuedOnly?: boolean }[] = [];
   // One ENS read per distinct approver, however many cards share it.
   const resolved = new Map<string, Promise<Address | null>>();
   // The index catches cards issued in the last minute that list() doesn't show yet;
@@ -59,32 +64,55 @@ export async function walletCards(address: Address, deps: Pick<AccessDeps, "stor
   const labels = [...new Set([...(await deps.store.walletIndex(address)), ...(await deps.store.listLabels())])];
   for (const label of labels) {
     const approver = (await deps.store.getRecords(label))?.["card.approver"]?.trim();
-    if (!approver || !isSignableApprover(approver)) continue;
-    if (!resolved.has(approver)) resolved.set(approver, deps.resolve(approver).catch(() => null));
-    const addr = await resolved.get(approver)!;
-    if (addr?.toLowerCase() === me) out.push({ label, approver });
+    if (!approver) continue;
+    if (isSignableApprover(approver)) {
+      if (!resolved.has(approver)) resolved.set(approver, deps.resolve(approver).catch(() => null));
+      const addr = await resolved.get(approver)!;
+      if (addr?.toLowerCase() === me) { out.push({ label, approver }); continue; }
+    }
+    // Issued by this wallet for someone else to approve: still its card to manage.
+    if ((await deps.store.getCard(label))?.issuedBy?.toLowerCase() === me) out.push({ label, approver, issuedOnly: true });
   }
   return out;
 }
 
-/** Every grant this wallet may make: operator, then all its cards, then each card. */
-export async function accessOptions(address: Address, deps: AccessDeps): Promise<AccessOption[]> {
-  const me = address.toLowerCase();
+/** The cards an email account approves or issued (its index; the records decide). */
+export async function emailCards(email: string, store: Store): Promise<{ label: string; approver: string; issuedOnly?: boolean }[]> {
+  const me = email.toLowerCase();
+  const out: { label: string; approver: string; issuedOnly?: boolean }[] = [];
+  for (const label of await store.accountIndex(me)) {
+    const [ref, rec] = await Promise.all([store.getCard(label), store.getRecords(label)]);
+    const approver = rec?.["card.approver"]?.trim();
+    if (!ref || !approver) continue;
+    if (approver === me) out.push({ label, approver });
+    else if (ref.issuedBy === me) out.push({ label, approver, issuedOnly: true });
+  }
+  return out;
+}
+
+export type Identity = { address: Address } | { email: string };
+
+const cardsOf = (id: Identity, deps: Pick<AccessDeps, "store" | "resolve">) =>
+  "email" in id ? emailCards(id.email, deps.store) : walletCards(id.address, deps);
+
+/** Every grant this person may make: operator (wallets only), then all their cards, then each card they approve. */
+export async function accessOptions(id: Identity, deps: AccessDeps): Promise<AccessOption[]> {
   const out: AccessOption[] = [];
-  if (deps.operators.some((o) => o.trim().toLowerCase() === me)) {
+  if ("address" in id && deps.operators.some((o) => o.trim().toLowerCase() === id.address.toLowerCase())) {
     out.push({ id: "fleet", grant: { kind: "fleet" }, name: "Every card (operator)", detail: "Issue cards and act for any card, like the admin token." });
   }
-  const cards = await walletCards(address, deps);
+  const cards = await cardsOf(id, deps);
   // Offered with no cards too: the app can then issue this wallet a test card.
   out.push({
     id: "wallet",
     grant: { kind: "wallet" },
     name: cards.length ? `All my cards (${cards.length})` : "My cards (none yet)",
     detail: cards.length
-      ? "Every card you approve, including cards issued to you later."
-      : "Connect now and ask the app to issue you a test card. You'll be its approver.",
+      ? "Every card you approve or issued, including cards issued later."
+      : "Connect now and ask the app to issue you a card.",
   });
-  for (const { label, approver } of cards) {
+  // A single-card grant acts as that card's agent, so it's only for the card's approver.
+  for (const { label, approver } of cards.filter((c) => !c.issuedOnly)) {
     const grant: Grant = { kind: "card", card: label };
     out.push({ id: grantId(grant), grant, name: fullName(label), detail: `You're its approver (${approver}).`, approver });
   }
@@ -98,7 +126,10 @@ export async function accessOptions(address: Address, deps: AccessDeps): Promise
  */
 export async function callerFor(p: GrantProps, deps: Pick<AccessDeps, "store" | "resolve">): Promise<Caller | null> {
   if (p.grant.kind === "fleet") return { kind: "admin" };
-  if (p.grant.kind === "wallet") return { kind: "owner", address: p.address, labels: (await walletCards(p.address, deps)).map((c) => c.label) };
+  if (p.grant.kind === "wallet") {
+    const id: Identity = p.email ? { email: p.email } : { address: p.address! };
+    return { kind: "owner", ...id, labels: (await cardsOf(id, deps)).map((c) => c.label) };
+  }
   const records = await deps.store.getRecords(p.grant.card);
   if (!records || (records["card.approver"] ?? "").trim() !== p.approver) return null;
   return { kind: "agent", label: p.grant.card };
