@@ -25,6 +25,7 @@ The policy is enforced twice: by X Card before anything is sent, and by the card
 | Visa TAP public key | [`https://api.x-card.dev/keys`](https://api.x-card.dev/keys) (keyid `BCwc4nK__9sgdXJKh-4w_AV76G4lsBXaSDWvk5orgoY`) |
 | Demo merchant (verifies TAP) | `https://api.x-card.dev/demo-merchant/*` (`shop.xcard.eth` lists this origin and the workers.dev one) |
 | Card rails | [Airwallex Issuing](https://www.airwallex.com/docs/issuing) (sandbox) |
+| Contact | hello@x-card.dev · [@xcard_dev](https://x.com/xcard_dev) on X |
 
 > **Sandbox, no real money.** ENS resolution and the payee check are real (Ethereum mainnet), and so are the TAP signatures. Cards, charges and balances run on the Airwallex sandbox.
 >

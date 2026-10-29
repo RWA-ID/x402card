@@ -26,7 +26,7 @@
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
   // The approval page without a request is just the console.
-  if (!CONSOLE && !UUID.test(location.hash.slice(1))) { location.replace("console" + location.search); return; }
+  if (!CONSOLE && !UUID.test(location.hash.slice(1))) { location.replace("console.html" + location.search); return; }
 
   let admin = readAdmin();
   let me = null; // { email } or { admin: true }, from /api/me
@@ -421,7 +421,7 @@
         renderPending(approvals, cards);
         renderFleet(cards);
         renderHistory(approvals);
-        firstCard(cards.length === 0);
+        firstCard(cards);
       }
       $("[data-updated]").textContent = "updated " + new Date().toTimeString().slice(0, 8);
     } catch (err) {
@@ -432,8 +432,11 @@
   }
 
   // A new account with no cards: the issue form leads, titled for it.
-  function firstCard(none) {
+  function firstCard(cards) {
+    const none = cards.length === 0;
     const blk = $("[data-issue-block]");
+    const mine = cards.filter((c) => c.issued_by_me).length;
+    $("[data-issue-left]").textContent = me.admin || !caps ? "" : `${Math.max(0, caps.perAccount - mine)} of ${caps.perAccount} left`;
     blk.classList.toggle("first", none && !me.admin);
     $("[data-issue-title]").textContent = none && !me.admin ? "Issue your first card" : "Issue a card";
   }
@@ -475,33 +478,43 @@
   }
 
   // Binds the form once; returns what re-applies on every sign-in (who's signed in decides the options).
+  // The left side is a live preview: the card face, how the limits nest, and a summary,
+  // all redrawn on every keystroke. Edit → issuing (the API call) → issued (token shown once).
   function initIssue() {
-    const form = $("[data-issue-form]"), labelIn = $("[data-issue-label]"), preview = $("[data-issue-preview]");
-    const submit = $("[data-issue-submit]"), err = $("[data-issue-err]"), out = $("[data-issued]");
-    const approverIn = $('[data-issue="approver"]');
+    const form = $("[data-issue-form]"), labelIn = $("[data-issue-label]"), err = $("[data-issue-err]");
+    const go = $("[data-issue-submit]"), tokenBox = $("[data-issued]"), again = $("[data-ix-again]");
+    const approverIn = $('[data-issue="approver"]'), payeesIn = $('[data-issue="payee_allow"]');
+    const curIn = $('[data-issue="currencies"]'), mccIn = $('[data-issue="mcc_allow"]');
+    const hint = $("[data-ix-namehint]"), segInd = $("[data-ix-segind]");
+    const card = { name: $("[data-ix-name]"), num: $("[data-ix-num]"), tags: $("[data-ix-tags]"), status: $("[data-ix-status]"),
+      apline: $("[data-ix-apline]"), mo: $("[data-ix-mo]"), glow: $("[data-ix-glow]"), flash: $("[data-ix-flash]") };
     const isAccount = () => !me.admin;
+    const KEYS = ["limit_tx", "limit_daily", "limit_monthly"];
+    const num = (k) => $(`[data-ix="${k}"]`), range = (k) => $(`[data-ix-range="${k}"]`);
+    const usd = (v) => "$" + Number(v).toLocaleString("en-US");
+    const PAYEE_LABEL = { "verified-or-escalate": "verified or ask", "verified-only": "verified only", any: "any" };
 
-    let ns = "xcard.eth";
+    let ns = "xcard.eth", apMode = "email", payee = "verified-or-escalate";
+    let phase = "edit"; // edit | issuing | issued
+    let taken = null;   // null = not checked yet, true / false from /api/names
+    let issued = null;  // { name, last4, token }
+
     const nsGroup = radioGroup("[data-ns-switch] [data-ns]", "ns", (v) => {
       ns = v;
+      segInd.classList.toggle("r", v === "x402card.eth");
       if (!isAccount()) { try { localStorage.setItem(NS_KEY, v); } catch { /* private mode */ } }
-      refresh();
+      edited(); checkName();
     });
-
-    // Approver: an email (they confirm by email) or a wallet / ENS name (they sign).
-    let apMode = "email";
-    const apHint = $("[data-approver-hint]");
-    const AP = {
-      email: { ph: "manager@company.com", hint: "They get each request by email and confirm it signed in with a code. No wallet needed." },
-      wallet: { ph: "alice.eth or 0x…", hint: "They sign each decision with that wallet: free, nothing goes on-chain." },
-    };
+    const AP_PH = { email: "manager@company.com", wallet: "alice.eth or 0x…" };
     const apGroup = radioGroup("[data-approver-switch] [data-ap]", "ap", (v) => {
       const prev = apMode; apMode = v;
-      approverIn.placeholder = AP[v].ph; apHint.textContent = AP[v].hint;
+      approverIn.placeholder = AP_PH[v];
       approverIn.type = v === "email" ? "email" : "text";
       // Switching modes clears a value that belongs to the other one; email starts as you.
       if (prev !== v) approverIn.value = v === "email" && isAccount() ? me.email : "";
+      edited();
     });
+    const payGroup = radioGroup("[data-payee-switch] [data-payee]", "payee", (v) => { payee = v; edited(); });
 
     // Pasting a full name picks its namespace.
     const label = () => {
@@ -514,118 +527,186 @@
       }
       return v;
     };
-    const problem = (v) =>
-      !v ? "" : !LABEL_RE.test(v) ? "Use lowercase letters, digits and hyphens (not at the start or end)."
-        : isReserved(v, ns) ? `${v}.${ns} is reserved.` : "";
+    const vals = () => Object.fromEntries(KEYS.map((k) => [k, num(k).value.trim()]));
+    const nameOk = (v) => LABEL_RE.test(v) && !isReserved(v, ns);
+    const approverOk = () => {
+      const v = approverIn.value.trim();
+      return apMode === "email" ? isEmail(v) : APPROVER_RE.test(v);
+    };
+
     // Taken names show while typing.
     let checkSeq = 0, checkTimer;
-    const avail = $("[data-issue-avail]");
-    function refresh() {
+    function checkName() {
       const v = label();
-      const p = problem(v);
-      preview.textContent = v ? (p ? "" : `→ ${v}.${ns}`) : `→ <name>.${ns}`;
-      err.textContent = p;
-      submit.disabled = !v || !!p;
-      avail.textContent = ""; avail.className = "issue-avail";
+      taken = null;
       clearTimeout(checkTimer);
-      if (!v || p) return;
+      if (!v || !nameOk(v)) return draw();
       const seq = ++checkSeq;
       checkTimer = setTimeout(async () => {
         try {
           const r = await api(`/api/names/${encodeURIComponent(`${v}.${ns}`)}`);
-          if (seq !== checkSeq) return;
-          avail.textContent = r.available ? "available" : "taken";
-          avail.className = "issue-avail " + (r.available ? "ok" : "no");
-          if (!r.available) { err.textContent = r.reason; submit.disabled = true; }
+          if (seq === checkSeq) { taken = !r.available; draw(); }
         } catch { /* the submit reports it */ }
-      }, 300);
+      }, 250);
+      draw();
     }
-    labelIn.addEventListener("input", refresh);
 
-    // Payee check: new cards default to verified-or-escalate.
-    const PAYEE_HINT = {
-      "verified-or-escalate": "A merchant whose ENS name lists the checkout pays straight through. Any other merchant waits for the approver; a lookalike is blocked.",
-      "verified-only": "Only merchants whose ENS name lists the checkout. Everything else is blocked, with no approval path.",
-      any: "No payee gate: the card pays any merchant its limits allow, and allowed payees are ignored. Fine for testing, not for real money.",
-    };
-    let payee = "verified-or-escalate";
-    const payeeHint = $("[data-payee-hint]");
-    radioGroup("[data-payee-switch] [data-payee]", "payee", (v) => { payee = v; payeeHint.textContent = PAYEE_HINT[v]; }).set(payee);
+    // Any edit after issuing goes back to editing a new card.
+    function edited() {
+      if (phase === "issued") { phase = "edit"; issued = null; tokenBox.hidden = true; again.hidden = true; }
+      draw();
+    }
+
+    function draw() {
+      const v = label(), f = vals();
+      const full = `${v || "name"}.${ns}`;
+      const ok = nameOk(v), numsOk = f.limit_tx !== "" && f.limit_monthly !== "";
+      const ready = ok && taken === false && numsOk && approverOk();
+
+      // Name hint.
+      hint.className = "ix-hint";
+      if (phase === "issued") { hint.textContent = `${issued.name} issued`; hint.classList.add("ok"); }
+      else if (!v) hint.textContent = "lowercase letters, digits and hyphens";
+      else if (!LABEL_RE.test(v)) { hint.textContent = "only a–z, 0–9 and inner hyphens"; hint.classList.add("no"); }
+      else if (isReserved(v, ns)) { hint.textContent = `${full} is reserved`; hint.classList.add("no"); }
+      else if (taken) { hint.textContent = `${full} is taken`; hint.classList.add("no"); }
+      else if (taken === false) { hint.textContent = `${full} is available`; hint.classList.add("ok"); }
+      else hint.textContent = `checking ${full}…`;
+
+      // Card face.
+      card.name.textContent = phase === "issued" ? issued.name : full;
+      card.name.classList.toggle("empty", !v && phase !== "issued");
+      card.num.textContent = "•••• •••• •••• " + (phase === "issued" && issued.last4 ? issued.last4 : "····");
+      card.tags.textContent = "";
+      const mcc = mccIn.value.trim();
+      for (const t of [`tx ≤ ${f.limit_tx === "" ? "—" : usd(f.limit_tx)}`, f.limit_daily === "" ? "no daily cap" : `day ≤ ${usd(f.limit_daily)}`, `mcc: ${mcc || "any"}`]) {
+        card.tags.append(el("span", { text: t }));
+      }
+      card.status.textContent = phase === "issued" ? "ACTIVE" : "DRAFT";
+      card.status.classList.toggle("on", phase === "issued");
+      card.apline.textContent = `→ ${approverIn.value.trim() || "approver"} · ${PAYEE_LABEL[payee]}`;
+      card.mo.textContent = f.limit_monthly === "" ? "—" : usd(f.limit_monthly);
+      card.glow.style.opacity = phase === "issued" ? 1 : phase === "issuing" ? 0.6 : ready ? 0.25 : 0;
+
+      // How the limits nest: each as a share of the monthly allowance.
+      const mo = Math.max(1, Number(f.limit_monthly) || 0);
+      for (const [k, key] of [["monthly", "limit_monthly"], ["daily", "limit_daily"], ["tx", "limit_tx"]]) {
+        const raw = f[key];
+        $(`[data-ix-mv="${k}"]`).textContent = raw === "" ? (k === "daily" ? "none" : "—") : usd(raw);
+        $(`[data-ix-bar="${k}"]`).style.width = `${Math.min(100, ((Number(raw) || 0) / mo) * 100)}%`;
+      }
+      $('[data-ix-sum="approver"]').textContent = approverIn.value.trim() || "—";
+      $('[data-ix-sum="payee"]').textContent = PAYEE_LABEL[payee];
+      $('[data-ix-sum="payees"]').textContent = payeesIn.value.trim() || "any verified";
+
+      // The action button.
+      go.hidden = phase === "issued";
+      go.classList.toggle("busy", phase === "issuing");
+      go.disabled = phase !== "edit" || !ready;
+      go.textContent = phase === "issuing" ? "Writing to ENS…"
+        : ready ? `Issue ${full} →`
+        : !ok ? "Add a valid name" : taken ? "Name is taken" : taken === null ? "Checking the name…" : !numsOk ? "Set the limits" : "Add an approver";
+    }
+
+    // Sliders and number boxes move together; demo accounts are capped.
+    for (const k of KEYS) {
+      num(k).addEventListener("input", () => { if (num(k).value !== "") range(k).value = num(k).value; edited(); });
+      range(k).addEventListener("input", () => { num(k).value = range(k).value; edited(); });
+    }
+    labelIn.addEventListener("input", () => { edited(); checkName(); });
+    for (const i of [approverIn, payeesIn, curIn, mccIn]) i.addEventListener("input", edited);
+
+    // Tilt and sheen follow the pointer over the preview.
+    const zone = $("[data-ix-tiltzone]"), tilt = $("[data-ix-tilt]");
+    if (!R) {
+      zone.addEventListener("mousemove", (e) => {
+        const r = zone.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+        tilt.style.transform = `rotateY(${(px - 0.5) * 16}deg) rotateX(${(0.5 - py) * 12}deg)`;
+        tilt.style.setProperty("--sx", `${(px - 0.5) * 40}%`);
+      });
+      zone.addEventListener("mouseleave", () => { tilt.style.transform = ""; tilt.style.setProperty("--sx", "0%"); });
+    }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const v = label();
-      if (!v || problem(v)) return refresh();
-      const f = (k) => $(`[data-issue="${k}"]`).value.trim();
-      const list = (s) => s.split(/[\s,]+/).filter(Boolean);
-      const approver = f("approver");
-      if (!approver) { err.textContent = apMode === "email" ? "Enter the approver's email." : "Enter the approver's ENS name or wallet address."; return; }
-      if (apMode === "email" ? !isEmail(approver) : !APPROVER_RE.test(approver)) {
-        err.textContent = apMode === "email" ? `${approver} isn't an email address.` : `${approver} isn't an ENS name or a 0x address.`; return;
-      }
-      const payeeAllow = list(f("payee_allow").toLowerCase());
-      const badPayee = payeeAllow.find((n) => !PAYEE_NAME_RE.test(n));
-      if (badPayee) { err.textContent = `${badPayee} isn't an ENS name. Allowed payees look like modelhub.eth.`; return; }
-      const name = `${v}.${ns}`;
-      submit.disabled = true; submit.textContent = "Issuing…"; err.textContent = "";
+      if (go.disabled || phase !== "edit") return;
+      const v = label(), f = vals();
+      const list = (x) => x.split(/[\s,]+/).filter(Boolean);
+      const payeeAllow = list(payeesIn.value.toLowerCase());
+      const bad = payeeAllow.find((n) => !PAYEE_NAME_RE.test(n));
+      if (bad) { err.textContent = `${bad} isn't an ENS name. Allowed payees look like modelhub.eth.`; return; }
+      err.textContent = "";
+      phase = "issuing"; draw();
+      card.flash.classList.remove("go"); void card.flash.offsetWidth; card.flash.classList.add("go");
+      const t0 = Date.now();
       try {
-        const r = await api("/api/cards", { method: "POST", body: JSON.stringify({ name, policy: {
-          limit_tx: Number(f("limit_tx")), limit_monthly: Number(f("limit_monthly")),
-          ...(f("limit_daily") ? { limit_daily: Number(f("limit_daily")) } : {}),
-          currencies: list(f("currencies").toUpperCase()), mcc_allow: list(f("mcc_allow")), approver,
+        const r = await api("/api/cards", { method: "POST", body: JSON.stringify({ name: `${v}.${ns}`, policy: {
+          limit_tx: Number(f.limit_tx), limit_monthly: Number(f.limit_monthly),
+          ...(f.limit_daily !== "" ? { limit_daily: Number(f.limit_daily) } : {}),
+          currencies: list(curIn.value.toUpperCase()), mcc_allow: list(mccIn.value), approver: approverIn.value.trim(),
           payee, payee_allow: payeeAllow,
         } }) });
-        showIssued(r.card.name, r.agent_token);
-        labelIn.value = "";
+        // Let the sweep finish before the card turns active.
+        await new Promise((res) => setTimeout(res, Math.max(0, 1100 - (Date.now() - t0))));
+        issued = { name: r.card.name, last4: r.card.last4, token: r.agent_token };
+        phase = "issued";
+        showToken();
         highlight = r.card.name;
         lastSig = ""; load();
       } catch (ex) {
+        phase = "edit";
         if (ex.message !== "unauthorized") err.textContent = ex.message;
       } finally {
-        submit.textContent = "Issue card"; refresh();
+        card.flash.classList.remove("go");
+        draw();
       }
     });
 
-    function showIssued(name, tok) {
-      const cmd = `claude mcp add --transport http ${name.split(".")[0]} ${MCP_URL} \\\n  --header "Authorization: Bearer ${tok}"`;
-      // Masked until asked: the page is often on a shared screen or a recording.
-      const masked = (t) => t.replaceAll(tok, tok.slice(0, 4) + "•".repeat(12));
-      const copy = (text) => el("button", { type: "button", class: "btn-xs", text: "Copy", onclick: async (e) => {
-        try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; } catch { e.target.textContent = "Reveal to copy"; }
-      } });
-      const secret = (tag, cls, text) => {
-        const n = el(tag, { class: cls, text: masked(text) });
-        let shown = false;
-        const reveal = el("button", { type: "button", class: "btn-xs", text: "Reveal", onclick: () => {
-          shown = !shown; n.textContent = shown ? text : masked(text); reveal.textContent = shown ? "Hide" : "Reveal";
-        } });
-        return [n, reveal];
-      };
-      out.textContent = "";
-      out.append(
-        el("div", { class: "issued-head" }, pill("active"), el("span", { class: "mono issued-name", text: name }),
-          el("button", { type: "button", class: "issued-x", "aria-label": "Dismiss", text: "×", onclick: () => { out.hidden = true; out.textContent = ""; } })),
-        el("p", { text: "Your card is live, and its policy resolves from the name right now. Give it to an agent (Claude Code, Cursor, any MCP client) with this token. It only works for this card and is shown once: store it now." }),
-        el("div", { class: "issued-line" }, ...secret("code", "mono", tok), copy(tok)),
-        el("p", { text: "Or add it to Claude Code in one line:" }),
-        el("div", { class: "issued-line" }, ...secret("pre", "code", cmd), copy(cmd.replace("\\\n  ", ""))));
-      out.hidden = false;
-      out.scrollIntoView({ block: "nearest", behavior: R ? "auto" : "smooth" });
+    // The agent token, shown once: masked until revealed (the page is often on a shared screen).
+    let revealed = false;
+    const masked = (t) => t.slice(0, 4) + "•".repeat(12);
+    function showToken() {
+      revealed = false;
+      $("[data-ix-token]").textContent = masked(issued.token);
+      $("[data-ix-reveal]").textContent = "reveal";
+      $("[data-ix-copy]").textContent = "copy";
+      $("[data-ix-copycmd]").textContent = "copy the claude mcp add line";
+      tokenBox.hidden = false; again.hidden = false;
     }
+    const copy = async (btn, text, done) => {
+      try { await navigator.clipboard.writeText(text); btn.textContent = done; } catch { btn.textContent = "copy failed"; }
+    };
+    $("[data-ix-reveal]").addEventListener("click", (e) => {
+      revealed = !revealed;
+      $("[data-ix-token]").textContent = revealed ? issued.token : masked(issued.token);
+      e.target.textContent = revealed ? "hide" : "reveal";
+    });
+    $("[data-ix-copy]").addEventListener("click", (e) => copy(e.target, issued.token, "copied"));
+    $("[data-ix-copycmd]").addEventListener("click", (e) =>
+      copy(e.target, `claude mcp add --transport http ${issued.name.split(".")[0]} ${MCP_URL} --header "Authorization: Bearer ${issued.token}"`, "copied the claude mcp add line"));
+    again.addEventListener("click", () => { labelIn.value = ""; edited(); checkName(); labelIn.focus(); });
 
     return function configure() {
       const account = isAccount();
-      // Demo accounts issue under xcard.eth; the operator picks either namespace.
+      // Demo accounts issue under xcard.eth within the demo caps; the operator picks the namespace.
       $("[data-ns-switch]").hidden = account;
       $("[data-ns-fixed]").hidden = !account;
-      $("[data-caps]").hidden = !account;
-      if (account && caps) $("[data-caps]").textContent = `Demo limits: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month, USD, ${caps.perAccount} cards per account.`;
-      const curIn = $('[data-issue="currencies"]');
+      const capEl = $("[data-caps]");
+      capEl.hidden = !account;
+      if (account && caps) capEl.textContent = `Demo limits: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month, USD.`;
+      const maxes = account && caps ? { limit_tx: caps.tx, limit_daily: caps.daily, limit_monthly: caps.monthly } : { limit_tx: 1000, limit_daily: 5000, limit_monthly: 20000 };
+      const defaults = { limit_tx: 100, limit_daily: 500, limit_monthly: 2000 };
+      for (const k of KEYS) {
+        range(k).max = String(maxes[k]); num(k).max = String(maxes[k]);
+        num(k).value = range(k).value = String(Math.min(defaults[k], maxes[k]));
+      }
       curIn.readOnly = account;
-      if (account) curIn.value = "USD";
+      curIn.value = "USD";
       let saved = "xcard.eth";
       if (!account) { try { if (localStorage.getItem(NS_KEY) === "x402card.eth") saved = "x402card.eth"; } catch { /* private mode */ } }
-      nsGroup.set(saved);
+      phase = "edit"; issued = null; tokenBox.hidden = true; again.hidden = true;
+      payGroup.set("verified-or-escalate");
       apGroup.set(account ? "email" : "wallet");
       approverIn.value = account ? me.email : "";
       // A first name to start from: the email's name part.
@@ -634,8 +715,7 @@
         const guess = me.email.split("@")[0].toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
         if (guess && LABEL_RE.test(guess)) labelIn.value = guess;
       }
-      out.hidden = true; out.textContent = "";
-      refresh();
+      nsGroup.set(saved);
     };
   }
 

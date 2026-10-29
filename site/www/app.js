@@ -523,29 +523,85 @@
     });
     label();
     $$("[data-signup]").forEach((b) => b.addEventListener("click", async () => {
-      if (signedIn()) { location.href = "console" + location.search; return; }
+      if (signedIn()) { location.href = "console.html" + location.search; return; }
       const s = await Auth.open({});
-      if (s) location.href = "console" + location.search;
+      if (s) location.href = "console.html" + location.search;
     }));
     window.addEventListener("storage", label);
   }
 
-  // ---------- Manage-by-name chat ----------
-  // Messages appear in order once the panel is in view.
-  function initChat() {
-    const chat = $("[data-chat]");
-    if (!chat) return;
-    const items = $$("[data-c]", chat).sort((a, b) => a.dataset.c - b.dataset.c);
-    if (R) { items.forEach((n) => n.classList.add("on")); return; }
+  // ---------- Manage by name: the iPad simulation ----------
+  // A scripted chat in an AI app using the X Card connector, laid out at 900x640
+  // and scaled to the frame. Plays when the section scrolls into view, loops,
+  // and shows the finished conversation when motion is reduced.
+  function initIpad() {
+    const stage = $("[data-ipad]");
+    if (!stage) return;
+    const screen = $("[data-ip-screen]", stage), app = $("[data-ip-app]", stage);
+    const scroller = $("[data-ip-scroll]", stage), feed = $("[data-ip-feed]", stage);
+    const typedEl = $("[data-ip-typed]", stage), caret = $("[data-ip-caret]", stage), ph = $("[data-ip-ph]", stage), send = $("[data-ip-send]", stage);
+    const appr = $("[data-ip-appr]", stage), tap = $("[data-tap]", stage);
+    const shown = $$("[data-s]", feed), only = $$("[data-only]", feed);
+
+    new ResizeObserver(() => {
+      const k = screen.clientWidth / 900;
+      app.style.transform = `scale(${k})`;
+      screen.style.height = Math.round(640 * k) + "px";
+    }).observe(screen);
+
+    let raf = 0;
+    // Ease the feed to its bottom (as the newest message lands).
+    const follow = () => {
+      cancelAnimationFrame(raf);
+      const tick = () => {
+        const d = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+        if (Math.abs(d) < 1) return;
+        scroller.scrollTop += d * 0.12;
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    };
+    new ResizeObserver(follow).observe(feed);
+
+    const setStep = (n) => {
+      shown.forEach((el) => { el.hidden = n < +el.dataset.s; });
+      only.forEach((el) => { el.hidden = n !== +el.dataset.only; });
+      follow();
+    };
+    const setTyped = (t) => { typedEl.textContent = t; caret.hidden = !t; ph.hidden = !!t; send.classList.toggle("on", !!t); };
+    const setAppr = (v) => { appr.dataset.ipAppr = v; follow(); };
+
+    let timers = [];
+    const at = (t, fn) => timers.push(setTimeout(fn, t));
+    const type = (t0, t1, text) => { const d = (t1 - t0) / text.length; for (let i = 1; i <= text.length; i++) at(t0 + d * i, () => setTyped(text.slice(0, i))); };
+
+    function play() {
+      timers.forEach(clearTimeout); timers = [];
+      scroller.scrollTop = 0; setTyped(""); setAppr("pending"); tap.classList.remove("on"); setStep(0);
+      if (R) { setStep(16); setAppr("approved"); return; }
+      type(400, 1500, "Who’s close to their limit this month?");
+      at(1700, () => { setStep(1); setTyped(""); });
+      [[2000, 2], [2700, 3], [3700, 4], [4700, 5]].forEach(([t, n]) => at(t, () => setStep(n)));
+      type(6100, 8000, "Give ana $500 more for the cloud migration, and freeze sam’s card. His contract ended.");
+      at(8200, () => { setStep(6); setTyped(""); });
+      [[8500, 7], [9100, 8], [10000, 9], [10600, 10], [11500, 11], [12400, 12]].forEach(([t, n]) => at(t, () => setStep(n)));
+      at(14200, () => { setStep(13); tap.classList.remove("on"); void tap.offsetWidth; tap.classList.add("on"); });
+      at(14700, () => setAppr("waiting"));
+      at(16800, () => setAppr("approved"));
+      [[17600, 14], [18100, 15], [18900, 16]].forEach(([t, n]) => at(t, () => setStep(n)));
+      at(25000, play);
+    }
+
+    setStep(R ? 16 : 0);
+    if (R) setAppr("approved");
     const io = new IntersectionObserver((es) => {
       if (!es.some((e) => e.isIntersecting)) return;
       io.disconnect();
-      const gaps = [0, 700, 600, 1300, 900, 500, 500, 1600];
-      let t = 200;
-      items.forEach((n, i) => { t += gaps[i] ?? 600; setTimeout(() => n.classList.add("on"), t); });
+      play();
     }, { threshold: 0.35 });
-    io.observe(chat);
+    io.observe(stage);
+    $("[data-ip-replay]", stage).addEventListener("click", play);
   }
 
-  initTilt(); initHero(); initBeats(); initFeed(); initSignup(); initChat();
+  initTilt(); initHero(); initBeats(); initFeed(); initSignup(); initIpad();
 })();

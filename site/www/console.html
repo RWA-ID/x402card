@@ -25,7 +25,7 @@
     </div>
     <div class="nav-links">
       <a href="index.html" class="hide-sm">Overview</a>
-      <a href="console" class="here">Console</a>
+      <a href="console.html" class="here">Console</a>
       <a href="legal.html" class="hide-sm">Legal</a>
     </div>
   </div>
@@ -111,59 +111,112 @@
   </section>
 
   <section class="block" data-app data-issue-block hidden>
-    <div class="block-head"><h2 data-issue-title>Issue a card</h2><span class="count" data-issue-avail-wrap><span class="issue-avail" data-issue-avail></span></span></div>
-    <form class="issue" data-issue-form novalidate>
-      <div class="issue-row">
-        <label class="issue-f issue-name">
-          <span>Name <i>the card’s whole interface: an employee, a team or an agent</i></span>
-          <div class="field">
-            <input data-issue-label required maxlength="63" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="maria" aria-label="Name">
-            <span class="ns-fixed mono" data-ns-fixed hidden>.xcard.eth</span>
-            <div class="ns-switch" role="radiogroup" aria-label="Namespace" data-ns-switch>
+    <div class="block-head"><h2 data-issue-title>Issue a card</h2><span class="count" data-issue-left></span></div>
+    <form class="ix" data-issue-form novalidate>
+      <aside class="ix-side">
+        <div class="ix-side-in">
+          <div class="ix-preview" data-ix-tiltzone>
+            <div class="ix-floor"></div>
+            <div class="ix-tilt" data-ix-tilt>
+              <div class="ix-card" data-ix-card>
+                <div class="ix-wash"></div>
+                <div class="ix-clip"><div class="ix-sheen"></div><div class="ix-flash" data-ix-flash></div></div>
+                <div class="ix-row"><div class="ix-wm"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</div><div class="ix-kind">AGENT · VIRTUAL</div></div>
+                <div class="ix-row ix-mid">
+                  <div class="ix-chip"></div>
+                  <div class="ix-right">
+                    <div class="ix-tags" data-ix-tags></div>
+                    <div class="ix-apline"><span class="ix-status" data-ix-status>DRAFT</span><span class="ix-apl" data-ix-apline></span></div>
+                  </div>
+                </div>
+                <div class="ix-row ix-bot">
+                  <div class="ix-idn"><div class="ix-num" data-ix-num>•••• •••• •••• ····</div><div class="ix-name" data-ix-name>name.xcard.eth</div></div>
+                  <div class="ix-allow"><div>ALLOWANCE / MO</div><div data-ix-mo>—</div></div>
+                </div>
+                <div class="ix-glow" data-ix-glow></div>
+              </div>
+            </div>
+          </div>
+          <div class="ix-nest">
+            <span class="ix-label">HOW THE LIMITS NEST</span>
+            <div class="ix-meter"><div><span>monthly</span><span data-ix-mv="monthly">—</span></div><div class="ix-track"><div data-ix-bar="monthly"></div></div></div>
+            <div class="ix-meter"><div><span>daily</span><span data-ix-mv="daily">none</span></div><div class="ix-track"><div data-ix-bar="daily"></div></div></div>
+            <div class="ix-meter"><div><span>per transaction</span><span data-ix-mv="tx">—</span></div><div class="ix-track"><div data-ix-bar="tx"></div></div></div>
+          </div>
+          <div class="ix-sum"><span>approver</span><span data-ix-sum="approver">—</span><span>payee check</span><span data-ix-sum="payee">verified or ask</span><span>allowed payees</span><span data-ix-sum="payees">any verified</span></div>
+          <div class="ix-act">
+            <button type="submit" class="ix-go" data-issue-submit>Issue</button>
+            <div class="ix-token" data-issued hidden>
+              <div class="ix-token-h"><span>AGENT TOKEN · SHOWN ONCE</span><span><button type="button" data-ix-reveal>reveal</button> · <button type="button" data-ix-copy>copy</button></span></div>
+              <code data-ix-token></code>
+              <span class="ix-token-n">Only works for this card. <span data-ix-cmd-wrap>Claude Code: <button type="button" data-ix-copycmd>copy the claude mcp add line</button>.</span> Added to Cards below.</span>
+            </div>
+            <button type="button" class="ix-again" data-ix-again hidden>Issue another</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="ix-form">
+        <p class="ix-intro">Set what it may spend and who approves the rest. Tightening applies at once; loosening waits for the approver.</p>
+        <label class="ix-namef">
+          <span class="ix-flabel">Name <i>an employee, a team or an agent</i></span>
+          <div class="ix-namebox">
+            <input data-issue-label maxlength="63" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="maria" aria-label="Name">
+            <span class="ix-nsfix mono" data-ns-fixed hidden>.xcard.eth</span>
+            <div class="ix-seg" role="radiogroup" aria-label="Namespace" data-ns-switch>
+              <div class="ix-seg-ind" data-ix-segind></div>
               <button type="button" role="radio" data-ns="xcard.eth" aria-checked="true">.xcard.eth</button>
               <button type="button" role="radio" data-ns="x402card.eth" aria-checked="false">.x402card.eth</button>
             </div>
           </div>
+          <span class="ix-hint" data-ix-namehint>lowercase letters, digits and hyphens</span>
         </label>
-      </div>
-      <div class="issue-grid">
-        <label class="issue-f"><span>Per transaction</span><div class="field"><input data-issue="limit_tx" type="number" min="0" step="any" value="100" required></div></label>
-        <label class="issue-f"><span>Daily limit <i>empty = none</i></span><div class="field"><input data-issue="limit_daily" type="number" min="0" step="any" value="500"></div></label>
-        <label class="issue-f"><span>Monthly allowance</span><div class="field"><input data-issue="limit_monthly" type="number" min="0" step="any" value="2000" required></div></label>
-        <label class="issue-f"><span>Currencies</span><div class="field"><input data-issue="currencies" value="USD" spellcheck="false" required></div></label>
-        <label class="issue-f"><span>Allowed MCCs <i>empty = any</i></span><div class="field"><input data-issue="mcc_allow" value="5734,7372" spellcheck="false"></div></label>
-      </div>
-      <p class="issue-hint" data-caps hidden></p>
-      <div class="issue-row issue-payee">
-        <div class="issue-f">
-          <span id="approver-mode-l">Approver</span>
-          <div class="ns-switch" role="radiogroup" aria-labelledby="approver-mode-l" data-approver-switch>
-            <button type="button" role="radio" data-ap="email" aria-checked="true">email</button>
-            <button type="button" role="radio" data-ap="wallet" aria-checked="false">wallet or ENS</button>
+
+        <div class="ix-group">
+          <span class="ix-label">LIMITS</span>
+          <div class="ix-slider">
+            <label class="ix-sl-label" for="ix-limit_tx">Per transaction</label>
+            <div class="ix-money"><span>$</span><input id="ix-limit_tx" type="number" min="0" data-ix="limit_tx" placeholder="none" inputmode="decimal"></div>
+            <input type="range" min="0" max="1000" step="5" data-ix-range="limit_tx" aria-label="Per transaction">
+          </div>
+          <div class="ix-slider">
+            <label class="ix-sl-label" for="ix-limit_daily">Daily limit <i>empty = none</i></label>
+            <div class="ix-money"><span>$</span><input id="ix-limit_daily" type="number" min="0" data-ix="limit_daily" placeholder="none" inputmode="decimal"></div>
+            <input type="range" min="0" max="5000" step="25" data-ix-range="limit_daily" aria-label="Daily limit">
+          </div>
+          <div class="ix-slider">
+            <label class="ix-sl-label" for="ix-limit_monthly">Monthly allowance</label>
+            <div class="ix-money"><span>$</span><input id="ix-limit_monthly" type="number" min="0" data-ix="limit_monthly" placeholder="none" inputmode="decimal"></div>
+            <input type="range" min="0" max="20000" step="100" data-ix-range="limit_monthly" aria-label="Monthly allowance">
+          </div>
+          <p class="ix-caps" data-caps hidden></p>
+          <div class="ix-two">
+            <label class="ix-small"><span class="ix-flabel">Currencies</span><input data-issue="currencies" value="USD" spellcheck="false"></label>
+            <label class="ix-small"><span class="ix-flabel">Allowed MCCs <i>empty = any</i></span><input data-issue="mcc_allow" value="5734,7372" spellcheck="false" placeholder="any"></label>
           </div>
         </div>
-        <label class="issue-f issue-allow"><span>Who approves <i>requests over the limits wait for them</i></span><div class="field"><input data-issue="approver" type="email" placeholder="manager@company.com" spellcheck="false" autocapitalize="off" required></div></label>
-        <p class="issue-hint" data-approver-hint></p>
-      </div>
-      <div class="issue-row issue-payee">
-        <div class="issue-f">
-          <span id="payee-mode-l">Payee check</span>
-          <div class="ns-switch" role="radiogroup" aria-labelledby="payee-mode-l" data-payee-switch>
-            <button type="button" role="radio" data-payee="verified-or-escalate" aria-checked="true">verified or ask</button>
-            <button type="button" role="radio" data-payee="verified-only" aria-checked="false">verified only</button>
-            <button type="button" role="radio" data-payee="any" aria-checked="false">any</button>
+
+        <div class="ix-group">
+          <span class="ix-label" id="ix-ap-l">WHO APPROVES</span>
+          <div class="ix-tiles two" role="radiogroup" aria-labelledby="ix-ap-l" data-approver-switch>
+            <button type="button" class="ix-tile" role="radio" aria-checked="false" data-ap="email"><span class="ix-dot"></span><span class="ix-tile-t"><b>Email</b><span>A link by email to approve or deny. No wallet needed.</span></span></button>
+            <button type="button" class="ix-tile" role="radio" aria-checked="false" data-ap="wallet"><span class="ix-dot"></span><span class="ix-tile-t"><b>Wallet or ENS</b><span>Approves by signing with a wallet or ENS name.</span></span></button>
           </div>
+          <input class="ix-wide" data-issue="approver" placeholder="manager@company.com" spellcheck="false" autocapitalize="off" aria-label="Approver">
         </div>
-        <label class="issue-f issue-allow"><span>Allowed payees <i>empty = any verified</i></span><div class="field"><input data-issue="payee_allow" placeholder="modelhub.eth, shop.xcard.eth" spellcheck="false" autocapitalize="off"></div></label>
-        <p class="issue-hint" data-payee-hint></p>
+
+        <div class="ix-group">
+          <span class="ix-label" id="ix-pay-l">PAYEE CHECK</span>
+          <div class="ix-tiles three" role="radiogroup" aria-labelledby="ix-pay-l" data-payee-switch>
+            <button type="button" class="ix-tile" role="radio" aria-checked="false" data-payee="verified-or-escalate"><span class="ix-dot"></span><span class="ix-tile-t"><b>Verified or ask</b><span>ENS-verified merchants pass; others wait for approval.</span></span></button>
+            <button type="button" class="ix-tile" role="radio" aria-checked="false" data-payee="verified-only"><span class="ix-dot"></span><span class="ix-tile-t"><b>Verified only</b><span>Only ENS-verified merchants. Others are declined.</span></span></button>
+            <button type="button" class="ix-tile" role="radio" aria-checked="false" data-payee="any"><span class="ix-dot"></span><span class="ix-tile-t"><b>Any</b><span>No payee check within the limits.</span></span></button>
+          </div>
+          <input class="ix-wide" data-issue="payee_allow" placeholder="allowed payees · empty = any verified" spellcheck="false" autocapitalize="off" aria-label="Allowed payees">
+        </div>
+        <div class="err" data-issue-err role="alert"></div>
       </div>
-      <div class="issue-foot">
-        <div class="issue-preview mono" data-issue-preview aria-live="polite"></div>
-        <button class="btn-sm" type="submit" data-issue-submit disabled>Issue card</button>
-      </div>
-      <div class="err" data-issue-err></div>
     </form>
-    <div class="issued" data-issued hidden></div>
   </section>
 
   <section class="block" data-app hidden>
@@ -182,6 +235,8 @@
     <div class="foot-main">
       <a href="index.html" class="wordmark" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
       <a class="gh" href="https://github.com/RWA-ID/x402card" target="_blank" rel="noopener" aria-label="X Card on GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>RWA-ID/x402card</span></a>
+      <a class="gh" href="https://x.com/xcard_dev" target="_blank" rel="noopener" aria-label="X Card on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg><span>@xcard_dev</span></a>
+      <a class="gh" href="mailto:hello@x-card.dev"><span>hello@x-card.dev</span></a>
     </div>
     <div class="foot-links">
       <a href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">resolver ↗</a>

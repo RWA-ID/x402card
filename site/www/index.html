@@ -13,8 +13,9 @@
 <meta property="og:image" content="https://x-card.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="X Card: give an agent a name, not a card number. Verified payees, Visa TAP at checkout, policy in ENS.">
+<meta property="og:image:alt" content="X Card: every card has a name. Run them all from your AI app. Company cards for employees, teams and agents, with approvals by email.">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@xcard_dev">
 <meta name="twitter:image" content="https://x-card.dev/og.png">
 <link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="brand/favicon-32.png" sizes="32x32" type="image/png">
@@ -37,7 +38,7 @@
       <a href="#uses" class="hide-sm">Use cases</a>
       <a href="#beat-payee" class="hide-sm">Trust</a>
       <a href="#hood" class="hide-sm">Under the hood</a>
-      <a href="console" class="hide-sm">Console</a>
+      <a href="console.html" class="hide-sm">Console</a>
       <button class="btn-nav" data-signup>Create demo account</button>
     </div>
   </div>
@@ -85,7 +86,7 @@
 </header>
 
 <section id="manage" class="section">
-  <div class="wrap section-grid">
+  <div class="wrap manage">
     <div class="section-copy">
       <div class="kicker"><span class="n">→</span><span>Manage by name</span></div>
       <h2>Your AI app is the card dashboard.</h2>
@@ -97,22 +98,96 @@
         <li><b>Name who approves.</b> <span>An email or a wallet. The exceptions go to them.</span></li>
       </ol>
     </div>
-    <div class="chat" data-chat aria-label="Example: managing cards from an AI app">
-      <div class="chat-head"><span class="chat-dot"></span><span>Your AI app</span><span class="chat-tag mono">X Card connected</span></div>
-      <div class="chat-msg you" data-c="1">Who’s close to their limit this month?</div>
-      <div class="chat-tool" data-c="2"><span class="mono">list_cards</span><span>4 cards</span></div>
-      <div class="chat-msg ai" data-c="3">
-        <span><b class="mono">dev-ana.xcard.eth</b> has spent $1,840 of $2,000 (92%). Everyone else is under half.</span>
-        <div class="chat-meter"><div style="transform:scaleX(.92)"></div></div>
+    <div class="ip-stage" data-ipad aria-label="Simulated chat: managing cards from an AI app with the X Card connector">
+      <div class="ip-floor"></div>
+      <div class="ip-bezel">
+        <div class="ip-cam"></div>
+        <div class="ip-screen" data-ip-screen>
+          <div class="ip-app" data-ip-app>
+            <div class="ip-rail"><div class="ip-menu"><i></i><i></i></div><div class="ip-new">+</div><div style="flex:1"></div><div class="ip-avatar">L</div></div>
+            <div class="ip-main">
+              <div class="ip-top"><div class="ip-title">Card limits this month <span>▾</span></div><div class="ip-conn"><span class="ip-tile sm"><img src="brand/xcard-mark.svg" alt=""></span><b>X Card</b><span class="ip-live"></span></div></div>
+              <div class="ip-scroll" data-ip-scroll>
+                <div class="ip-feed" data-ip-feed>
+                  <div class="ip-you" data-s="1">Who’s close to their limit this month?</div>
+                  <div class="ip-think" data-only="2"><span></span><span></span><span></span></div>
+                  <div class="ip-call" data-s="3">
+                    <div class="ip-chip"><span class="ip-tile"><img src="brand/xcard-mark.svg" alt=""></span><b>X Card</b><span class="ip-tool">list_cards</span><span class="ip-spin" data-only="3"></span><span class="ip-ok" data-s="4">✓</span><span class="ip-more">›</span></div>
+                    <div class="ip-view" data-s="4"><div class="ip-uri">ui://xcard/card.html</div>
+                      <div class="ip-panel">
+                        <div class="ip-panel-head"><b>Your cards</b><span>4 cards</span></div>
+                        <div class="ip-grid"><div class="ip-mini">
+                          <div class="ip-face"><div class="ip-face-top"><span class="ip-wm"><img src="brand/xcard-mark.svg" alt="">X Card</span><span class="ip-kind">AGENT · VIRTUAL</span></div><div class="ip-chipcard"></div><div class="ip-face-bot"><span class="ip-num">•••• 4021</span><span class="ip-name">dev-ana.xcard.eth</span></div></div>
+                          <div class="ip-tags"><span class="ip-tag">month ≤ $2,000</span><span class="ip-tag cat">cloud &amp; hosting</span></div>
+                        </div><div class="ip-mini">
+                          <div class="ip-face"><div class="ip-face-top"><span class="ip-wm"><img src="brand/xcard-mark.svg" alt="">X Card</span><span class="ip-kind">AGENT · VIRTUAL</span></div><div class="ip-chipcard"></div><div class="ip-face-bot"><span class="ip-num">•••• 1187</span><span class="ip-name">maria.xcard.eth</span></div></div>
+                          <div class="ip-tags"><span class="ip-tag">day ≤ $150</span><span class="ip-tag">month ≤ $1,500</span><span class="ip-tag cat">any category</span></div>
+                        </div><div class="ip-mini">
+                          <div class="ip-face"><div class="ip-face-top"><span class="ip-wm"><img src="brand/xcard-mark.svg" alt="">X Card</span><span class="ip-kind">AGENT · VIRTUAL</span></div><div class="ip-chipcard"></div><div class="ip-face-bot"><span class="ip-num">•••• 2290</span><span class="ip-name">sam.xcard.eth</span></div></div>
+                          <div class="ip-tags"><span class="ip-tag">tx ≤ $200</span><span class="ip-tag">month ≤ $800</span><span class="ip-tag cat">software</span></div>
+                        </div><div class="ip-mini">
+                          <div class="ip-face"><div class="ip-face-top"><span class="ip-wm"><img src="brand/xcard-mark.svg" alt="">X Card</span><span class="ip-kind">AGENT · VIRTUAL</span></div><div class="ip-chipcard"></div><div class="ip-face-bot"><span class="ip-num">•••• 7318</span><span class="ip-name">research-bot.xcard.eth</span></div></div>
+                          <div class="ip-tags"><span class="ip-tag">tx ≤ $50</span><span class="ip-tag">month ≤ $500</span><span class="ip-tag cat">software · computer services</span></div>
+                        </div></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ip-ai" data-s="5"><div><b class="ip-code">dev-ana.xcard.eth</b> has spent $1,840 of its $2,000 monthly limit (92%). Everyone else is under half.</div><div class="ip-meter"><div></div></div></div>
+                  <div class="ip-you" data-s="6">Give ana $500 more for the cloud migration, and freeze sam’s card. His contract ended.</div>
+                  <div class="ip-think" data-only="7"><span></span><span></span><span></span></div>
+                  <div class="ip-call" data-s="8">
+                    <div class="ip-chip"><span class="ip-tile"><img src="brand/xcard-mark.svg" alt=""></span><b>X Card</b><span class="ip-tool">request_funding</span><span class="ip-spin" data-only="8"></span><span class="ip-ok" data-s="9">✓</span><span class="ip-more">›</span></div>
+                    <div class="ip-view" data-s="9"><div class="ip-uri">ui://xcard/approval.html</div>
+                      <div class="ip-appr" data-ip-appr="pending">
+                        <div class="ip-appr-top"><div class="ip-brand">X <i>·</i> Card</div><span class="ip-pill warn" data-ap="pending waiting">Needs approval</span><span class="ip-pill ok" data-ap="approved">approved</span></div>
+                        <div class="ip-appr-main"><div style="min-width:0"><div class="ip-appr-name">dev-ana.xcard.eth</div><div class="ip-appr-what">requests funds · cloud migration</div></div><div class="ip-amt">+$500<small>USD</small></div></div>
+                        <div class="ip-kv"><span>approver</span><span>lena@acme.com</span><span>why</span><span>over card.limit.monthly ($2,000)</span></div>
+                        <div class="ip-btns">
+                          <div class="ip-approve" data-ap="pending">Approve $500</div>
+                          <div class="ip-approve dim" data-ap="waiting">Waiting for your confirmation…</div>
+                          <div class="ip-approve done" data-ap="approved">Approved ✓</div>
+                          <div class="ip-deny" data-ap="pending waiting">Deny</div>
+                          <div class="ip-tap" data-tap></div>
+                        </div>
+                        <p class="ip-note" data-ap="pending">You confirm in a small window, signed in with a code sent to lena@acme.com.</p>
+                        <p class="ip-note" data-ap="waiting">Confirm in the window that opened, with the code we email you. This card updates when you’re done.</p>
+                        <p class="ip-note" data-ap="approved">Confirmed by lena@acme.com by email.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ip-call" data-s="10">
+                    <div class="ip-chip"><span class="ip-tile"><img src="brand/xcard-mark.svg" alt=""></span><b>X Card</b><span class="ip-tool">freeze · sam.xcard.eth</span><span class="ip-spin" data-only="10"></span><span class="ip-ok" data-s="11">✓</span><span class="ip-more">›</span></div>
+                    <div class="ip-view" data-s="11"><div class="ip-uri">ui://xcard/card.html</div>
+                      <div class="ip-panel">
+                        <div class="ip-frozen-row">
+                          <div class="ip-face big frozen"><div class="ip-ice"></div><div class="ip-face-top"><span class="ip-wm"><img src="brand/xcard-mark.svg" alt="">X Card</span><span class="ip-kind ice">FROZEN</span></div><div class="ip-chipcard"></div><div class="ip-face-bot"><span class="ip-num">•••• •••• •••• 2290</span><span class="ip-name">sam.xcard.eth</span></div><div class="ip-stamp">FROZEN</div></div>
+                          <div class="ip-side">
+                            <div class="ip-status"><span></span>Frozen · only a human can unfreeze</div>
+                            <div class="ip-tags"><span class="ip-tag">tx ≤ $200</span><span class="ip-tag">month ≤ $800</span><span class="ip-tag cat">software</span></div>
+                            <div class="ip-side-kv"><span>approver</span><span>lena@acme.com</span></div>
+                          </div>
+                        </div>
+                        <div class="ip-recs"><div class="ip-recs-head"><span>sam.xcard.eth</span><span>ENS TEXT</span></div><div><span>card.limit.monthly</span><span>800</span></div><div><span>card.mcc.allow</span><span>5734</span></div><div><span>card.status</span><span class="ice">frozen</span></div></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ip-ai" data-s="12">I sent the $500 top-up to <b>lena@acme.com</b> for approval, since it raises dev-ana’s limit. <b class="ip-code">sam.xcard.eth</b> is frozen now; any payment on it returns <span class="ip-code plain">CARD_FROZEN</span>.</div>
+                  <div class="ip-from" data-s="14"><span class="ip-from-l"><span class="ip-tile xs"><img src="brand/xcard-mark.svg" alt=""></span>sent from X Card</span><div class="ip-you">I approved the $500 funding request for dev-ana.xcard.eth by email (approval apr_8f3k2).</div></div>
+                  <div class="ip-think" data-only="15"><span></span><span></span><span></span></div>
+                  <div class="ip-ai" data-s="16">Done. dev-ana’s monthly limit is now <b>$2,500</b>, and <span class="ip-code plain">card.limit.monthly</span> reads 2500 on ENS. sam’s card stays frozen until a human unfreezes it.</div>
+                </div>
+              </div>
+              <div class="ip-compose-wrap">
+                <div class="ip-compose">
+                  <div class="ip-input"><span data-ip-typed></span><span class="ip-caret" data-ip-caret hidden></span><span class="ip-ph" data-ip-ph>Reply…</span></div>
+                  <div class="ip-row"><div class="ip-plus">+</div><div class="ip-tchip"><span class="ip-tile xs"><img src="brand/xcard-mark.svg" alt=""></span>X Card</div><div style="flex:1"></div><div class="ip-send" data-ip-send>↑</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="chat-msg you" data-c="4">Give ana $500 more for the cloud migration, and freeze sam’s card. His contract ended.</div>
-      <div class="chat-tool" data-c="5"><span class="mono">request_funding</span><span class="hold">waiting for approver</span></div>
-      <div class="chat-tool" data-c="6"><span class="mono">freeze · sam.xcard.eth</span><span class="ice">FROZEN</span></div>
-      <div class="chat-card" data-c="7">
-        <div class="chat-card-top"><span class="mono">dev-ana.xcard.eth</span><span class="status-pill" style="color:var(--warning);background:oklch(0.84 0.14 80 / 0.1)">NEEDS APPROVAL</span></div>
-        <div class="chat-card-amt mono">+$500 <small>cloud migration</small></div>
-        <div class="chat-card-foot"><span>Emailed to l•••@acme.com</span><span class="chat-ok" data-c="8">✓ approved</span></div>
-      </div>
+      <div class="ip-caption"><span>Simulated MCP App views · sandbox data</span><button type="button" class="replay ip-replay" data-ip-replay>↻ replay</button></div>
     </div>
   </div>
 </section>
@@ -497,6 +572,8 @@
     <div class="foot-main">
       <a href="index.html" class="wordmark" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
       <a class="gh" href="https://github.com/RWA-ID/x402card" target="_blank" rel="noopener" aria-label="X Card on GitHub"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>RWA-ID/x402card</span></a>
+      <a class="gh" href="https://x.com/xcard_dev" target="_blank" rel="noopener" aria-label="X Card on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg><span>@xcard_dev</span></a>
+      <a class="gh" href="mailto:hello@x-card.dev"><span>hello@x-card.dev</span></a>
     </div>
     <div class="foot-links">
       <a href="https://etherscan.io/address/0xf11eb8f6fbd761c25bd01064bab2e48ad90792a0#code" target="_blank" rel="noopener">resolver ↗</a>
