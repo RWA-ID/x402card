@@ -108,7 +108,9 @@ export function cardKeyOf(name: string): string | null {
   const parent = PARENT_NAMES.find((p) => n.endsWith("." + p));
   if (!parent) return null;
   const label = n.slice(0, -(parent.length + 1));
-  if (!/^[a-z0-9-]{1,63}$/.test(label)) return null;
+  // A company's cards sit one level deeper: maria.acme.xcard.eth.
+  const shape = parent === LEGACY_PARENT ? /^[a-z0-9-]{1,63}$/ : /^[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})?$/;
+  if (!shape.test(label)) return null;
   return parent === LEGACY_PARENT ? label : n;
 }
 

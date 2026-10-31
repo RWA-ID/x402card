@@ -34,7 +34,7 @@ import { isEmail, maskEmail, publicRecords } from "./policy/records.ts";
 import { ensPayeeChecker } from "./policy/payee.ts";
 import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
 import { verifyTap } from "./tap/verify.ts";
-import { AirwallexIssuer, CardService, DEMO_CARDS, ORG_DEFAULT_CAPS, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
+import { AirwallexIssuer, CardService, DEMO_CARDS, ORG_DEFAULT_CAPS, cardWord, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer } from "./testing.ts";
 
@@ -337,6 +337,9 @@ export default {
           if (!operators.length || !operators.every(isEmail)) return bad("operators: one or more emails");
           const caps = { ...ORG_DEFAULT_CAPS, ...b.caps };
           if (!Object.values(caps).every((v) => typeof v === "number" && v > 0)) return bad("caps must be positive numbers");
+          // <slug>.xcard.eth becomes the company's namespace.
+          if (RESERVED_LABELS.has(b.slug)) return bad(`${b.slug} is reserved`);
+          if (await store.getCard(`${b.slug}.${DEMO_CARDS.parent}`)) return bad(`${b.slug}.${DEMO_CARDS.parent} already has a card`);
           for (const e of operators) {
             const other = await store.orgOf(e);
             if (other && other.slug !== b.slug) return bad(`${e} already operates ${other.slug}`);
@@ -406,7 +409,13 @@ async function accountApi(req: Request, path: string, env: Env, store: Store, em
       return json(org ? { email, caps: org.caps, org: { slug: org.slug, name: org.name, operators: org.operators } } : { email, caps: DEMO_CARDS });
     }
     const n = path.match(/^\/api\/names\/([^/]+)$/);
-    if (n && req.method === "GET") return json(await nameStatus(store, decodeURIComponent(n[1])));
+    if (n && req.method === "GET") {
+      // An operator's names are under the company's namespace.
+      const org = await store.orgOf(email);
+      const asked = decodeURIComponent(n[1]);
+      const parent = org ? `${org.slug}.${DEMO_CARDS.parent}` : "";
+      return json(await nameStatus(store, parent ? `${cardWord(asked, parent)}.${parent}` : asked));
+    }
     const cards = await svc.accountCards(email);
     const mine = new Set(cards.map((c) => normalizeLabel(c.name)));
 

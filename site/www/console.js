@@ -555,11 +555,12 @@
     // Pasting a full name picks its namespace.
     const label = () => {
       let v = labelIn.value.trim().toLowerCase();
-      for (const p of ["xcard.eth", "x402card.eth"]) {
+      for (const p of [...(me?.org ? [`${me.org.slug}.xcard.eth`] : []), "xcard.eth", "x402card.eth"]) {
         if (!v.endsWith("." + p)) continue;
         v = v.slice(0, -(p.length + 1));
         labelIn.value = v;
         if (!isAccount() && ns !== p) nsGroup.set(p);
+        break;
       }
       return v;
     };
@@ -762,6 +763,12 @@
         if (guess && LABEL_RE.test(guess)) labelIn.value = guess;
       }
       nsGroup.set(saved);
+      // An operator's cards are under the company's namespace.
+      if (me.org) {
+        ns = `${me.org.slug}.xcard.eth`;
+        $("[data-ns-fixed]").textContent = `.${ns}`;
+        edited();
+      }
     };
   }
 

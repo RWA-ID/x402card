@@ -15,7 +15,7 @@ test("card keys", () => {
   assert.equal(cardKeyOf("Researcher.XCard.eth"), "researcher.xcard.eth");
   assert.equal(cardKeyOf("xcard.eth"), "");
   assert.equal(cardKeyOf("x402card.eth"), "");
-  assert.equal(cardKeyOf("a.b.xcard.eth"), null);
+  assert.equal(cardKeyOf("a.b.x402card.eth"), null);
   assert.equal(cardKeyOf("researcher.notxcard.eth"), null);
   assert.equal(nameOfKey("researcher"), "researcher.x402card.eth");
   assert.equal(nameOfKey("researcher.xcard.eth"), "researcher.xcard.eth");
@@ -42,4 +42,10 @@ test("shop.xcard.eth lists the gateway's own origin as its payee origin", async 
   assert.equal(await origins("Shop.XCard.eth", "https://x402card.dmpay.workers.dev"), "https://x402card.dmpay.workers.dev");
   assert.equal(await origins("shop.xcard.eth"), "", "no origin known: no record");
   assert.equal(await origins("shop.x402card.eth", "https://x402card.dmpay.workers.dev"), "", "only the xcard.eth name");
+});
+
+test("cardKeyOf: a company's cards one level deeper, under xcard.eth only", () => {
+  assert.equal(cardKeyOf("maria.acme.xcard.eth"), "maria.acme.xcard.eth");
+  assert.equal(cardKeyOf("maria.acme.x402card.eth"), null);
+  assert.equal(cardKeyOf("a.maria.acme.xcard.eth"), null);
 });

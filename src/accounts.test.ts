@@ -205,16 +205,16 @@ test("orgs: an operator issues for the company within its caps, sees its cards, 
 
   const policy = { limit_tx: 50, limit_monthly: 200, approver: "manager@acme.com" };
   const one = await as("ops@acme.com", "issue_card", { submit: true, name: "orgmaria", policy });
-  assert.equal(one.structuredContent.card.name, "orgmaria.xcard.eth");
+  assert.equal(one.structuredContent.card.name, "orgmaria.acme.xcard.eth");
   assert.match(one.structuredContent.agent_token, /^x4c_/);
-  assert.equal((await store.getCard("orgmaria.xcard.eth"))!.org, "acme");
+  assert.equal((await store.getCard("orgmaria.acme.xcard.eth"))!.org, "acme");
   assert.equal(one.structuredContent.card.records["card.limit.daily"], "200", "blank daily: the most the caps allow, never above monthly");
   assert.match((await as("ops@acme.com", "issue_card", { submit: true, name: "orgbig", policy: { ...policy, limit_tx: 101 } })).content[0].text, /over_org_caps/);
 
   // The second operator sees it, can manage it, and can't loosen it alone.
-  assert.deepEqual((await emailCards("ops2@acme.com", store)).map((c) => c.label), ["orgmaria.xcard.eth"]);
-  assert.equal((await as("ops2@acme.com", "get_card", { name: "orgmaria.xcard.eth" })).structuredContent.card.name, "orgmaria.xcard.eth");
-  const loosen = (await as("ops2@acme.com", "update_policy", { name: "orgmaria.xcard.eth", limit_monthly: 300 })).structuredContent;
+  assert.deepEqual((await emailCards("ops2@acme.com", store)).map((c) => c.label), ["orgmaria.acme.xcard.eth"]);
+  assert.equal((await as("ops2@acme.com", "get_card", { name: "orgmaria.acme.xcard.eth" })).structuredContent.card.name, "orgmaria.acme.xcard.eth");
+  const loosen = (await as("ops2@acme.com", "update_policy", { name: "orgmaria.acme.xcard.eth", limit_monthly: 300 })).structuredContent;
   assert.equal(loosen.decision, "pending_human", "loosening still waits for the approver");
   // The console: the operator sees the request and who decides it, and can't decide it.
   const opSession = "xs_operator";
@@ -226,7 +226,7 @@ test("orgs: an operator issues for the company within its caps, sees its cards, 
   assert.deepEqual((await call("GET", "/api/me", undefined, opSession)).body.org, { slug: "acme", name: "Acme", operators: ["ops@acme.com", "ops2@acme.com"] });
   assert.equal((await call("GET", "/api/cards", undefined, opSession)).body.cards[0].org, "acme");
   assert.ok(!(await emailCards("outsider@else.com", store)).length);
-  assert.match((await as("outsider@else.com", "get_card", { name: "orgmaria.xcard.eth" })).content[0].text, /forbidden/);
+  assert.match((await as("outsider@else.com", "get_card", { name: "orgmaria.acme.xcard.eth" })).content[0].text, /forbidden/);
 
   // The caps count cards, and many cards can share one approver and one issuer.
   await as("ops@acme.com", "issue_card", { submit: true, name: "orgjon", policy });
@@ -260,16 +260,16 @@ test("claim links: one holder, many cards; only that email claims; the token goe
   assert.equal((await call("POST", "/api/cards", { name: "nope", holder: "x@y.com", policy }, stranger)).status, 400, "only an operator names a holder");
   assert.equal((await call("POST", "/api/cards", { name: "bad-holder", holder: "not-an-email", policy }, boss)).status, 400);
 
-  const link = linkFor("claimone.xcard.eth");
+  const link = linkFor("claimone.beta.xcard.eth");
   const view = await call("GET", `/claims/${link}`);
   assert.equal(view.body.org, "Beta Inc");
   assert.ok(!JSON.stringify(view.body).includes("staff@beta.com"), "the public view masks the holder");
   assert.ok(!(await emailCards("staff@beta.com", store)).length, "no access before claiming");
 
   // A resend ends the old link.
-  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/claim", {}, stranger)).status, 403);
-  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/claim", {}, boss)).body.sent, true);
-  const fresh = linkFor("claimone.xcard.eth");
+  assert.equal((await call("POST", "/api/cards/claimone.beta.xcard.eth/claim", {}, stranger)).status, 403);
+  assert.equal((await call("POST", "/api/cards/claimone.beta.xcard.eth/claim", {}, boss)).body.sent, true);
+  const fresh = linkFor("claimone.beta.xcard.eth");
   assert.notEqual(fresh, link);
   assert.equal((await call("GET", `/claims/${link}`)).status, 404);
 
@@ -279,13 +279,44 @@ test("claim links: one holder, many cards; only that email claims; the token goe
   assert.equal(got.status, 200);
   assert.match(got.body.agent_token, /^x4c_/);
   assert.equal((await call("POST", `/claims/${fresh}`, {}, holder)).status, 404, "the link works once");
-  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/claim", {}, boss)).status, 400, "already claimed");
+  assert.equal((await call("POST", "/api/cards/claimone.beta.xcard.eth/claim", {}, boss)).status, 400, "already claimed");
 
   // The holder has it, and only it; the unclaimed one stays out.
-  assert.deepEqual((await emailCards("staff@beta.com", store)).map((c) => c.label), ["claimone.xcard.eth"]);
+  assert.deepEqual((await emailCards("staff@beta.com", store)).map((c) => c.label), ["claimone.beta.xcard.eth"]);
   const list = (await call("GET", "/api/cards", undefined, holder)).body.cards;
-  assert.deepEqual(list.map((c: any) => c.name), ["claimone.xcard.eth"]);
+  assert.deepEqual(list.map((c: any) => c.name), ["claimone.beta.xcard.eth"]);
   assert.equal(list[0].claimed, true);
-  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/unfreeze", {}, holder)).status, 403, "the holder can't lift a freeze");
-  assert.equal((await call("GET", "/api/cards", undefined, boss)).body.cards.find((c: any) => c.name === "claimone.xcard.eth").holder, "staff@beta.com");
+  assert.equal((await call("POST", "/api/cards/claimone.beta.xcard.eth/unfreeze", {}, holder)).status, 403, "the holder can't lift a freeze");
+  assert.equal((await call("GET", "/api/cards", undefined, boss)).body.cards.find((c: any) => c.name === "claimone.beta.xcard.eth").holder, "staff@beta.com");
+});
+
+test("company namespaces: maria.<org>.xcard.eth, only from that company's operators", async () => {
+  const { sha256Hex } = await import("./mcp.ts");
+  const { Store } = await import("./store.ts");
+  const store = new Store(env.KV);
+  const session = async (email: string) => { const t = "xs_" + email; await store.putSession(await sha256Hex(t), email); return t; };
+  await call("POST", "/api/orgs", { slug: "gamma", name: "Gamma", operators: ["op@gamma.com"] }, "admin-token");
+  await call("POST", "/api/orgs", { slug: "delta", name: "Delta", operators: ["op@delta.com"] }, "admin-token");
+  const gamma = await session("op@gamma.com"), delta = await session("op@delta.com"), solo = await session("solo@else.com");
+  const policy = { limit_tx: 50, limit_monthly: 200, approver: "op@gamma.com" };
+
+  for (const name of ["maria", "maria.xcard.eth"]) {
+    const r = await call("POST", "/api/cards", { name, policy }, gamma);
+    if (name === "maria") assert.equal(r.body.card.name, "maria.gamma.xcard.eth");
+    else assert.equal(r.status, 400, "same word, same card");
+  }
+  assert.equal((await call("POST", "/api/cards", { name: "maria", policy }, delta)).body.card.name, "maria.delta.xcard.eth", "two companies can both have a maria");
+  assert.equal((await call("POST", "/api/cards", { name: "jon.gamma.xcard.eth", policy }, delta)).status, 400, "another company's namespace");
+  assert.equal((await call("POST", "/api/cards", { name: "jon.gamma.xcard.eth", policy }, solo)).status, 400);
+  assert.equal((await call("POST", "/api/cards", { name: "jon.gamma.xcard.eth", policy: { ...policy, currencies: ["USD"] } }, "admin-token")).status, 400, "the admin token doesn't issue into a company either");
+  assert.equal((await call("POST", "/api/cards", { name: "gamma.xcard.eth", policy }, solo)).status, 400, "a company's name isn't a card");
+  assert.equal((await call("POST", "/api/cards", { name: "plain", policy }, solo)).body.card.name, "plain.xcard.eth", "others stay flat");
+  assert.equal((await call("POST", "/api/orgs", { slug: "plain", name: "P", operators: ["p@p.com"] }, "admin-token")).status, 400, "a name already a card can't become a company");
+  assert.equal((await call("POST", "/api/orgs", { slug: "shop", name: "S", operators: ["s@s.com"] }, "admin-token")).status, 400);
+
+  const free = await call("GET", "/api/names/nadia.xcard.eth", undefined, gamma);
+  assert.deepEqual([free.body.name, free.body.available], ["nadia.gamma.xcard.eth", true]);
+  assert.equal((await call("GET", "/api/names/maria", undefined, gamma)).body.available, false);
+  // It reads back by its deep name, publicly.
+  assert.equal((await call("GET", "/public/cards/maria.gamma.xcard.eth")).body.exists, true);
 });

@@ -168,7 +168,7 @@ const HTML = /* html */ `<!doctype html>
   function form(d, caps, me) {
     const account = !!me.email;
     const nameIn = el("input", { value: d.name || "", placeholder: "maria", spellcheck: "false", autocapitalize: "off", "aria-label": "Name", maxlength: "63" });
-    const nameField = account ? el("label", { class: "f", style: "margin-bottom:12px" }, el("span", { text: "Name" }), el("div", { class: "text" }, nameIn, el("em", { text: ".xcard.eth" }))) : null;
+    const nameField = account ? el("label", { class: "f", style: "margin-bottom:12px" }, el("span", { text: "Name" }), el("div", { class: "text" }, nameIn, el("em", { text: "." + (me.parent || "xcard.eth") }))) : null;
     // Who approves: an email (confirms by email) or a wallet / ENS name (signs). Defaults to whoever signed in.
     const approverIn = el("input", { value: d.approver || me.email || me.address || "", placeholder: "manager@company.com or alice.eth", spellcheck: "false", autocapitalize: "off", "aria-label": "Approver" });
     const apHint = el("p", { class: "note", style: "margin-top:6px" });
@@ -220,7 +220,7 @@ const HTML = /* html */ `<!doctype html>
       err.textContent = "";
       const approver = approverIn.value.trim();
       if (!/^([^\s@]+@[^\s@]+\.[a-z]{2,}|0x[0-9a-fA-F]{40}|[^\s.,@]+(\.[^\s.,@]+)*\.[a-z]{2,})$/i.test(approver)) { err.textContent = "The approver is an email, a 0x address or an ENS name."; return; }
-      const name = nameIn.value.trim().toLowerCase().replace(/\.xcard\.eth$/, "");
+      const name = nameIn.value.trim().toLowerCase().replace(me.parent ? "." + me.parent : ".xcard.eth", "").replace(/\.xcard\.eth$/, "");
       if (account && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) { err.textContent = "Pick a name: lowercase letters, digits and hyphens."; return; }
       const holder = holderField ? holderIn.value.trim() : "";
       if (holder && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(holder)) { err.textContent = "The holder is an email address."; return; }

@@ -112,11 +112,18 @@ export function normalizeLabel(name: string): string {
   const n = name.trim().toLowerCase();
   const full = n.includes(".") ? n : `${n}.${LEGACY_PARENT}`;
   const key = cardKeyOf(full);
-  const label = full.slice(0, full.indexOf("."));
-  if (!key || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) {
+  const labels = full.split(".").slice(0, key?.includes(".") ? -2 : 1);
+  if (!key || !labels.every((l) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l))) {
     throw new ServiceError("bad_name", `"${name}" is not a valid name under ${PARENT_NAMES.join(" or ")}`);
   }
   return key;
+}
+
+/** "maria", "maria.xcard.eth" or "maria.acme.xcard.eth" -> the word to issue under parent. */
+export function cardWord(name: string, parent: string): string {
+  const n = name.trim().toLowerCase();
+  for (const end of [`.${parent}`, `.${DEMO_CARDS.parent}`]) if (n.endsWith(end)) return n.slice(0, -end.length);
+  return n;
 }
 
 /** First label of a card key: "researcher.xcard.eth" -> "researcher". */
@@ -393,9 +400,10 @@ export class CardService {
   }
 
   private async issueCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string, holder?: string): Promise<CardView> {
-    const full = name.trim().toLowerCase();
-    const label = full.endsWith(`.${DEMO_CARDS.parent}`) ? full : `${full}.${DEMO_CARDS.parent}`;
-    if (label.split(".").length !== 3) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${DEMO_CARDS.parent}`);
+    const parent = org ? `${org}.${DEMO_CARDS.parent}` : DEMO_CARDS.parent;
+    const word = cardWord(name, parent);
+    if (word.includes(".")) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${parent}`);
+    const label = `${word}.${parent}`;
     let policy: CardPolicy;
     try {
       policy = parseRecords({ "card.currencies": "USD", "card.payee": "verified-or-escalate", "card.approver": me, ...records, "card.status": "active" });
@@ -440,6 +448,10 @@ export class CardService {
     const label = normalizeLabel(name);
     if (RESERVED_LABELS.has(labelOfKey(label)) || RESERVED_KEYS.has(label)) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
     if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
+    // A company's namespace is its own: only its operators issue under it, and its name isn't a card.
+    const [, deeper] = label.split(".");
+    if (label.split(".").length === 4 && deeper !== opts.org) throw new ServiceError("bad_name", `only ${deeper}'s operators can issue under ${deeper}.${DEMO_CARDS.parent}`);
+    if (label.split(".").length === 3 && label.endsWith(`.${DEMO_CARDS.parent}`) && (await this.store.getOrg(labelOfKey(label)))) throw new ServiceError("reserved", `${fullName(label)} is a company's name`);
 
     const policy = parseRecords({ "card.status": "active", ...records });
     const [user, domain] = this.opts.cardholderEmail.split("@");

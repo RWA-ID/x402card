@@ -2,7 +2,7 @@
 // Auth: Bearer token. The admin token can do everything; each issued card
 // gets an agent token that only works for its own name. Agents never see
 // card numbers, Airwallex IDs or keys.
-import { CardService, DEMO_CARDS, ServiceError, TEST_CARDS, describeError, fullName, normalizeLabel } from "./service.ts";
+import { CardService, DEMO_CARDS, ServiceError, TEST_CARDS, cardWord, describeError, fullName, normalizeLabel } from "./service.ts";
 import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 import { UI_MIME, approvalResource } from "./ui/approval.ts";
@@ -306,14 +306,14 @@ export class McpServer {
         const { email, address } = this.caller;
         // An org's operator issues for the company, within its caps; anyone else gets a demo or test card.
         const org = email ? await this.store.orgOf(email) : null;
-        const me = email ? { email, ...(org ? { org: org.name } : {}) } : { address };
+        const me = email ? { email, ...(org ? { org: org.name, parent: `${org.slug}.${DEMO_CARDS.parent}` } : {}) } : { address };
         // The form shows first; the person submits it (submit: true) from the chat.
         if (a.submit !== true) {
           return {
             decision: "form",
             caps: org?.caps ?? (email ? DEMO_CARDS : TEST_CARDS),
             me,
-            defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy), ...(email && typeof a.name === "string" ? { name: a.name.trim().toLowerCase().replace(/\.xcard\.eth$/, "") } : {}) },
+            defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy), ...(email && typeof a.name === "string" ? { name: cardWord(a.name, org ? `${org.slug}.${DEMO_CARDS.parent}` : DEMO_CARDS.parent) } : {}) },
           };
         }
         const picked = pickPolicy(a.policy);
