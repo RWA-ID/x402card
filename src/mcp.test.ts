@@ -401,6 +401,34 @@ test("owner (wallet sign-in): list_cards, a name picks among several, others' ca
   assert.equal((await owner(["c.xcard.eth"])("get_approval", { approval_id: asked.approval_id })).structuredContent.approval.status, "pending");
 });
 
+test("issue_card signed in: the view gets an agent token, the model's text doesn't, and it works for that card only", async () => {
+  const { svc, store, tool } = setup();
+  const signedIn = [
+    { kind: "owner", email: "lead@acme.com", labels: [] },
+    { kind: "owner", address: "0xc32A9e2f1092F1D57D3267C2E70b80DA9De06D59", labels: [] },
+  ] as const;
+  const names = [];
+  for (const caller of signedIn) {
+    const req = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "issue_card", arguments: { name: "maria", submit: true, policy: { limit_tx: 40, limit_monthly: 400 } } } }) });
+    const res = ((await (await new McpServer(svc, store, { ...caller, labels: [] } as any).handle(req)).json()) as any).result;
+    const token = res.structuredContent.agent_token;
+    assert.match(token, /^x4c_/);
+    assert.ok(!res.content[0].text.includes(token), "the token stays out of the model's text");
+    assert.ok(!res.content[0].text.includes("agent_token"));
+    assert.ok(!res.structuredContent.ui_only);
+    const name = res.structuredContent.card.name;
+    assert.equal((await tool(token, "get_card", {})).structuredContent.card.name, name, "it acts as that card's agent");
+    assert.match((await tool(token, "issue_card", {})).content[0].text, /forbidden/);
+    for (const other of names) assert.match((await tool(token, "get_card", { name: other })).content[0].text, /forbidden/, "and only that card");
+    names.push(name);
+  }
+  // The form step mints nothing.
+  const form = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "issue_card", arguments: {} } }) });
+  const f = ((await (await new McpServer(svc, store, { ...signedIn[0], labels: [] } as any).handle(form)).json()) as any).result.structuredContent;
+  assert.equal(f.decision, "form");
+  assert.ok(!("agent_token" in f));
+});
+
 test("issue_card from a wallet sign-in: the form first, then the next testN.xcard.eth, within the caps", async () => {
   const { svc, store, tool } = setup();
   const wallet = "0xc32A9e2f1092F1D57D3267C2E70b80DA9De06D59";
@@ -422,7 +450,7 @@ test("issue_card from a wallet sign-in: the form first, then the next testN.xcar
   assert.equal(r.card.records["card.approver"], "mallory.eth", "the form's approver: email, wallet or ENS name");
   assert.equal(r.card.records["card.currencies"], "USD");
   assert.equal(r.card.records["card.limit.daily"], "150");
-  assert.ok(!("agent_token" in r), "the connection is the access; no token to leak into the chat");
+  assert.match(r.agent_token, /^x4c_/);
   assert.equal((await store.getCard("test2.xcard.eth"))!.issuedBy, wallet);
   // Indexed under the wallet at once: list() can lag new keys on Cloudflare.
   assert.deepEqual(await store.walletIndex(wallet), ["test2.xcard.eth"], "indexed as its issuer, though mallory.eth approves it");

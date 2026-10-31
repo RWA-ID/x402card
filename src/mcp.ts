@@ -45,7 +45,7 @@ export const TOOLS = [
     _meta: issueUi,
     title: "Issue an agent card",
     description:
-      "Issue a virtual card with a spend policy published as ENS text records. Signed in (email or wallet): call it with no arguments, or with a suggested name and policy, and the person fills in the form in the chat and submits it: the limits, merchant categories, payee check and the approver (an email, a wallet or an ENS name; by default themselves). Signed in by email they name the card (<name>.xcard.eth; caps $500/transaction, $2,000/day, $5,000/month, USD, 5 cards); by wallet they get the next free testN.xcard.eth (caps $50/transaction, $200/day, $500/month, USD, 3 cards). Never set submit yourself. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
+      "Issue a virtual card with a spend policy published as ENS text records. Signed in (email or wallet): call it with no arguments, or with a suggested name and policy, and the person fills in the form in the chat and submits it: the limits, merchant categories, payee check and the approver (an email, a wallet or an ENS name; by default themselves). Signed in by email they name the card (<name>.xcard.eth; caps $500/transaction, $2,000/day, $5,000/month, USD, 5 cards); by wallet they get the next free testN.xcard.eth (caps $50/transaction, $200/day, $500/month, USD, 3 cards). Never set submit yourself. The issued card in the chat shows the person an agent token, once, for an autonomous agent to use this card; it isn't in your result. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
     inputSchema: {
       type: "object",
       properties: {
@@ -288,8 +288,9 @@ export class McpServer {
   /** Tool errors are returned as results with isError so the model can read them. */
   async callTool(name: string, args: Record<string, unknown>) {
     try {
-      const data = await this.dispatch(name, args);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }], structuredContent: data };
+      // ui_only goes to the view in the chat, not into the text the model reads.
+      const { ui_only, ...data } = await this.dispatch(name, args);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }], structuredContent: { ...data, ...(ui_only as object | undefined) } };
     } catch (e) {
       const err = describeError(e);
       return { content: [{ type: "text", text: `${err.code}: ${err.message}` }], structuredContent: { error: err }, isError: true };
@@ -321,7 +322,13 @@ export class McpServer {
         this.caller.labels = [...new Set([...this.caller.labels, normalizeLabel(card.name)])];
         const approver = card.records["card.approver"];
         const mine = approver === email || approver === address;
-        return { decision: "issued", card, note: `${card.name} is yours and this connection can use it now. ${mine ? "You're its approver." : `${approver} approves anything over its limits.`}` };
+        const label = normalizeLabel(card.name);
+        return {
+          decision: "issued",
+          card,
+          note: `${card.name} is yours and this connection can use it now. ${mine ? "You're its approver." : `${approver} approves anything over its limits.`} The card in the chat shows the person an agent token for it, once, to give to an autonomous agent. You don't have that token and shouldn't ask for it in the chat.`,
+          ui_only: { agent_token: await mintAgentToken(this.store, label) },
+        };
       }
       case "list_cards": {
         const labels = this.caller.kind === "admin" ? await this.store.listLabels() : this.caller.kind === "agent" ? [this.caller.label] : this.caller.labels;
@@ -429,6 +436,13 @@ export class McpServer {
   }
 }
 
+/** A new agent token for one card. Only its hash is stored, so it can be shown just once. */
+async function mintAgentToken(store: Store, label: string) {
+  const token = randomToken();
+  await store.putToken(await sha256Hex(token), label);
+  return token;
+}
+
 /**
  * Issue a card and mint its agent token (shown once). Shared by the issue_card
  * tool and the admin issue form (POST /api/cards).
@@ -436,8 +450,7 @@ export class McpServer {
 export async function issueWithToken(svc: CardService, store: Store, name: string, policy: unknown) {
   const label = normalizeLabel(name);
   const card = await svc.issueCard(label, policyToRecords(policy));
-  const token = randomToken();
-  await store.putToken(await sha256Hex(token), label);
+  const token = await mintAgentToken(store, label);
   return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
 }
 
@@ -447,9 +460,7 @@ export async function issueAccountWithToken(svc: CardService, store: Store, emai
   // An empty approver means "me": the record defaults to the account's own email.
   if (!records["card.approver"]) delete records["card.approver"];
   const card = await svc.issueAccountCard(email, name, records);
-  const label = normalizeLabel(card.name);
-  const token = randomToken();
-  await store.putToken(await sha256Hex(token), label);
+  const token = await mintAgentToken(store, normalizeLabel(card.name));
   return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
 }
 

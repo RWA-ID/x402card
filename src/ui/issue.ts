@@ -82,6 +82,11 @@ const HTML = /* html */ `<!doctype html>
   .kv span:nth-child(odd) { color: var(--muted); font: 500 11.5px var(--mono); text-transform: uppercase; letter-spacing: 0.04em; padding-top: 1px; }
   .kv span:nth-child(even) { color: var(--text-2); overflow-wrap: anywhere; }
   .name { font: 500 17px var(--mono); overflow-wrap: anywhere; }
+  .agent { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .agent p { color: var(--muted); font-size: 12.5px; margin: 4px 0 8px; }
+  .tok { font: 500 12.5px var(--mono); background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; overflow-wrap: anywhere; user-select: all; }
+  .agent .actions { margin-top: 8px; flex-wrap: wrap; }
+  button.ghost { font: 500 12.5px var(--sans); border-radius: 999px; padding: 6px 12px; cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--text-2); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
 </head>
@@ -147,7 +152,7 @@ const HTML = /* html */ `<!doctype html>
   function onResult(res) {
     const sc = res.structuredContent || {};
     if (sc.decision === "form") return form(sc.defaults || {}, sc.caps || {}, sc.me || {});
-    if (sc.card) return issued(sc.card);
+    if (sc.card) return issued(sc.card, sc.agent_token);
     const msg = (sc.error && sc.error.message) || (res.content && res.content[0] && res.content[0].text) || "Couldn't issue the card.";
     root.textContent = "";
     root.append(el("div", { class: "top" }, brand(), el("span", { class: "pill no", text: "Not issued" })), el("div", { class: "note", text: msg }));
@@ -228,7 +233,7 @@ const HTML = /* html */ `<!doctype html>
         const r = await request("tools/call", { name: "issue_card", arguments: { ...(account ? { name } : {}), policy, submit: true } }, 60000);
         const sc = (r && r.structuredContent) || {};
         if (r && r.isError || !sc.card) throw new Error((sc.error && sc.error.message) || (r && r.content && r.content[0] && r.content[0].text) || "not issued");
-        issued(sc.card);
+        issued(sc.card, sc.agent_token);
         tell("I issued " + sc.card.name + " (" + usd(policy.limit_tx) + "/transaction" + (policy.limit_daily ? ", " + usd(policy.limit_daily) + "/day" : "") + ", " + usd(policy.limit_monthly) + "/month).");
       } catch (ex) {
         go.disabled = false; go.textContent = "Issue card";
@@ -240,7 +245,46 @@ const HTML = /* html */ `<!doctype html>
       el("h2", { text: "Issue a card" }), el("p", { class: "sub", text: "Set what it may spend and who approves the rest. Tightening applies at once; loosening waits for the approver." }), f);
   }
 
-  function issued(card) {
+  // The agent token, shown once: masked until revealed (the chat is often on a shared screen).
+  function agentAccess(card, token) {
+    const masked = token.slice(0, 8) + "•".repeat(16);
+    const shown = el("div", { class: "tok", text: masked });
+    // Chat frames may block the clipboard API: try the older route before showing anything.
+    const legacyCopy = (text) => {
+      const t = el("textarea", { style: "position:fixed;opacity:0" });
+      t.value = text;
+      document.body.append(t);
+      t.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch {}
+      t.remove();
+      return ok;
+    };
+    const copy = (btn, text) => {
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).catch(() => { if (!legacyCopy(text)) throw 0; }).then(() => { btn.textContent = "Copied"; }, () => {
+        shown.textContent = text;
+        reveal.textContent = "Hide";
+        btn.textContent = "Select the text above";
+      });
+    };
+    const reveal = el("button", { type: "button", class: "ghost", text: "Reveal" });
+    reveal.addEventListener("click", () => {
+      const hide = shown.textContent !== masked;
+      shown.textContent = hide ? masked : token;
+      reveal.textContent = hide ? "Reveal" : "Hide";
+    });
+    const copyToken = el("button", { type: "button", class: "ghost", text: "Copy token" });
+    copyToken.addEventListener("click", () => copy(copyToken, token));
+    const copyLine = el("button", { type: "button", class: "ghost", text: "Copy claude mcp add" });
+    copyLine.addEventListener("click", () => copy(copyLine, "claude mcp add --transport http " + card.name.split(".")[0] + ' https://mcp.x-card.dev/mcp --header "Authorization: Bearer ' + token + '"'));
+    return el("div", { class: "agent" },
+      el("div", { class: "lbl", text: "Agent token" }),
+      el("p", { text: "For an agent that runs on its own. It works for this card only, under this policy, and never sees a card number. Shown once, and not shared with this chat." }),
+      shown,
+      el("div", { class: "actions" }, reveal, copyToken, copyLine));
+  }
+
+  function issued(card, token) {
     const r = card.records || {};
     const mccs = (r["card.mcc.allow"] || "").split(",").filter(Boolean).map((c) => (MCCS.find((m) => m[0] === c) || [c, "MCC " + c])[1]);
     root.textContent = "";
@@ -254,7 +298,8 @@ const HTML = /* html */ `<!doctype html>
         el("span", { text: "monthly" }), el("span", { text: usd(r["card.limit.monthly"]) }),
         el("span", { text: "pays" }), el("span", { text: mccs.length ? mccs.join(", ") : "any category" }),
         el("span", { text: "payee" }), el("span", { text: r["card.payee"] || "any" }),
-        el("span", { text: "approver" }), el("span", { text: (r["card.approver"] || "").replace(/^(0x.{4}).*(.{4})$/, "$1…$2") })));
+        el("span", { text: "approver" }), el("span", { text: (r["card.approver"] || "").replace(/^(0x.{4}).*(.{4})$/, "$1…$2") })),
+      ...(token ? [agentAccess(card, token)] : []));
   }
 })();
 </script>
