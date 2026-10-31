@@ -105,8 +105,25 @@
     </details>
   </section>
 
+  <section class="org" data-app data-org hidden aria-label="Your company">
+    <div class="org-head">
+      <div>
+        <div class="org-kicker">Company · you're an operator</div>
+        <h2 data-org-name></h2>
+      </div>
+      <p class="org-rule">You issue and manage its cards. Each card's approver decides anything over its limits.</p>
+    </div>
+    <dl class="org-stats">
+      <div><dt>Cards</dt><dd data-org-cards></dd></div>
+      <div><dt>Monthly allowance</dt><dd data-org-allow></dd></div>
+      <div><dt>Waiting on approvers</dt><dd data-org-pending></dd></div>
+      <div><dt>Frozen</dt><dd data-org-frozen></dd></div>
+    </dl>
+    <div class="org-foot"><span data-org-caps></span><span data-org-ops></span></div>
+  </section>
+
   <section class="block" data-app hidden>
-    <div class="block-head"><h2>Waiting for you</h2><span class="count" data-pending-count></span></div>
+    <div class="block-head"><h2 data-pending-title>Waiting for you</h2><span class="count" data-pending-count></span></div>
     <div class="req-list" data-pending></div>
   </section>
 

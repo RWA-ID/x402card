@@ -460,12 +460,13 @@ export async function issueWithToken(svc: CardService, store: Store, name: strin
   return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
 }
 
-/** A demo account issues a card on the console, with an agent token for it (shown once). */
+/** A demo account or org operator issues a card on the console, with an agent token for it (shown once). */
 export async function issueAccountWithToken(svc: CardService, store: Store, email: string, name: string, policy: unknown) {
   const records = policyToRecords({ currencies: ["USD"], ...(policy && typeof policy === "object" ? policy : {}) });
   // An empty approver means "me": the record defaults to the account's own email.
   if (!records["card.approver"]) delete records["card.approver"];
-  const card = await svc.issueAccountCard(email, name, records);
+  const org = await store.orgOf(email);
+  const card = org ? await svc.issueOrgCard(email, org, name, records) : await svc.issueAccountCard(email, name, records);
   const token = await mintAgentToken(store, normalizeLabel(card.name));
   return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
 }

@@ -119,6 +119,8 @@
     $("[data-meta]").hidden = false;
     $("[data-who]").textContent = me.admin ? "operator" : me.email;
     document.querySelectorAll("[data-app]").forEach((n) => (n.hidden = false));
+    $("[data-org]").hidden = !me.org;
+    if (me.org) $("[data-pending-title]").textContent = "Waiting on approval";
     (configureIssue ??= initIssue())();
     load();
   }
@@ -323,6 +325,21 @@
     });
   }
 
+  // ---------- the company panel, for an org's operators ----------
+  function renderOrg(cards, approvals) {
+    if (!me?.org) return;
+    const mine = cards.filter((c) => c.org === me.org.slug);
+    const names = new Set(mine.map((c) => c.name));
+    const allowance = mine.reduce((sum, c) => sum + (Number(c.records?.["card.limit.monthly"]) || 0), 0);
+    $("[data-org-name]").textContent = me.org.name;
+    $("[data-org-cards]").textContent = `${mine.length} of ${caps.cards}`;
+    $("[data-org-allow]").textContent = money(allowance);
+    $("[data-org-pending]").textContent = String(approvals.filter((a) => a.status === "pending" && a.expiresAt > Date.now() && names.has(fullName(a.name))).length);
+    $("[data-org-frozen]").textContent = String(mine.filter((c) => c.status === "frozen").length);
+    $("[data-org-caps]").textContent = `Per card: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month.`;
+    $("[data-org-ops]").textContent = `Operators: ${me.org.operators.join(", ")}`;
+  }
+
   // ---------- cards: the same card face as the home page ----------
   let highlight = "";
   function renderFleet(cards) {
@@ -333,11 +350,19 @@
       box.append(el("div", { class: "empty", text: me?.admin ? "No cards yet. Issue one above, or with the issue_card MCP tool." : "No cards yet. Issue your first one above: pick a name, set its limits, name who approves." }));
       return;
     }
-    const grid = el("div", { class: "fleet-grid" });
-    for (const c of cards) grid.append(fleetItem(c));
-    box.append(grid);
+    // An operator sees the company's cards first, then any of their own.
+    const groups = me?.org
+      ? [[me.org.name, cards.filter((c) => c.org === me.org.slug)], ["Your own cards", cards.filter((c) => c.org !== me.org.slug)]]
+      : [["", cards]];
+    for (const [title, group] of groups) {
+      if (!group.length) continue;
+      if (title) box.append(el("h3", { class: "fleet-group", text: title }));
+      const grid = el("div", { class: "fleet-grid" });
+      for (const c of group) grid.append(fleetItem(c));
+      box.append(grid);
+    }
     if (highlight) {
-      const f = grid.querySelector(`[data-card="${CSS.escape(highlight)}"]`);
+      const f = box.querySelector(`[data-card="${CSS.escape(highlight)}"]`);
       if (f) { f.classList.add("fresh"); f.scrollIntoView({ block: "nearest", behavior: R ? "auto" : "smooth" }); }
       highlight = "";
     }
@@ -418,6 +443,7 @@
       const sig = JSON.stringify([approvals, cards]);
       if (sig !== lastSig || focusId) {
         lastSig = sig;
+        renderOrg(cards, approvals);
         renderPending(approvals, cards);
         renderFleet(cards);
         renderHistory(approvals);
@@ -435,10 +461,12 @@
   function firstCard(cards) {
     const none = cards.length === 0;
     const blk = $("[data-issue-block]");
-    const mine = cards.filter((c) => c.issued_by_me).length;
-    $("[data-issue-left]").textContent = me.admin || !caps ? "" : `${Math.max(0, caps.perAccount - mine)} of ${caps.perAccount} left`;
-    blk.classList.toggle("first", none && !me.admin);
-    $("[data-issue-title]").textContent = none && !me.admin ? "Issue your first card" : "Issue a card";
+    const mine = cards.filter((c) => (me.org ? c.org === me.org.slug : c.issued_by_me)).length;
+    const allowed = me.org ? caps?.cards : caps?.perAccount;
+    $("[data-issue-left]").textContent = me.admin || !caps ? "" : `${Math.max(0, allowed - mine)} of ${allowed} left`;
+    const first = (me.org ? !mine : none) && !me.admin;
+    blk.classList.toggle("first", first);
+    $("[data-issue-title]").textContent = me.org ? `Issue a card for ${me.org.name}` : first ? "Issue your first card" : "Issue a card";
   }
 
   // ---------- issue a card ----------
@@ -694,7 +722,7 @@
       $("[data-ns-fixed]").hidden = !account;
       const capEl = $("[data-caps]");
       capEl.hidden = !account;
-      if (account && caps) capEl.textContent = `Demo limits: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month, USD.`;
+      if (account && caps) capEl.textContent = `${me?.org ? me.org.name : "Demo"} limits: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month, USD.`;
       const maxes = account && caps ? { limit_tx: caps.tx, limit_daily: caps.daily, limit_monthly: caps.monthly } : { limit_tx: 1000, limit_daily: 5000, limit_monthly: 20000 };
       const defaults = { limit_tx: 100, limit_daily: 500, limit_monthly: 2000 };
       for (const k of KEYS) {

@@ -128,6 +128,8 @@ export interface CardView {
   pending_approvals: { id: string; kind: "funding" | "payment" | "policy"; amount: number; currency: string; reason: string; merchant?: string }[];
   /** On a demo account's own list: this account issued the card (it may also just approve others'). */
   issued_by_me?: boolean;
+  /** On an operator's list: the company it belongs to. */
+  org?: string;
 }
 
 export interface SafeTransaction {
@@ -317,14 +319,17 @@ export class CardService {
     return this.issueCard(label, toRecords(policy), { issuedBy: me, ...(org ? { org } : {}) });
   }
 
-  /** The cards an email account issued or approves, as it is now. */
+  /** The cards an email account issued or approves, and its org's if it's an operator, as they are now. */
   async accountCards(email: string): Promise<CardView[]> {
     const me = email.toLowerCase();
     const out: CardView[] = [];
-    for (const label of await this.store.accountIndex(me)) {
+    const org = await this.store.orgOf(me);
+    const labels = new Set([...(await this.store.accountIndex(me)), ...(org ? await this.store.orgIndex(org.slug) : [])]);
+    for (const label of labels) {
       const [ref, rec] = await Promise.all([this.store.getCard(label), this.store.getRecords(label)]);
-      if (!ref || !rec || (ref.issuedBy !== me && rec["card.approver"] !== me)) continue;
-      out.push({ ...(await this.getCard(label)), ...(ref.issuedBy === me ? { issued_by_me: true } : {}) });
+      const inOrg = !!org && ref?.org === org.slug;
+      if (!ref || !rec || (ref.issuedBy !== me && rec["card.approver"] !== me && !inOrg)) continue;
+      out.push({ ...(await this.getCard(label)), ...(ref.issuedBy === me ? { issued_by_me: true } : {}), ...(inOrg ? { org: org.slug } : {}) });
     }
     return out;
   }

@@ -160,7 +160,7 @@ test("a card approved by a colleague's email shows on both accounts; only the ap
 });
 
 test("issue_card in the chat for an email sign-in: names the card, approver from the form", async () => {
-  const { McpServer } = await import("./mcp.ts");
+  const { McpServer, sha256Hex } = await import("./mcp.ts");
   const { service } = await import("./index.ts");
   const { Store } = await import("./store.ts");
   const store = new Store(env.KV);
@@ -181,7 +181,7 @@ test("issue_card in the chat for an email sign-in: names the card, approver from
 });
 
 test("orgs: an operator issues for the company within its caps, sees its cards, and can't loosen one alone", async () => {
-  const { McpServer } = await import("./mcp.ts");
+  const { McpServer, sha256Hex } = await import("./mcp.ts");
   const { Store } = await import("./store.ts");
   const { emailCards, callerFor } = await import("./oauth/access.ts");
   const { service } = await import("./index.ts");
@@ -216,6 +216,15 @@ test("orgs: an operator issues for the company within its caps, sees its cards, 
   assert.equal((await as("ops2@acme.com", "get_card", { name: "orgmaria.xcard.eth" })).structuredContent.card.name, "orgmaria.xcard.eth");
   const loosen = (await as("ops2@acme.com", "update_policy", { name: "orgmaria.xcard.eth", limit_monthly: 300 })).structuredContent;
   assert.equal(loosen.decision, "pending_human", "loosening still waits for the approver");
+  // The console: the operator sees the request and who decides it, and can't decide it.
+  const opSession = "xs_operator";
+  await store.putSession(await sha256Hex(opSession), "ops2@acme.com");
+  const seen = (await call("GET", "/api/approvals", undefined, opSession)).body.approvals.find((x: any) => x.id === loosen.approval_id);
+  assert.equal(seen.approver, "manager@acme.com");
+  assert.equal(seen.can_decide, false);
+  assert.equal((await call("POST", `/api/approvals/${loosen.approval_id}`, { approve: true }, opSession)).status, 403);
+  assert.deepEqual((await call("GET", "/api/me", undefined, opSession)).body.org, { slug: "acme", name: "Acme", operators: ["ops@acme.com", "ops2@acme.com"] });
+  assert.equal((await call("GET", "/api/cards", undefined, opSession)).body.cards[0].org, "acme");
   assert.ok(!(await emailCards("outsider@else.com", store)).length);
   assert.match((await as("outsider@else.com", "get_card", { name: "orgmaria.xcard.eth" })).content[0].text, /forbidden/);
 

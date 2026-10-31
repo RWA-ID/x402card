@@ -370,13 +370,16 @@ async function nameStatus(store: Store, name: string): Promise<{ name: string; a
 }
 
 /**
- * The console for a demo account (email session): its own cards, issuing
- * within DEMO_CARDS, and deciding requests whose approver is this email.
+ * The console for a demo account or org operator (email session): its cards,
+ * issuing within DEMO_CARDS or the org's caps, and deciding requests whose approver is this email.
  */
 async function accountApi(req: Request, path: string, env: Env, store: Store, email: string): Promise<Response> {
   const svc = service(env, store);
   try {
-    if (path === "/api/me" && req.method === "GET") return json({ email, caps: DEMO_CARDS });
+    if (path === "/api/me" && req.method === "GET") {
+      const org = await store.orgOf(email);
+      return json(org ? { email, caps: org.caps, org: { slug: org.slug, name: org.name, operators: org.operators } } : { email, caps: DEMO_CARDS });
+    }
     const n = path.match(/^\/api\/names\/([^/]+)$/);
     if (n && req.method === "GET") return json(await nameStatus(store, decodeURIComponent(n[1])));
     const cards = await svc.accountCards(email);
@@ -390,9 +393,11 @@ async function accountApi(req: Request, path: string, env: Env, store: Store, em
     }
     if (path === "/api/approvals" && req.method === "GET") {
       const all = await store.listApprovals();
+      // A company's operators see who approves its cards.
+      const orgCards = new Set(cards.filter((c) => c.org).map((c) => normalizeLabel(c.name)));
       const approvals = all
         .filter((a) => a.approver === email || mine.has(a.name))
-        .map(({ sig: _sig, ...a }) => ({ ...a, approver: a.approver === email || !isEmail(a.approver) ? a.approver : maskEmail(a.approver), can_decide: a.approver === email }));
+        .map(({ sig: _sig, ...a }) => ({ ...a, approver: a.approver === email || !isEmail(a.approver) || orgCards.has(a.name) ? a.approver : maskEmail(a.approver), can_decide: a.approver === email }));
       return json({ approvals });
     }
     const m = path.match(/^\/api\/approvals\/([0-9a-f-]{36})$/);
