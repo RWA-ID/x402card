@@ -13,6 +13,7 @@ import { decidePayee, toOrigin, type PayeeCheck, type PayeeChecker } from "./pol
 import type { TapSigner, TapTag } from "./tap/sign.ts";
 import { type CardPolicy, PolicyError, type TextRecords, isEmail, maskEmail, parseRecords, toRecords } from "./policy/records.ts";
 import { describeChanges, planChanges, type PolicyChange, type PolicyInput } from "./policy/changes.ts";
+import { sha256Hex } from "./mcp.ts";
 import type { Org, Store } from "./store.ts";
 
 /** The Airwallex surface the service needs; faked in tests. */
@@ -78,6 +79,9 @@ export class AirwallexIssuer implements Issuer {
   }
 }
 
+const CLAIM_TTL_S = 7 * 24 * 3600;
+const CLAIM_MAILS_PER_HOUR = 200;
+
 /** An org's caps unless it sets its own. */
 export const ORG_DEFAULT_CAPS = { tx: 500, daily: 2000, monthly: 5000, cards: 50 } as const;
 
@@ -130,6 +134,24 @@ export interface CardView {
   issued_by_me?: boolean;
   /** On an operator's list: the company it belongs to. */
   org?: string;
+  /** On the lists of those who manage it: who it was issued to, and whether they've claimed it. */
+  holder?: string;
+  claimed?: boolean;
+  /** Just after issuing to a holder: did the claim email go out? */
+  claim_sent?: boolean;
+}
+
+/** What a claim link shows before anyone signs in. */
+export interface ClaimView {
+  card: string;
+  last4?: string;
+  org: string;
+  holder: string;
+  limit_tx?: string;
+  limit_daily?: string;
+  limit_monthly?: string;
+  currencies?: string;
+  expiresAt: number;
 }
 
 export interface SafeTransaction {
@@ -200,6 +222,8 @@ export interface ServiceOptions {
   approverAuth?: ApproverAuth;
   /** Tells an email approver a request is waiting (auth/mail.ts). Best effort: a failed send never fails the request. */
   notify?: (a: PendingApproval, card: { name: string; last4?: string; approvalUrl?: string }) => Promise<void>;
+  /** Emails a holder their one-time claim link (auth/mail.ts). */
+  sendClaim?: (c: { to: string; card: string; last4?: string; org: string; records: TextRecords; url: string; expiresAt: number }) => Promise<void>;
 }
 
 /** An approval as the approver sees it, with the typed data to sign either way. */
@@ -289,14 +313,86 @@ export class CardService {
   }
 
   /** An org's operator issues a card for the company, within the org's caps. */
-  async issueOrgCard(email: string, org: Org, name: string, records: TextRecords): Promise<CardView> {
+  async issueOrgCard(email: string, org: Org, name: string, records: TextRecords, holderEmail?: string): Promise<CardView> {
+    const holder = holderEmail?.trim().toLowerCase();
+    if (holder && !isEmail(holder)) throw new ServiceError("bad_holder", "the holder is an email address");
     if ((await this.store.orgIndex(org.slug)).length >= org.caps.cards) {
       throw new ServiceError("limit_reached", `${org.name} can issue ${org.caps.cards} cards`);
     }
-    return this.issueCapped(email.toLowerCase(), name, records, org.caps, "org", org.slug);
+    const card = await this.issueCapped(email.toLowerCase(), name, records, org.caps, "org", org.slug, holder);
+    return holder ? { ...card, holder, claimed: false, claim_sent: await this.sendClaim(normalizeLabel(card.name), org) } : card;
   }
 
-  private async issueCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string): Promise<CardView> {
+  /**
+   * Emails the holder a one-time link, ending any earlier one. Returns false if
+   * it couldn't go out: the card stands, and an operator can send it again.
+   */
+  private async sendClaim(label: string, org: Org): Promise<boolean> {
+    const [ref, rec] = await Promise.all([this.store.getCard(label), this.store.getRecords(label)]);
+    if (!ref?.holder || !rec || !this.opts.sendClaim) return false;
+    if ((await this.store.hit(`claimrl:${org.slug}`)) > CLAIM_MAILS_PER_HOUR) return false;
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const token = "clm_" + Array.from(bytes, (x) => x.toString(16).padStart(2, "0")).join("");
+    const expiresAt = Date.now() + CLAIM_TTL_S * 1000;
+    await this.store.putClaim(await sha256Hex(token), { label, email: ref.holder, expiresAt }, CLAIM_TTL_S);
+    try {
+      await this.opts.sendClaim({ to: ref.holder, card: fullName(label), last4: ref.last4, org: org.name, records: rec, url: `https://x-card.dev/claim#${token}`, expiresAt });
+      return true;
+    } catch (e) {
+      console.error("claim mail", e);
+      return false;
+    }
+  }
+
+  /** An operator sends an unclaimed card's link again. */
+  async resendClaim(name: string, org: Org): Promise<boolean> {
+    const label = normalizeLabel(name);
+    const ref = await this.store.getCard(label);
+    if (!ref || ref.org !== org.slug) throw new ServiceError("not_found", "not one of your company's cards");
+    if (!ref.holder) throw new ServiceError("no_holder", `${fullName(label)} wasn't issued to anyone`);
+    if (ref.claimedAt) throw new ServiceError("claimed", `${fullName(label)} is already claimed`);
+    return this.sendClaim(label, org);
+  }
+
+  /** What a claim link shows: public to whoever has the link. */
+  async claimView(token: string): Promise<ClaimView> {
+    const claim = await this.liveClaim(token);
+    const [ref, rec] = await Promise.all([this.store.getCard(claim.label), this.store.getRecords(claim.label)]);
+    const org = ref?.org ? await this.store.getOrg(ref.org) : null;
+    if (!ref || !rec) throw new ServiceError("not_found", "this claim link isn't valid");
+    return {
+      card: fullName(claim.label),
+      last4: ref.last4,
+      org: org?.name ?? "A company",
+      holder: maskEmail(claim.email),
+      limit_tx: rec["card.limit.tx"],
+      limit_daily: rec["card.limit.daily"],
+      limit_monthly: rec["card.limit.monthly"],
+      currencies: rec["card.currencies"],
+      expiresAt: claim.expiresAt,
+    };
+  }
+
+  /** The holder, signed in as that email, claims the card. The link is used up. */
+  async claimCard(token: string, email: string): Promise<CardView> {
+    const claim = await this.liveClaim(token);
+    if (claim.email !== email.toLowerCase()) throw new ServiceError("not_holder", `this card was issued to ${maskEmail(claim.email)}: sign in with that address`);
+    const ref = await this.store.getCard(claim.label);
+    if (!ref) throw new ServiceError("not_found", "this claim link isn't valid");
+    await this.store.putCard(claim.label, { ...ref, claimedAt: Date.now() });
+    await this.store.addToAccountIndex(claim.email, claim.label);
+    await this.store.deleteClaim(await sha256Hex(token), claim.label);
+    await this.store.addEvent(claim.label, { at: Date.now(), kind: "policy", detail: `claimed by ${maskEmail(claim.email)}` });
+    return this.getCard(claim.label);
+  }
+
+  private async liveClaim(token: string) {
+    const claim = /^clm_[0-9a-f]{64}$/.test(token) ? await this.store.getClaim(await sha256Hex(token)) : null;
+    if (!claim || claim.expiresAt < Date.now()) throw new ServiceError("not_found", "this claim link was used, replaced or has expired: ask your company's operator for a new one");
+    return claim;
+  }
+
+  private async issueCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string, holder?: string): Promise<CardView> {
     const full = name.trim().toLowerCase();
     const label = full.endsWith(`.${DEMO_CARDS.parent}`) ? full : `${full}.${DEMO_CARDS.parent}`;
     if (label.split(".").length !== 3) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${DEMO_CARDS.parent}`);
@@ -316,7 +412,7 @@ export class CardService {
       policy.currencies.join(",") !== "USD" && "USD only",
     ].filter(Boolean);
     if (over.length) throw new ServiceError(`over_${kind}_caps`, `${kind} cards: ${over.join(", ")}`);
-    return this.issueCard(label, toRecords(policy), { issuedBy: me, ...(org ? { org } : {}) });
+    return this.issueCard(label, toRecords(policy), { issuedBy: me, ...(org ? { org } : {}), ...(holder ? { holder } : {}) });
   }
 
   /** The cards an email account issued or approves, and its org's if it's an operator, as they are now. */
@@ -328,13 +424,19 @@ export class CardService {
     for (const label of labels) {
       const [ref, rec] = await Promise.all([this.store.getCard(label), this.store.getRecords(label)]);
       const inOrg = !!org && ref?.org === org.slug;
-      if (!ref || !rec || (ref.issuedBy !== me && rec["card.approver"] !== me && !inOrg)) continue;
-      out.push({ ...(await this.getCard(label)), ...(ref.issuedBy === me ? { issued_by_me: true } : {}), ...(inOrg ? { org: org.slug } : {}) });
+      const holding = ref?.holder === me && !!ref?.claimedAt;
+      if (!ref || !rec || (ref.issuedBy !== me && rec["card.approver"] !== me && !inOrg && !holding)) continue;
+      out.push({
+        ...(await this.getCard(label)),
+        ...(ref.issuedBy === me ? { issued_by_me: true } : {}),
+        ...(inOrg ? { org: org.slug } : {}),
+        ...(ref.holder ? { holder: ref.holder, claimed: !!ref.claimedAt } : {}),
+      });
     }
     return out;
   }
 
-  async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string; org?: string } = {}): Promise<CardView> {
+  async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string; org?: string; holder?: string } = {}): Promise<CardView> {
     const label = normalizeLabel(name);
     if (RESERVED_LABELS.has(labelOfKey(label)) || RESERVED_KEYS.has(label)) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
     if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
@@ -356,6 +458,7 @@ export class CardService {
       cardholderId: holder.cardholderId, cardId: card.cardId, last4: card.last4, createdAt: Date.now(),
       ...(opts.issuedBy ? { issuedBy: opts.issuedBy } : {}),
       ...(opts.org ? { org: opts.org } : {}),
+      ...(opts.holder ? { holder: opts.holder } : {}),
     });
     await this.store.putRecords(label, toRecords(policy));
     await this.store.clearRequestId("issue", label);

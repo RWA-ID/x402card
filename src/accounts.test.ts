@@ -237,3 +237,55 @@ test("orgs: an operator issues for the company within its caps, sees its cards, 
   assert.equal(await store.orgOf("ops2@acme.com"), null);
   assert.ok(!(await emailCards("ops2@acme.com", store)).length);
 });
+
+test("claim links: one holder, many cards; only that email claims; the token goes to them, once", async () => {
+  const { sha256Hex } = await import("./mcp.ts");
+  const { Store } = await import("./store.ts");
+  const { emailCards } = await import("./oauth/access.ts");
+  const store = new Store(env.KV);
+  const session = async (email: string) => { const t = "xs_" + email; await store.putSession(await sha256Hex(t), email); return t; };
+  assert.equal((await call("POST", "/api/orgs", { slug: "beta", name: "Beta Inc", operators: ["boss@beta.com"] }, "admin-token")).status, 201);
+  const boss = await session("boss@beta.com"), holder = await session("staff@beta.com"), stranger = await session("stranger@else.com");
+  const policy = { limit_tx: 50, limit_monthly: 200, approver: "boss@beta.com" };
+  const linkFor = (card: string) => {
+    const m = [...sent].reverse().find((x) => x.to[0] === "staff@beta.com" && x.text.includes(card));
+    return m!.text.match(/claim#(clm_[0-9a-f]{64})/)![1];
+  };
+
+  const one = await call("POST", "/api/cards", { name: "claimone", holder: "Staff@Beta.com", policy }, boss);
+  assert.equal(one.status, 201);
+  assert.equal(one.body.agent_token, undefined, "the operator never gets the holder's token");
+  assert.equal(one.body.card.claim_sent, true);
+  assert.equal((await call("POST", "/api/cards", { name: "claimtwo", holder: "staff@beta.com", policy }, boss)).status, 201, "one email can hold many cards");
+  assert.equal((await call("POST", "/api/cards", { name: "nope", holder: "x@y.com", policy }, stranger)).status, 400, "only an operator names a holder");
+  assert.equal((await call("POST", "/api/cards", { name: "bad-holder", holder: "not-an-email", policy }, boss)).status, 400);
+
+  const link = linkFor("claimone.xcard.eth");
+  const view = await call("GET", `/claims/${link}`);
+  assert.equal(view.body.org, "Beta Inc");
+  assert.ok(!JSON.stringify(view.body).includes("staff@beta.com"), "the public view masks the holder");
+  assert.ok(!(await emailCards("staff@beta.com", store)).length, "no access before claiming");
+
+  // A resend ends the old link.
+  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/claim", {}, stranger)).status, 403);
+  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/claim", {}, boss)).body.sent, true);
+  const fresh = linkFor("claimone.xcard.eth");
+  assert.notEqual(fresh, link);
+  assert.equal((await call("GET", `/claims/${link}`)).status, 404);
+
+  assert.equal((await call("POST", `/claims/${fresh}`)).status, 401);
+  assert.equal((await call("POST", `/claims/${fresh}`, {}, stranger)).status, 403, "a forwarded link doesn't work");
+  const got = await call("POST", `/claims/${fresh}`, {}, holder);
+  assert.equal(got.status, 200);
+  assert.match(got.body.agent_token, /^x4c_/);
+  assert.equal((await call("POST", `/claims/${fresh}`, {}, holder)).status, 404, "the link works once");
+  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/claim", {}, boss)).status, 400, "already claimed");
+
+  // The holder has it, and only it; the unclaimed one stays out.
+  assert.deepEqual((await emailCards("staff@beta.com", store)).map((c) => c.label), ["claimone.xcard.eth"]);
+  const list = (await call("GET", "/api/cards", undefined, holder)).body.cards;
+  assert.deepEqual(list.map((c: any) => c.name), ["claimone.xcard.eth"]);
+  assert.equal(list[0].claimed, true);
+  assert.equal((await call("POST", "/api/cards/claimone.xcard.eth/unfreeze", {}, holder)).status, 403, "the holder can't lift a freeze");
+  assert.equal((await call("GET", "/api/cards", undefined, boss)).body.cards.find((c: any) => c.name === "claimone.xcard.eth").holder, "staff@beta.com");
+});

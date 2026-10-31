@@ -21,6 +21,8 @@
 //   org:<slug>               a company: { slug, name, operators, caps }
 //   orgm:<email>             the org this email operates
 //   orgc:<slug>              the org's cards, by key
+//   claim:<sha256>           a card's one-time claim link -> { label, email, expiresAt } (7 days)
+//   claimof:<label>          that link's hash, so sending a new one ends the old one
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
 import type { RecordSource } from "./ens/gateway.ts";
@@ -34,6 +36,15 @@ export interface CardRef {
   issuedBy?: string;
   /** The company it belongs to; that org's operators manage it. */
   org?: string;
+  /** The person it was issued to, by email. They get access by claiming it. */
+  holder?: string;
+  claimedAt?: number;
+}
+
+export interface Claim {
+  label: string;
+  email: string;
+  expiresAt: number;
 }
 
 /** A company. Operators issue and manage its cards; approvals stay with each card's card.approver. */
@@ -110,6 +121,19 @@ export class Store implements RecordSource {
   async addToOrgIndex(slug: string, label: string): Promise<void> {
     const have = await this.orgIndex(slug);
     if (!have.includes(label)) await this.kv.put(`orgc:${slug}`, JSON.stringify([...have, label]));
+  }
+
+  getClaim(hash: string) { return this.kv.get<Claim>(`claim:${hash}`, "json"); }
+  /** Stores a card's claim link, ending any earlier one. */
+  async putClaim(hash: string, c: Claim, ttlS: number) {
+    const old = await this.kv.get(`claimof:${c.label}`);
+    if (old) await this.kv.delete(`claim:${old}`);
+    await this.kv.put(`claim:${hash}`, JSON.stringify(c), { expirationTtl: ttlS });
+    await this.kv.put(`claimof:${c.label}`, hash, { expirationTtl: ttlS });
+  }
+  async deleteClaim(hash: string, label: string) {
+    await this.kv.delete(`claim:${hash}`);
+    await this.kv.delete(`claimof:${label}`);
   }
 
   getOtp(key: string) { return this.kv.get<{ hash: string; tries: number }>(`otp:${key}`, "json"); }

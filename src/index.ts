@@ -25,9 +25,9 @@ import { mainnet } from "viem/chains";
 import { viemReader } from "@x402identity/payee";
 import { AirwallexClient, KvTokenStore } from "./airwallex/client.ts";
 import { AuthError, EmailAuth } from "./auth/email.ts";
-import { FROM_APPROVALS, approvalEmail, resendMailer, type Mailer } from "./auth/mail.ts";
+import { FROM_APPROVALS, approvalEmail, claimEmail, resendMailer, type Mailer } from "./auth/mail.ts";
 import { RESERVED_KEYS, RESERVED_LABELS, gatewayResponse } from "./ens/gateway.ts";
-import { McpServer, authenticate, issueAccountWithToken, issueWithToken } from "./mcp.ts";
+import { McpServer, authenticate, issueAccountWithToken, issueWithToken, mintAgentToken } from "./mcp.ts";
 import { ensApproverAuth } from "./policy/approver.ts";
 import { describeChanges } from "./policy/changes.ts";
 import { isEmail, maskEmail, publicRecords } from "./policy/records.ts";
@@ -112,6 +112,12 @@ export function service(env: Env, store: Store, origin?: string): CardService {
   const send = env.RESEND_API_KEY ? resendMailer(env.RESEND_API_KEY) : undefined;
   return new CardService(store, issuer, {
     ...(send ? {
+      sendClaim: async (c) => {
+        const r = c.records;
+        const cur = (r["card.currencies"] || "USD").split(",")[0];
+        const limits: [string, string][] = [["per transaction", `${r["card.limit.tx"]} ${cur}`], ...(r["card.limit.daily"] ? [["per day", `${r["card.limit.daily"]} ${cur}`] as [string, string]] : []), ["per month", `${r["card.limit.monthly"]} ${cur}`]];
+        await send({ from: FROM_APPROVALS, ...claimEmail({ to: c.to, card: c.card, last4: c.last4, org: c.org, limits, approver: r["card.approver"] ?? "", url: c.url, expiresAt: c.expiresAt }) });
+      },
       notify: async (a, card) => {
         const [why, ...rest] = a.reason.split(" · ");
         await send({ from: FROM_APPROVALS, ...approvalEmail({
@@ -271,6 +277,25 @@ export default {
       }
     }
 
+    // A holder's claim link: public to read, the holder's own email session to claim.
+    const claimPath = path.match(/^\/claims\/([^/]+)$/);
+    if (claimPath) {
+      const svc = service(env, store);
+      try {
+        if (req.method === "GET") return json(await svc.claimView(claimPath[1]));
+        if (req.method === "POST") {
+          const email = await new EmailAuth({ store, secret: env.APPROVAL_SECRET }).session(bearer(req));
+          if (!email) return json({ error: "sign in first" }, 401);
+          const card = await svc.claimCard(claimPath[1], email);
+          return json({ card, agent_token: await mintAgentToken(store, normalizeLabel(card.name)) });
+        }
+        return json({ error: "not found" }, 404);
+      } catch (e) {
+        const err = describeError(e);
+        return json({ error: err }, err.code === "not_found" ? 404 : err.code === "not_holder" ? 403 : 400);
+      }
+    }
+
     if (path.startsWith("/api/")) {
       const caller = await authenticate(req, store, env.MCP_ADMIN_TOKEN);
       if (caller?.kind !== "admin") {
@@ -387,9 +412,9 @@ async function accountApi(req: Request, path: string, env: Env, store: Store, em
 
     if (path === "/api/cards" && req.method === "GET") return json({ cards });
     if (path === "/api/cards" && req.method === "POST") {
-      const b = (await req.json().catch(() => ({}))) as { name?: unknown; policy?: unknown };
+      const b = (await req.json().catch(() => ({}))) as { name?: unknown; policy?: unknown; holder?: unknown };
       if (typeof b.name !== "string" || !b.name.trim()) return json({ error: { code: "bad_input", message: "name is required" } }, 400);
-      return json(await issueAccountWithToken(svc, store, email, b.name, b.policy), 201);
+      return json(await issueAccountWithToken(svc, store, email, b.name, b.policy, typeof b.holder === "string" && b.holder.trim() ? b.holder : undefined), 201);
     }
     if (path === "/api/approvals" && req.method === "GET") {
       const all = await store.listApprovals();
@@ -407,8 +432,17 @@ async function accountApi(req: Request, path: string, env: Env, store: Store, em
       const approval = await svc.decideByEmail(m[1], b.approve, email);
       return json({ approval, card: await svc.getCard(approval.name) });
     }
+    const resend = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/claim$/);
+    if (resend && req.method === "POST") {
+      const org = await store.orgOf(email);
+      if (!org) return json({ error: { code: "forbidden", message: "only a company's operator can do this" } }, 403);
+      return json({ sent: await svc.resendClaim(resend[1], org) });
+    }
     const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/unfreeze$/);
     if (u && req.method === "POST") {
+      // A holder uses the card; someone else lifts a freeze on it.
+      const c = cards.find((x) => normalizeLabel(x.name) === normalizeLabel(u[1]));
+      if (c && !c.issued_by_me && !c.org && c.records["card.approver"] !== email) return json({ error: { code: "forbidden", message: "the card's holder can't unfreeze it" } }, 403);
       if (!mine.has(normalizeLabel(u[1]))) return json({ error: { code: "not_found", message: "not one of your cards" } }, 404);
       return json({ card: await svc.unfreeze(u[1], maskEmail(email)) });
     }

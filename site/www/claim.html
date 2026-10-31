@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claim your card · X Card</title>
+<meta name="description" content="Claim the X Card your company issued you.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0a0b0d">
+<link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="brand/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="brand/app-icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&display=swap">
+<link rel="stylesheet" href="styles.css">
+<!-- Opened from the chat's approval card: just this request, before first paint. -->
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <div class="nav-left">
+      <a href="index.html" class="wordmark" style="color:var(--text)" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
+      <div class="pill-sandbox">SANDBOX</div>
+    </div>
+    <div class="nav-links">
+      <a href="index.html" class="hide-sm">Overview</a>
+      <a href="console.html">Console</a>
+    </div>
+  </div>
+</nav>
+
+<main class="wrap page">
+  <div class="page-head">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="kicker"><span class="n">→</span><span>A card for you</span></div>
+      <h1>Claim your card</h1>
+      <p class="page-sub">Your company issued this card for your AI agent. The agent spends within its limits and never sees a card number.</p>
+    </div>
+  </div>
+  <div data-claim aria-live="polite"><div class="empty">Loading…</div></div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-main">
+      <a href="index.html" class="wordmark" aria-label="X Card home"><img class="mark" src="brand/xcard-mark.svg" alt="" aria-hidden="true" width="48" height="48">X Card</a>
+      <a class="gh" href="https://x.com/xcard_dev" target="_blank" rel="noopener" aria-label="X Card on X"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg><span>@xcard_dev</span></a>
+      <a class="gh" href="mailto:hello@x-card.dev"><span>hello@x-card.dev</span></a>
+    </div>
+    <div class="foot-links">
+      <a href="legal.html#privacy">Privacy</a>
+      <a href="legal.html#terms">Terms</a>
+      <span>Sandbox demo, no real money.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="auth.js" defer></script>
+<script src="claim.js" defer></script>
+</body>
+</html>

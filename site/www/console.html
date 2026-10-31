@@ -168,6 +168,7 @@
               <code data-ix-token></code>
               <span class="ix-token-n">Only works for this card. <span data-ix-cmd-wrap>Claude Code: <button type="button" data-ix-copycmd>copy the claude mcp add line</button>.</span> Added to Cards below.</span>
             </div>
+            <p class="ix-claimed" data-ix-claimed role="status" hidden></p>
             <button type="button" class="ix-again" data-ix-again hidden>Issue another</button>
           </div>
         </div>
@@ -187,6 +188,12 @@
             </div>
           </div>
           <span class="ix-hint" data-ix-namehint>lowercase letters, digits and hyphens</span>
+        </label>
+
+        <label class="ix-namef" data-holder-field hidden>
+          <span class="ix-flabel">Holder <i>optional: who the card is for</i></span>
+          <div class="ix-namebox"><input data-issue-holder type="email" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="maria@company.com" aria-label="Holder's email"></div>
+          <span class="ix-hint">They get a one-time link by email, and only they get the agent token.</span>
         </label>
 
         <div class="ix-group">

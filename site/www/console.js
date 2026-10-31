@@ -396,11 +396,19 @@
           catch (err) { e.target.disabled = false; e.target.textContent = err.message; }
         } })
       : null;
+    const resend = c.holder && !c.claimed && c.org
+      ? el("button", { class: "btn-xs", text: "Resend claim link", onclick: async (e) => {
+          e.target.disabled = true;
+          try { const r = await api(`/api/cards/${encodeURIComponent(c.name)}/claim`, { method: "POST" }); e.target.textContent = r.sent ? "Sent" : "Couldn't send"; }
+          catch (err) { e.target.textContent = err.message; }
+        } })
+      : null;
     return el("article", { class: "fleet-item", "data-card": c.name },
       face,
       el("div", { class: "fleet-meta" },
-        el("div", { class: "fleet-row" }, pill(c.status), pending ? el("span", { class: "status-pill", style: "color:var(--warning);background:oklch(0.84 0.14 80 / 0.1)", text: `${pending} PENDING` }) : null, el("span", { style: "flex:1" }), action),
+        el("div", { class: "fleet-row" }, pill(c.status), pending ? el("span", { class: "status-pill", style: "color:var(--warning);background:oklch(0.84 0.14 80 / 0.1)", text: `${pending} PENDING` }) : null, el("span", { style: "flex:1" }), action, resend),
         el("div", { class: "kv" },
+          ...(c.holder ? [el("span", { text: "holder" }), el("span", { text: `${c.holder} · ${c.claimed ? "claimed" : "not claimed yet"}` })] : []),
           el("span", { text: "approver" }), el("span", { text: who(r["card.approver"] || "—") }),
           el("span", { text: "merchants" }), el("span", { text: r["card.mcc.allow"] ? "MCC " + r["card.mcc.allow"] : "any category" }),
           el("span", { text: "payee" }), el("span", { text: payeeCell(r) }))));
@@ -581,7 +589,7 @@
 
     // Any edit after issuing goes back to editing a new card.
     function edited() {
-      if (phase === "issued") { phase = "edit"; issued = null; tokenBox.hidden = true; again.hidden = true; }
+      if (phase === "issued") { phase = "edit"; issued = null; tokenBox.hidden = true; again.hidden = true; $("[data-ix-claimed]").hidden = true; }
       draw();
     }
 
@@ -669,7 +677,8 @@
       card.flash.classList.remove("go"); void card.flash.offsetWidth; card.flash.classList.add("go");
       const t0 = Date.now();
       try {
-        const r = await api("/api/cards", { method: "POST", body: JSON.stringify({ name: `${v}.${ns}`, policy: {
+        const holder = me.org ? $("[data-issue-holder]").value.trim() : "";
+        const r = await api("/api/cards", { method: "POST", body: JSON.stringify({ name: `${v}.${ns}`, ...(holder ? { holder } : {}), policy: {
           limit_tx: Number(f.limit_tx), limit_monthly: Number(f.limit_monthly),
           ...(f.limit_daily !== "" ? { limit_daily: Number(f.limit_daily) } : {}),
           currencies: list(curIn.value.toUpperCase()), mcc_allow: list(mccIn.value), approver: approverIn.value.trim(),
@@ -679,7 +688,14 @@
         await new Promise((res) => setTimeout(res, Math.max(0, 1100 - (Date.now() - t0))));
         issued = { name: r.card.name, last4: r.card.last4, token: r.agent_token };
         phase = "issued";
-        showToken();
+        if (r.agent_token) showToken();
+        else {
+          // Issued to a holder: the token is theirs, when they claim it.
+          $("[data-ix-claimed]").textContent = r.card.claim_sent ? `${holder} got a one-time link to claim it.` : `The claim email to ${holder} didn't go out. Send it again from the card below.`;
+          $("[data-ix-claimed]").hidden = false;
+          again.hidden = false;
+          $("[data-issue-holder]").value = "";
+        }
         highlight = r.card.name;
         lastSig = ""; load();
       } catch (ex) {
@@ -734,6 +750,8 @@
       let saved = "xcard.eth";
       if (!account) { try { if (localStorage.getItem(NS_KEY) === "x402card.eth") saved = "x402card.eth"; } catch { /* private mode */ } }
       phase = "edit"; issued = null; tokenBox.hidden = true; again.hidden = true;
+      $("[data-holder-field]").hidden = !me.org;
+      $("[data-ix-claimed]").hidden = true;
       payGroup.set("verified-or-escalate");
       apGroup.set(account ? "email" : "wallet");
       approverIn.value = account ? me.email : "";

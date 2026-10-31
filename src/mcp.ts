@@ -45,7 +45,7 @@ export const TOOLS = [
     _meta: issueUi,
     title: "Issue an agent card",
     description:
-      "Issue a virtual card with a spend policy published as ENS text records. Signed in (email or wallet): call it with no arguments, or with a suggested name and policy, and the person fills in the form in the chat and submits it: the limits, merchant categories, payee check and the approver (an email, a wallet or an ENS name; by default themselves). Signed in by email they name the card (<name>.xcard.eth; caps $500/transaction, $2,000/day, $5,000/month, USD, 5 cards); by wallet they get the next free testN.xcard.eth (caps $50/transaction, $200/day, $500/month, USD, 3 cards). An org's operator issues for the company within its caps, and sees all its cards. Never set submit yourself. The issued card in the chat shows the person an agent token, once, for an autonomous agent to use this card; it isn't in your result. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
+      "Issue a virtual card with a spend policy published as ENS text records. Signed in (email or wallet): call it with no arguments, or with a suggested name and policy, and the person fills in the form in the chat and submits it: the limits, merchant categories, payee check and the approver (an email, a wallet or an ENS name; by default themselves). Signed in by email they name the card (<name>.xcard.eth; caps $500/transaction, $2,000/day, $5,000/month, USD, 5 cards); by wallet they get the next free testN.xcard.eth (caps $50/transaction, $200/day, $500/month, USD, 3 cards). An org's operator issues for the company within its caps, sees all its cards, and can name a holder: the person the card is for, who claims it by email and gets its agent token. Never set submit yourself. The issued card in the chat shows the person an agent token, once, for an autonomous agent to use this card; it isn't in your result. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
     inputSchema: {
       type: "object",
       properties: {
@@ -67,6 +67,7 @@ export const TOOLS = [
             payee_allow: { type: "array", items: { type: "string" }, description: "ENS names this card may pay, e.g. modelhub.eth; empty = any verified payee" },
           },
         },
+        holder: { type: "string", description: "A company's operator only: the email of the person the card is for. They get a one-time link to claim it" },
         submit: { type: "boolean", description: "Set by the form in the chat when the person submits it" },
       },
     },
@@ -319,8 +320,10 @@ export class McpServer {
         // A blank daily limit on a named card isn't the test default: the service sets it from the caps.
         const { limit_daily: _testDaily, ...named } = TEST_DEFAULTS;
         const records = policyToRecords({ ...(email ? named : TEST_DEFAULTS), ...picked, currencies: ["USD"], approver: optStr(picked.approver) || email || address });
+        const holder = optStr(a.holder);
+        if (holder && !org) throw toolError("forbidden", "only a company's operator can issue a card to someone else");
         const card = org
-          ? await this.svc.issueOrgCard(email!, org, str(a.name, "name"), records)
+          ? await this.svc.issueOrgCard(email!, org, str(a.name, "name"), records, holder)
           : email
           ? await this.svc.issueAccountCard(email, str(a.name, "name"), records)
           : await this.svc.issueTestCard(address!, records);
@@ -329,6 +332,15 @@ export class McpServer {
         const approver = card.records["card.approver"];
         const mine = approver === email || approver === address;
         const label = normalizeLabel(card.name);
+        if (holder) {
+          return {
+            decision: "issued",
+            card,
+            note: card.claim_sent
+              ? `${card.name} is issued to ${holder}, who got a one-time claim link by email. They sign in to claim it and get its agent token; you and the operator never see that token.`
+              : `${card.name} is issued to ${holder}, but the claim email didn't go out. It can be sent again from the console.`,
+          };
+        }
         return {
           decision: "issued",
           card,
@@ -443,7 +455,7 @@ export class McpServer {
 }
 
 /** A new agent token for one card. Only its hash is stored, so it can be shown just once. */
-async function mintAgentToken(store: Store, label: string) {
+export async function mintAgentToken(store: Store, label: string) {
   const token = randomToken();
   await store.putToken(await sha256Hex(token), label);
   return token;
@@ -461,12 +473,15 @@ export async function issueWithToken(svc: CardService, store: Store, name: strin
 }
 
 /** A demo account or org operator issues a card on the console, with an agent token for it (shown once). */
-export async function issueAccountWithToken(svc: CardService, store: Store, email: string, name: string, policy: unknown) {
+export async function issueAccountWithToken(svc: CardService, store: Store, email: string, name: string, policy: unknown, holder?: string) {
   const records = policyToRecords({ currencies: ["USD"], ...(policy && typeof policy === "object" ? policy : {}) });
   // An empty approver means "me": the record defaults to the account's own email.
   if (!records["card.approver"]) delete records["card.approver"];
   const org = await store.orgOf(email);
-  const card = org ? await svc.issueOrgCard(email, org, name, records) : await svc.issueAccountCard(email, name, records);
+  if (holder && !org) throw toolError("forbidden", "only a company's operator can issue a card to someone else");
+  const card = org ? await svc.issueOrgCard(email, org, name, records, holder) : await svc.issueAccountCard(email, name, records);
+  // The holder gets the token when they claim it, not the operator.
+  if (holder) return { card };
   const token = await mintAgentToken(store, normalizeLabel(card.name));
   return { card, agent_token: token, note: "Store agent_token now; it is not shown again. It only works for this card." };
 }

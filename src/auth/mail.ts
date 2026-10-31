@@ -152,6 +152,39 @@ export function approvalEmail(i: ApprovalMailInput): Mail {
   };
 }
 
+export interface ClaimMailInput {
+  to: string;
+  card: string;
+  last4?: string;
+  org: string;
+  limits: [string, string][];
+  approver: string;
+  url: string;
+  expiresAt: number;
+}
+
+export function claimEmail(i: ClaimMailInput): Mail {
+  const headline = `${i.org} issued you a card`;
+  const rows: [string, string][] = [...i.limits, ["approver", i.approver], ["link expires", new Date(i.expiresAt).toUTCString().replace(":00 GMT", " UTC")]];
+  const table = rows.map(([k, v]) => `<tr>
+    <td style="font-family:${MONO};font-size:12px;color:#5d626c;padding:7px 0;vertical-align:top;white-space:nowrap;">${esc(k)}</td>
+    <td align="right" style="font-family:${MONO};font-size:12px;color:#b9bdc6;padding:7px 0 7px 14px;word-break:break-word;">${esc(v)}</td></tr>`).join("");
+  const inner = `
+<div style="font-family:${MONO};font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8b909a;">A card for you</div>
+<div style="font-family:${SANS};font-size:23px;line-height:1.25;font-weight:500;letter-spacing:-0.02em;color:#eceef1;padding-top:12px;word-break:break-word;">${esc(headline)}</div>
+<div style="font-family:${SANS};font-size:15px;line-height:1.6;color:#8b909a;padding-top:10px;">Claim it to connect your AI agent. The agent spends within these limits and never sees a card number. Anything over them waits for the approver.</div>
+<div style="padding-top:22px;">${cardFace(i.card, i.last4)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:18px;border-top:1px solid #1d2026;">${table}</table>
+<div style="padding-top:24px;">${button(i.url, "Claim your card")}</div>
+<div style="font-family:${SANS};font-size:13px;line-height:1.6;color:#5d626c;padding-top:18px;">The link works once. You sign in with a code sent to this address, so a forwarded email can't claim it.</div>`;
+  return {
+    to: i.to,
+    subject: `${headline}: ${i.card}`,
+    html: frame(headline, inner),
+    text: `${headline}: ${i.card}\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\nClaim it: ${i.url}\n\nThe link works once. You sign in with a code sent to this address, so a forwarded email can't claim it.`,
+  };
+}
+
 function money(n: number, cur: string): string {
   const sym = ({ USD: "$", EUR: "€", GBP: "£", JPY: "¥" } as Record<string, string>)[cur];
   const v = n.toLocaleString("en-US", { maximumFractionDigits: 2 });

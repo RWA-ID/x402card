@@ -76,7 +76,7 @@ export async function walletCards(address: Address, deps: Pick<AccessDeps, "stor
   return out;
 }
 
-/** The cards an email account approves or issued, and its org's if it's an operator (the indexes; the records decide). */
+/** The cards an email account approves, issued or claimed, and its org's if it's an operator (the indexes; the records decide). */
 export async function emailCards(email: string, store: Store): Promise<{ label: string; approver: string; issuedOnly?: boolean }[]> {
   const me = email.toLowerCase();
   const out: { label: string; approver: string; issuedOnly?: boolean }[] = [];
@@ -87,7 +87,7 @@ export async function emailCards(email: string, store: Store): Promise<{ label: 
     const approver = rec?.["card.approver"]?.trim();
     if (!ref || !approver) continue;
     if (approver === me) out.push({ label, approver });
-    else if (ref.issuedBy === me || (org && ref.org === org.slug)) out.push({ label, approver, issuedOnly: true });
+    else if (ref.issuedBy === me || (org && ref.org === org.slug) || (ref.holder === me && ref.claimedAt)) out.push({ label, approver, issuedOnly: true });
   }
   return out;
 }

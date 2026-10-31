@@ -177,6 +177,9 @@ const HTML = /* html */ `<!doctype html>
       apHint.textContent = v.includes("@") ? "They get each request by email and confirm it with a code." : v ? "They sign each decision with that wallet: free, nothing goes on-chain." : "";
     };
     approverIn.addEventListener("input", hintAp); hintAp();
+    // An operator can issue to someone: they claim it by email and get its agent token.
+    const holderIn = el("input", { value: d.holder || "", placeholder: "maria@company.com", spellcheck: "false", autocapitalize: "off", "aria-label": "Holder" });
+    const holderField = me.org ? el("div", { class: "row" }, el("label", { class: "f" }, el("span", {}, "Holder ", el("i", { text: "optional: who the card is for" })), el("div", { class: "text" }, holderIn))) : null;
     const approverField = el("div", { class: "row" }, el("label", { class: "f" }, el("span", {}, "Approver ", el("i", { text: "email, wallet or ENS name" })), el("div", { class: "text" }, approverIn)), apHint);
     const fields = [
       money("limit_tx", "Per transaction", d.limit_tx, caps.tx),
@@ -203,6 +206,7 @@ const HTML = /* html */ `<!doctype html>
       el("div", { class: "grid" }, ...fields.map((x) => x.node)),
       el("div", { class: "row" }, el("div", { class: "lbl", text: "Where it can pay" }), el("div", { class: "chips" }, ...chips)),
       el("div", { class: "row" }, el("div", { class: "lbl", text: "Payee check" }), el("div", { class: "chips" }, ...payeeChips)),
+      holderField,
       approverField,
       el("div", { class: "actions" }, go),
       el("p", { class: "note", text: me.org
@@ -218,6 +222,8 @@ const HTML = /* html */ `<!doctype html>
       if (!/^([^\s@]+@[^\s@]+\.[a-z]{2,}|0x[0-9a-fA-F]{40}|[^\s.,@]+(\.[^\s.,@]+)*\.[a-z]{2,})$/i.test(approver)) { err.textContent = "The approver is an email, a 0x address or an ENS name."; return; }
       const name = nameIn.value.trim().toLowerCase().replace(/\.xcard\.eth$/, "");
       if (account && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) { err.textContent = "Pick a name: lowercase letters, digits and hyphens."; return; }
+      const holder = holderField ? holderIn.value.trim() : "";
+      if (holder && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(holder)) { err.textContent = "The holder is an email address."; return; }
       const policy = { mcc_allow: [...chosen], payee, approver };
       for (const x of fields) {
         const raw = x.input.value.trim();
@@ -232,7 +238,7 @@ const HTML = /* html */ `<!doctype html>
       if (policy.limit_tx > policy.limit_monthly) { err.textContent = "Per transaction can't be more than monthly."; return; }
       go.disabled = true; go.textContent = "Issuing…";
       try {
-        const r = await request("tools/call", { name: "issue_card", arguments: { ...(account ? { name } : {}), policy, submit: true } }, 60000);
+        const r = await request("tools/call", { name: "issue_card", arguments: { ...(account ? { name } : {}), ...(holder ? { holder } : {}), policy, submit: true } }, 60000);
         const sc = (r && r.structuredContent) || {};
         if (r && r.isError || !sc.card) throw new Error((sc.error && sc.error.message) || (r && r.content && r.content[0] && r.content[0].text) || "not issued");
         issued(sc.card, sc.agent_token);
@@ -301,7 +307,12 @@ const HTML = /* html */ `<!doctype html>
         el("span", { text: "pays" }), el("span", { text: mccs.length ? mccs.join(", ") : "any category" }),
         el("span", { text: "payee" }), el("span", { text: r["card.payee"] || "any" }),
         el("span", { text: "approver" }), el("span", { text: (r["card.approver"] || "").replace(/^(0x.{4}).*(.{4})$/, "$1…$2") })),
-      ...(token ? [agentAccess(card, token)] : []));
+      ...(token ? [agentAccess(card, token)] : []),
+      ...(card.holder ? [el("div", { class: "agent" },
+        el("div", { class: "lbl", text: "Holder" }),
+        el("p", { text: card.claim_sent
+          ? card.holder + " got a one-time link to claim this card. They sign in with a code, and only they get its agent token."
+          : "The claim email to " + card.holder + " didn't go out. Send it again from the console." }))] : []));
   }
 })();
 </script>
