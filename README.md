@@ -72,7 +72,7 @@ The policy is enforced twice: by X Card before anything is sent, and by the card
                        └──────────────────────────────────────────────┘  │
                                                                          ▼
   AI agent ──MCP──▶ ┌────────────────────────────── Cloudflare Worker ──────────┐
-  (Claude, any     │  /mcp       10 tools + in-chat views (MCP Apps); OAuth     │
+  (Claude, any     │  /mcp       11 tools + in-chat views (MCP Apps); OAuth     │
    MCP client)     │             wallet sign-in or scoped tokens                │
                    │  /gateway   signed answers to text()/addr() lookups        │
   human / platform │  /api       approvals (funding + held payments), unfreeze  │
@@ -342,7 +342,7 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 |---|---|
 | ENS OffchainResolver on mainnet, `xcard.eth` and `x402card.eth` pointed at it | ✅ live, source verified |
 | CCIP-Read gateway (signed records) | ✅ live |
-| MCP server (10 tools; OAuth wallet sign-in or scoped tokens) | ✅ live at `mcp.x-card.dev` |
+| MCP server (11 tools; OAuth wallet sign-in or scoped tokens) | ✅ live at `mcp.x-card.dev` |
 | In-chat views (MCP Apps): card view, approval card, issue form, TAP signature | ✅ live; rendered in Claude.ai |
 | `update_policy` + daily limit (tighten now, loosen with a wallet signature) | ✅ live; first live policy approval signed in Claude.ai on 2026-10-28 |
 | Self-serve test cards (`testN.xcard.eth`, issued from the chat) | ✅ live |
@@ -352,6 +352,7 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 | Airwallex charges (`pay`) | ⏳ the sandbox's transaction simulator is down for Airwallex maintenance ([status page](https://status.airwallex.com/): "Degraded performance in Sandbox simulation features", since 2026-10-26), so charges fail at the issuer step. Everything before it (pre-check, payee gate, held payments) works live; tests run the full flow against `FakeIssuer`. |
 | Root governance: names + resolver owned by a 2-of-3 Safe | ✅ done; both parent names and the resolver are owned by the Safe |
 | Agent `pay` tool with policy pre-check | ✅ live; tested end to end against a fake issuer |
+| Company distribution (operators, claim links, company names, CSV batches) | ✅ live on the sandbox; tested with real Airwallex cards up to 3-row batches. The 200-row limit isn't load-tested against Airwallex |
 | Verified payee (payee gate, `card.payee`, held payments) | ✅ live; tested end to end, verifier checked against mainnet ENS. Not yet exercised on a live card (needs Airwallex issuance). |
 | Visa TAP signing (`sign_request`, `/keys`, demo merchant) | ✅ live; signatures verified by a port of Visa's reference merchant |
 | TAP body objects (consumer recognition, payment container) | ⏳ need Visa Intelligent Commerce onboarding |
@@ -447,8 +448,8 @@ curl -s https://mcp.x-card.dev/mcp \
 
 | Tool | Arguments | Returns |
 |---|---|---|
+| `issue_card` | A company's operator (email sign-in) also passes `holder`, the email of the person the card is for: they claim it and get its agent token, and it's named `<name>.<company>.xcard.eth`. Admin token: `name`, `policy: { limit_tx, limit_daily?, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }`. Wallet sign-in: no arguments, or a suggested `policy` | Operator: `card`, `agent_token` (shown once). Wallet sign-in: `decision: "form"` with defaults and caps; the person submits the form in the chat and gets the next free `testN.xcard.eth` with their wallet as approver (caps: $50/transaction, $200/day, $500/month, USD, 3 per wallet). The issued card in the chat shows an agent token once, for an autonomous agent; it stays out of the text the model reads |
 | `issue_cards` | A company's operator: `csv`, or `batch_id` to check on one | `decision: "preview"` with every row and its errors, confirmed by the person in the chat; then progress. Each holder gets a claim link |
-| `issue_card` | Operator: `name`, `policy: { limit_tx, limit_daily?, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }`. Wallet sign-in: no arguments, or a suggested `policy` | Operator: `card`, `agent_token` (shown once). Wallet sign-in: `decision: "form"` with defaults and caps; the person submits the form in the chat and gets the next free `testN.xcard.eth` with their wallet as approver (caps: $50/transaction, $200/day, $500/month, USD, 3 per wallet). The issued card in the chat shows an agent token once, for an autonomous agent; it stays out of the text the model reads |
 | `list_cards` | | every card this connection can use: `name`, `status`, `last4`, limits, categories, payee rule, approver, `pending_approvals` |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
 | `pay` | `name?`, `amount`, `currency`, `mcc`, `merchant`, `merchant_url?`, `payee_name?`, `purpose?`, `request_id?` | `approved` · `blocked` + `code`, `reason` (X Card pre-check or payee gate) · `declined` + `code` (issuer) · `pending_human` + `approval_id`, `approval_url` (payee held); `payee` check; `card_frozen` if this attempt froze the card |
@@ -541,12 +542,23 @@ Endpoints (no token for the first two; `Authorization: Bearer xs_…` for the re
 | `GET` | `/api/me` | | `{ email, caps }` |
 | `GET` | `/api/names/:name` | | `{ name, available, reason? }` |
 | `GET` | `/api/cards` | | The account's cards (issued or approved), `issued_by_me` on its own |
-| `POST` | `/api/cards` | `{ "name": "maria", "policy": { limit_tx, limit_daily?, limit_monthly, mcc_allow[], approver?, payee?, payee_allow[]? } }` | Issue under `xcard.eth` within the caps; returns `card` and `agent_token` |
+| `POST` | `/api/cards` | `{ "name": "maria", "policy": { limit_tx, limit_daily?, limit_monthly, mcc_allow[], approver?, payee?, payee_allow[]? }, "holder"?: "maria@acme.com" }` | `holder` is for a company's operators. Issue under `xcard.eth` within the caps; returns `card` and `agent_token` |
 | `GET` | `/api/approvals` | | Requests on the account's cards or naming it as approver, each with `can_decide` |
 | `POST` | `/api/approvals/:id` | `{ "approve": true \| false }` | Decide, as the email approver |
 | `POST` | `/api/cards/:name/unfreeze` | | Unfreeze one of the account's cards |
 
 ## Integrate: platforms (approvals and oversight)
+
+A company's operators also have:
+
+| Method | Path | Body | Purpose |
+|---|---|---|---|
+| `POST` | `/api/batches` | `{ "csv": "name,holder_email,limit_tx,limit_monthly\n…" }` | Check every row and return a preview. Issues nothing |
+| `POST` | `/api/batches/:id/start` | | Start issuing the previewed rows |
+| `GET` | `/api/batches/:id` | | Progress; each call issues a few more rows |
+| `POST` | `/api/cards/:name/claim` | | Send an unclaimed card's link again, ending the old one |
+
+A claim link has its own endpoints: `GET /claims/:token` shows the card with the holder masked, and `POST /claims/:token` claims it with the holder's email session and returns the agent token, once.
 
 Admin endpoints (`Authorization: Bearer <admin token>`):
 
@@ -781,6 +793,7 @@ src/
   tap/sign.ts           Visa TAP signing (RFC 9421, Ed25519), keyid, key generation
   tap/verify.ts         Visa TAP verification (the merchant side)
   airwallex/client.ts   auth, token cache, retries, request_id
+  batch.ts              CSV batches: preview, confirm, resumable job
   airwallex/issuing.ts  cardholders, cards, transactions
   airwallex/simulator.ts  every sandbox simulation call behind one interface
 contracts/              OffchainResolver.sol + Hardhat deploy
