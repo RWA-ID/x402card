@@ -120,6 +120,8 @@
     $("[data-who]").textContent = me.admin ? "operator" : me.email;
     document.querySelectorAll("[data-app]").forEach((n) => (n.hidden = false));
     $("[data-org]").hidden = !me.org;
+    $("[data-batch]").hidden = !me.org;
+    if (me.org) initBatch();
     if (me.org) $("[data-pending-title]").textContent = "Waiting on approval";
     (configureIssue ??= initIssue())();
     load();
@@ -338,6 +340,50 @@
     $("[data-org-frozen]").textContent = String(mine.filter((c) => c.status === "frozen").length);
     $("[data-org-caps]").textContent = `Per card: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month.`;
     $("[data-org-ops]").textContent = `Operators: ${me.org.operators.join(", ")}`;
+  }
+
+  // ---------- issue from a CSV: preview, confirm, then a few rows per request ----------
+  let batchReady = false;
+  function initBatch() {
+    if (batchReady) return;
+    batchReady = true;
+    const out = $("[data-batch-result]"), err = $("[data-batch-err]"), file = $("[data-batch-file]");
+    file.addEventListener("change", async () => {
+      const f = file.files[0];
+      file.value = "";
+      if (!f) return;
+      err.textContent = ""; out.textContent = "";
+      try { draw(await api("/api/batches", { method: "POST", body: JSON.stringify({ csv: await f.text() }) })); }
+      catch (ex) { if (ex.message !== "unauthorized") err.textContent = ex.message; }
+    });
+    // A leading = + - @ would run as a formula when the report opens in a spreadsheet.
+    const cell = (v) => { const s = String(v ?? "").replace(/^([=+\-@])/, "'$1"); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const report = (b) => URL.createObjectURL(new Blob([["line,name,holder,approver,status,claim_email_sent,last4,error", ...b.rows.map((r) =>
+      [r.line, r.name, r.holder, r.approver, r.status, r.claim_sent ?? "", r.last4 ?? "", r.error ?? ""].map(cell).join(","))].join("\n")], { type: "text/csv" }));
+    function draw(b) {
+      const t = b.totals, preview = b.status === "preview";
+      $("[data-batch-count]").textContent = preview ? "preview" : b.status === "running" ? "issuing" : "done";
+      const go = el("button", { class: "btn-primary batch-go", type: "button", text: `Issue ${t.pending} card${t.pending === 1 ? "" : "s"} and email the claim links`, onclick: async (e) => {
+        e.target.disabled = true; err.textContent = "";
+        try { draw(await api(`/api/batches/${b.batch_id}/start`, { method: "POST" })); }
+        catch (ex) { e.target.disabled = false; err.textContent = ex.message; }
+      } });
+      if (!t.pending) go.disabled = true;
+      out.textContent = "";
+      out.append(
+        el("p", { class: "batch-sum", text: preview ? `Nothing is issued yet. ${t.pending} ready, ${t.invalid} with errors (skipped), under ${b.parent}.`
+          : `${t.issued} of ${t.rows - t.invalid} issued${t.failed ? `, ${t.failed} failed` : ""}${t.emails_unsent ? `, ${t.emails_unsent} emails not sent` : ""}.` }),
+        el("div", { class: "batch-scroll" }, el("table", { class: "batch-table" },
+          el("thead", {}, el("tr", {}, ...["Name", "Holder", "Approver", "Tx / day / month", "Status"].map((h) => el("th", { text: h })))),
+          el("tbody", {}, ...b.rows.map((r) => el("tr", { class: r.status === "invalid" || r.status === "failed" ? "bad" : "" },
+            el("td", { text: r.name }), el("td", { text: r.holder }), el("td", { text: who(r.approver || "") }),
+            el("td", { text: r.error || `$${r.limit_tx} / ${r.limit_daily ? "$" + r.limit_daily : "–"} / $${r.limit_monthly}` }),
+            el("td", { text: r.status === "pending" ? (preview ? "ready" : "…") : r.status })))))),
+        ...(preview ? [go] : []),
+        ...(b.status === "done" ? [el("a", { class: "btn-xs batch-file", style: "margin-top:12px", href: report(b), download: `xcard-batch-${b.batch_id.slice(0, 8)}.csv`, text: "Download the report" })] : []));
+      if (b.status === "running") setTimeout(async () => { try { draw(await api(`/api/batches/${b.batch_id}`)); } catch { setTimeout(() => draw(b), 4000); } }, 1500);
+      if (b.status === "done") { lastSig = ""; load(); }
+    }
   }
 
   // ---------- cards: the same card face as the home page ----------

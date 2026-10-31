@@ -816,3 +816,17 @@ details.op p { font-size: 13px !important; }
 .claim-token { font-family: var(--mono); font-size: 12.5px; padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid rgba(255,255,255,0.1); overflow-wrap: anywhere; user-select: all; }
 .claim-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .claim p { margin: 0; color: var(--muted); font-size: 14px; }
+
+/* Issue from a CSV: an org's operators */
+.batch { display: flex; flex-direction: column; gap: 12px; padding: clamp(18px, 3vw, 24px); border-radius: 24px; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); min-width: 0; }
+.batch-help { margin: 0; font-size: 13.5px; color: var(--muted); }
+.batch-file { display: inline-block; font-size: 12px; padding: 8px 12px; }
+.batch-sum { font-family: var(--mono); font-size: 12.5px; color: var(--text-2, var(--muted)); margin: 0 0 10px; }
+.batch-scroll { max-height: 380px; overflow: auto; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; }
+.batch-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.batch-table th { position: sticky; top: 0; background: var(--surface); text-align: left; font-family: var(--mono); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: 9px 12px; white-space: nowrap; }
+.batch-table td { padding: 9px 12px; border-top: 1px solid rgba(255,255,255,0.07); overflow-wrap: anywhere; color: var(--muted); }
+.batch-table td:first-child { font-family: var(--mono); color: var(--text); }
+.batch-table tr.bad td { color: var(--error, #f27474); }
+.batch-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.batch-go { margin-top: 12px; }

@@ -243,6 +243,16 @@
     </form>
   </section>
 
+  <section class="block" data-app data-batch hidden>
+    <div class="block-head"><h2>Issue from a CSV</h2><span class="count" data-batch-count></span></div>
+    <div class="batch" data-batch-body>
+      <p class="batch-help">Columns: <span class="mono">name, holder_email, limit_tx, limit_monthly</span>, and optionally <span class="mono">approver, limit_daily, mcc_allow, payee</span>. Names and limits are public ENS records, so use a label like <span class="mono">emp-4821</span> if a card shouldn't name a person.</p>
+      <div class="batch-actions"><label class="btn-xs batch-file">Choose a CSV<input type="file" accept=".csv,text/csv" data-batch-file hidden></label></div>
+      <p class="claim-err" data-batch-err role="alert"></p>
+      <div data-batch-result></div>
+    </div>
+  </section>
+
   <section class="block" data-app hidden>
     <div class="block-head"><h2>Cards</h2><span class="count" data-fleet-count></span></div>
     <div data-fleet></div>

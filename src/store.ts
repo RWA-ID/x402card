@@ -23,6 +23,9 @@
 //   orgc:<slug>              the org's cards, by key
 //   claim:<sha256>           a card's one-time claim link -> { label, email, expiresAt } (7 days)
 //   claimof:<label>          that link's hash, so sending a new one ends the old one
+//   batch:<id>               a CSV of cards, previewed or being issued (7 days)
+//   batchrun:<id>            a batch still issuing, for the cron
+//   batchlock:<id>           the batch's one runner (a minute at most)
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
 import type { RecordSource } from "./ens/gateway.ts";
@@ -39,6 +42,30 @@ export interface CardRef {
   /** The person it was issued to, by email. They get access by claiming it. */
   holder?: string;
   claimedAt?: number;
+}
+
+export interface BatchRow {
+  /** Its line in the file. */
+  line: number;
+  name: string;
+  holder: string;
+  records: TextRecords;
+  status: "invalid" | "pending" | "issued" | "failed";
+  error?: string;
+  claim_sent?: boolean;
+  last4?: string;
+}
+
+export interface Batch {
+  id: string;
+  org: string;
+  /** The operator who uploaded it. */
+  by: string;
+  status: "preview" | "running" | "done";
+  rows: BatchRow[];
+  createdAt: number;
+  startedAt?: number;
+  finishedAt?: number;
 }
 
 export interface Claim {
@@ -135,6 +162,22 @@ export class Store implements RecordSource {
     await this.kv.delete(`claim:${hash}`);
     await this.kv.delete(`claimof:${label}`);
   }
+
+  getBatch(id: string) { return this.kv.get<Batch>(`batch:${id}`, "json"); }
+  putBatch(b: Batch) { return this.kv.put(`batch:${b.id}`, JSON.stringify(b), { expirationTtl: 7 * 24 * 3600 }); }
+  markBatchRunning(id: string) { return this.kv.put(`batchrun:${id}`, "1", { expirationTtl: 7 * 24 * 3600 }); }
+  clearBatchRunning(id: string) { return this.kv.delete(`batchrun:${id}`); }
+  async runningBatches() {
+    const { keys } = await this.kv.list({ prefix: "batchrun:" });
+    return keys.map((k) => k.name.slice("batchrun:".length));
+  }
+  /** Best effort, like every KV check: advanceBatch also tolerates a racing runner. */
+  async lockBatch(id: string) {
+    if ((await this.kv.get(`batchlock:${id}`)) !== null) return false;
+    await this.kv.put(`batchlock:${id}`, "1", { expirationTtl: 60 });
+    return true;
+  }
+  unlockBatch(id: string) { return this.kv.delete(`batchlock:${id}`); }
 
   getOtp(key: string) { return this.kv.get<{ hash: string; tries: number }>(`otp:${key}`, "json"); }
   putOtp(key: string, v: { hash: string; tries: number }) { return this.kv.put(`otp:${key}`, JSON.stringify(v), { expirationTtl: 10 * 60 }); }

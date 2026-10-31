@@ -320,3 +320,77 @@ test("company namespaces: maria.<org>.xcard.eth, only from that company's operat
   // It reads back by its deep name, publicly.
   assert.equal((await call("GET", "/public/cards/maria.gamma.xcard.eth")).body.exists, true);
 });
+
+test("CSV batches: a preview issues nothing, every row is checked, the job issues what was previewed", async () => {
+  const { sha256Hex, McpServer } = await import("./mcp.ts");
+  const { Store } = await import("./store.ts");
+  const { parseCsv, advanceRunning } = await import("./batch.ts");
+  const { service } = await import("./index.ts");
+  const store = new Store(env.KV);
+  const session = async (email: string) => { const t = "xs_" + email; await store.putSession(await sha256Hex(t), email); return t; };
+  await call("POST", "/api/orgs", { slug: "omega", name: "Omega", operators: ["op@omega.com"], caps: { tx: 100, cards: 8 } }, "admin-token");
+  const op = await session("op@omega.com"), solo = await session("solo2@else.com");
+  assert.deepEqual(parseCsv('\uFEFFa,b\r\n"x, ""y""\nz",2\r\n\r\n'), [["a", "b"], ['x, "y"\nz', "2"]]);
+
+  const csv = [
+    "name,holder_email,limit_tx,limit_monthly,limit_daily,approver,mcc_allow",
+    "ana,same@omega.com,50,200,,boss@omega.com,5734;7372",
+    "bo,same@omega.com,50,200,100,,",
+    "cy,not-an-email,50,200,,,",
+    "di,same@omega.com,500,900,,,",
+    "ana,same@omega.com,50,200,,,",
+    "e_bad!,same@omega.com,50,200,,,",
+  ].join("\n");
+  assert.equal((await call("POST", "/api/batches", { csv }, solo)).status, 403);
+  assert.match((await call("POST", "/api/batches", { csv: "name,holder_email,limit_tx\na,b@c.co,1" }, op)).body.error.message, /limit_monthly/);
+  assert.match((await call("POST", "/api/batches", { csv: "name,holder_email,limit_tx,limit_monthly,limit_montly\na,b@c.co,1,2,3" }, op)).body.error.message, /unknown column/);
+
+  const before = (await store.orgIndex("omega")).length;
+  const p = (await call("POST", "/api/batches", { csv }, op)).body;
+  assert.equal((await store.orgIndex("omega")).length, before, "a preview issues nothing");
+  assert.deepEqual(p.rows.map((r: any) => r.status), ["pending", "pending", "invalid", "invalid", "invalid", "invalid"]);
+  assert.equal(p.rows[0].name, "ana.omega.xcard.eth");
+  assert.equal(p.rows[1].approver, "op@omega.com", "the operator by default");
+  assert.match(p.rows[3].error, /per transaction max 100/);
+  assert.match(p.rows[4].error, /already in the file/);
+
+  // Someone else's company can't see or start it.
+  await call("POST", "/api/orgs", { slug: "sigma", name: "Sigma", operators: ["op@sigma.com"] }, "admin-token");
+  assert.equal((await call("POST", `/api/batches/${p.batch_id}/start`, {}, await session("op@sigma.com"))).status, 404);
+
+  const before2 = sent.length;
+  const r = (await call("POST", `/api/batches/${p.batch_id}/start`, {}, op)).body;
+  assert.equal(r.status, "done");
+  assert.deepEqual([r.totals.issued, r.totals.invalid, r.totals.emails_unsent], [2, 4, 0]);
+  assert.equal(sent.slice(before2).filter((m) => /issued you a card/.test(m.subject)).length, 2, "one claim email per card, to the same inbox");
+  assert.equal((await store.getCard("ana.omega.xcard.eth"))!.holder, "same@omega.com");
+  assert.equal((await store.getRecords("ana.omega.xcard.eth"))!["card.mcc.allow"], "5734,7372");
+  // Starting again issues nothing more.
+  assert.equal((await call("POST", `/api/batches/${p.batch_id}/start`, {}, op)).body.totals.issued, 2);
+
+  // The room left is checked before starting: 6 left, 7 rows.
+  const many = ["name,holder_email,limit_tx,limit_monthly", ...Array.from({ length: 7 }, (_, i) => `n${i},same@omega.com,5,50`)].join("\n");
+  const big = (await call("POST", "/api/batches", { csv: many }, op)).body;
+  assert.match((await call("POST", `/api/batches/${big.batch_id}/start`, {}, op)).body.error.message, /room for 6/);
+
+  // A big file: a few rows per request, and the cron carries on with no page open.
+  const six = ["name,holder_email,limit_tx,limit_monthly", ...Array.from({ length: 6 }, (_, i) => `m${i},same@omega.com,5,50`)].join("\n");
+  const b6 = (await call("POST", "/api/batches", { csv: six }, op)).body;
+  const first = (await call("POST", `/api/batches/${b6.batch_id}/start`, {}, op)).body;
+  assert.deepEqual([first.status, first.totals.issued, first.totals.pending], ["running", 5, 1]);
+  await advanceRunning(service(env, store), store);
+  const end = (await call("GET", `/api/batches/${b6.batch_id}`, undefined, op)).body;
+  assert.deepEqual([end.status, end.totals.issued], ["done", 6]);
+
+  // Over the connector: the agent can't; the operator previews; a confirm starts it.
+  const mcp = async (caller: any, args: any) => {
+    const req = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "issue_cards", arguments: args } }) });
+    return ((await (await new McpServer(service(env, store), store, caller).handle(req)).json()) as any).result;
+  };
+  assert.match((await mcp({ kind: "agent", label: "x" }, { csv })).content[0].text, /forbidden/);
+  const prev = (await mcp({ kind: "owner", email: "op@sigma.com", labels: [] }, { csv: "name,holder_email,limit_tx,limit_monthly\nzed,z@sigma.com,5,50" })).structuredContent;
+  assert.equal(prev.decision, "preview");
+  assert.equal((await store.getCard("zed.sigma.xcard.eth")), null);
+  const done = (await mcp({ kind: "owner", email: "op@sigma.com", labels: [] }, { batch_id: prev.batch_id, submit: true })).structuredContent;
+  assert.deepEqual([done.status, done.totals.issued], ["done", 1]);
+});

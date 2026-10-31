@@ -36,6 +36,7 @@ import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
 import { verifyTap } from "./tap/verify.ts";
 import { AirwallexIssuer, CardService, DEMO_CARDS, ORG_DEFAULT_CAPS, cardWord, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
+import { advanceBatch, advanceRunning, batchFor, batchView, previewBatch, startBatch } from "./batch.ts";
 import { FakeIssuer } from "./testing.ts";
 
 export interface Env {
@@ -374,7 +375,10 @@ export default {
   },
 
   async scheduled(_ev: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(service(env, new Store(env.KV)).checkAll());
+    const store = new Store(env.KV);
+    const svc = service(env, store);
+    ctx.waitUntil(svc.checkAll());
+    ctx.waitUntil(advanceRunning(svc, store));
   },
 } satisfies ExportedHandler<Env>;
 
@@ -440,6 +444,20 @@ async function accountApi(req: Request, path: string, env: Env, store: Store, em
       if (typeof b.approve !== "boolean") return json({ error: { code: "bad_input", message: "body must be {approve: boolean}" } }, 400);
       const approval = await svc.decideByEmail(m[1], b.approve, email);
       return json({ approval, card: await svc.getCard(approval.name) });
+    }
+    if (path === "/api/batches" || path.startsWith("/api/batches/")) {
+      const org = await store.orgOf(email);
+      if (!org) return json({ error: { code: "forbidden", message: "only a company's operator can issue from a CSV" } }, 403);
+      if (path === "/api/batches" && req.method === "POST") {
+        const b = (await req.json().catch(() => ({}))) as { csv?: unknown };
+        if (typeof b.csv !== "string") return json({ error: { code: "bad_input", message: "csv is required" } }, 400);
+        return json(batchView(await previewBatch(svc, store, org, email, b.csv)), 201);
+      }
+      const bm = path.match(/^\/api\/batches\/([0-9a-f-]{36})(\/start)?$/);
+      if (!bm) return json({ error: "not found" }, 404);
+      let batch = await batchFor(store, bm[1], org);
+      if (bm[2] && req.method === "POST") batch = await startBatch(store, batch, org);
+      return json(batchView(await advanceBatch(svc, store, batch)));
     }
     const resend = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/claim$/);
     if (resend && req.method === "POST") {

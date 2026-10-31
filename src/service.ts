@@ -400,6 +400,20 @@ export class CardService {
   }
 
   private async issueCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string, holder?: string): Promise<CardView> {
+    const { label, policy } = this.checkCapped(me, name, records, caps, kind, org);
+    return this.issueCard(label, toRecords(policy), { issuedBy: me, ...(org ? { org } : {}), ...(holder ? { holder } : {}) });
+  }
+
+  /** Everything an org card's row must pass before it's issued. Issues nothing. */
+  async checkOrgCard(email: string, org: Org, name: string, records: TextRecords): Promise<string> {
+    const { label: checked } = this.checkCapped(email.toLowerCase(), name, records, org.caps, "org", org.slug);
+    const label = normalizeLabel(checked);
+    if (RESERVED_LABELS.has(labelOfKey(label))) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
+    if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
+    return label;
+  }
+
+  private checkCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string): { label: string; policy: CardPolicy } {
     const parent = org ? `${org}.${DEMO_CARDS.parent}` : DEMO_CARDS.parent;
     const word = cardWord(name, parent);
     if (word.includes(".")) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${parent}`);
@@ -420,7 +434,7 @@ export class CardService {
       policy.currencies.join(",") !== "USD" && "USD only",
     ].filter(Boolean);
     if (over.length) throw new ServiceError(`over_${kind}_caps`, `${kind} cards: ${over.join(", ")}`);
-    return this.issueCard(label, toRecords(policy), { issuedBy: me, ...(org ? { org } : {}), ...(holder ? { holder } : {}) });
+    return { label, policy };
   }
 
   /** The cards an email account issued or approves, and its org's if it's an operator, as they are now. */

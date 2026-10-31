@@ -47,7 +47,7 @@ test("protocol: initialize, tools/list, auth", async () => {
   assert.equal(init.result.protocolVersion, "2025-06-18");
   assert.ok(init.result.capabilities.tools);
   const list = await call(ADMIN, "tools/list");
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "list_cards", "get_card", "pay", "sign_request", "request_funding", "update_policy", "get_approval", "freeze", "list_transactions"]);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ["issue_card", "issue_cards", "list_cards", "get_card", "pay", "sign_request", "request_funding", "update_policy", "get_approval", "freeze", "list_transactions"]);
   assert.equal((await call("wrong", "tools/list")).status, 401);
   assert.equal((await call(ADMIN, "nope")).error.code, -32601);
 });
@@ -59,7 +59,7 @@ test("approval card: a ui:// resource linked from pay, request_funding and get_a
   const tools = (await call(ADMIN, "tools/list")).result.tools;
   const linked = tools.filter((t: any) => t._meta?.ui?.resourceUri === "ui://xcard/approval.html").map((t: any) => t.name);
   assert.deepEqual(linked, ["pay", "request_funding", "update_policy", "get_approval"]);
-  assert.deepEqual((await call(ADMIN, "resources/list")).result.resources.map((r: any) => r.uri), ["ui://xcard/approval.html", "ui://xcard/issue.html", "ui://xcard/card.html"]);
+  assert.deepEqual((await call(ADMIN, "resources/list")).result.resources.map((r: any) => r.uri), ["ui://xcard/approval.html", "ui://xcard/issue.html", "ui://xcard/batch.html", "ui://xcard/card.html"]);
   const carded = tools.filter((t: any) => t._meta?.ui?.resourceUri === "ui://xcard/card.html").map((t: any) => t.name);
   assert.deepEqual(carded, ["list_cards", "get_card", "sign_request", "freeze", "list_transactions"]);
   const [form] = (await call(ADMIN, "resources/read", { uri: "ui://xcard/issue.html" })).result.contents;
@@ -94,6 +94,7 @@ test("demo script through MCP", async () => {
   // Agent token: no issue_card, scoped to its own name.
   const agentTools = (await call(agent, "tools/list")).result.tools.map((t: any) => t.name);
   assert.ok(!agentTools.includes("issue_card"));
+  assert.ok(!agentTools.includes("issue_cards"));
   const other = await tool(agent, "get_card", { name: "someoneelse" });
   assert.ok(other.isError);
   assert.match(other.content[0].text, /forbidden/);

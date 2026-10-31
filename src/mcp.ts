@@ -7,6 +7,8 @@ import type { Store } from "./store.ts";
 import type { TextRecords } from "./policy/records.ts";
 import { UI_MIME, approvalResource } from "./ui/approval.ts";
 import { issueResource } from "./ui/issue.ts";
+import { batchResource } from "./ui/batch.ts";
+import { advanceBatch, batchFor, batchView, previewBatch, startBatch } from "./batch.ts";
 import { cardResource } from "./ui/card.ts";
 import type { PolicyInput } from "./policy/changes.ts";
 
@@ -38,6 +40,8 @@ const cardUi = { ui: { resourceUri: CARD_UI }, "ui/resourceUri": CARD_UI };
 /** The issue form (MCP Apps): the person sets the policy and submits. */
 export const ISSUE_UI = "ui://xcard/issue.html";
 const issueUi = { ui: { resourceUri: ISSUE_UI }, "ui/resourceUri": ISSUE_UI };
+export const BATCH_UI = "ui://xcard/batch.html";
+const batchUi = { ui: { resourceUri: BATCH_UI }, "ui/resourceUri": BATCH_UI };
 
 export const TOOLS = [
   {
@@ -69,6 +73,21 @@ export const TOOLS = [
         },
         holder: { type: "string", description: "A company's operator only: the email of the person the card is for. They get a one-time link to claim it" },
         submit: { type: "boolean", description: "Set by the form in the chat when the person submits it" },
+      },
+    },
+  },
+  {
+    name: "issue_cards",
+    _meta: batchUi,
+    title: "Issue a company's cards from a CSV",
+    description:
+      "For a company's operator. Pass the CSV's text as csv: columns name, holder_email, limit_tx, limit_monthly, and optionally approver (default: the operator), limit_daily, mcc_allow (separated by ;), payee. This only previews: every row is checked and nothing is issued. The person reviews the preview in the chat and confirms it there. Never set submit yourself. Each holder then gets a one-time claim link by email. Pass batch_id to check on a batch.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        csv: { type: "string", description: "The CSV's text, exactly as written" },
+        batch_id: { type: "string", description: "A batch from an earlier call" },
+        submit: { type: "boolean", description: "Set by the preview in the chat when the person confirms it" },
       },
     },
   },
@@ -259,19 +278,21 @@ export class McpServer {
           return rpc(msg.id, {});
         case "tools/list":
           return rpc(msg.id, {
-            tools: this.caller.kind === "agent" ? TOOLS.filter((t) => t.name !== "issue_card") : TOOLS,
+            tools: this.caller.kind === "agent" ? TOOLS.filter((t) => t.name !== "issue_card" && t.name !== "issue_cards") : TOOLS,
           });
         case "resources/list":
           return rpc(msg.id, {
             resources: [
               { uri: APPROVAL_UI, name: "approval", title: "X Card approval", mimeType: UI_MIME },
               { uri: ISSUE_UI, name: "issue", title: "Issue an X Card", mimeType: UI_MIME },
+              { uri: BATCH_UI, name: "batch", title: "Issue X Cards from a CSV", mimeType: UI_MIME },
               { uri: CARD_UI, name: "card", title: "X Card", mimeType: UI_MIME },
             ],
           });
         case "resources/read": {
           if (msg.params?.uri === APPROVAL_UI) return rpc(msg.id, { contents: [approvalResource(this.origin)] });
           if (msg.params?.uri === ISSUE_UI) return rpc(msg.id, { contents: [issueResource()] });
+          if (msg.params?.uri === BATCH_UI) return rpc(msg.id, { contents: [batchResource()] });
           if (msg.params?.uri === CARD_UI) return rpc(msg.id, { contents: [cardResource()] });
           return rpc(msg.id, undefined, { code: -32002, message: "resource not found" });
         }
@@ -347,6 +368,20 @@ export class McpServer {
           note: `${card.name} is yours and this connection can use it now. ${mine ? "You're its approver." : `${approver} approves anything over its limits.`} The card in the chat shows the person an agent token for it, once, to give to an autonomous agent. You don't have that token and shouldn't ask for it in the chat.`,
           ui_only: { agent_token: await mintAgentToken(this.store, label) },
         };
+      }
+      case "issue_cards": {
+        const email = this.caller.kind === "owner" ? this.caller.email : undefined;
+        const org = email ? await this.store.orgOf(email) : null;
+        if (!email || !org) throw toolError("forbidden", "only a company's operator can issue from a CSV");
+        const id = optStr(a.batch_id);
+        if (!id) {
+          const batch = await previewBatch(this.svc, this.store, org, email, str(a.csv, "csv"));
+          return { decision: "preview", ...batchView(batch), note: "Nothing is issued yet. The person reviews this preview in the chat and confirms it there." };
+        }
+        let batch = await batchFor(this.store, id, org);
+        if (a.submit === true) batch = await startBatch(this.store, batch, org);
+        batch = await advanceBatch(this.svc, this.store, batch);
+        return { decision: batch.status === "preview" ? "preview" : "batch", ...batchView(batch) };
       }
       case "list_cards": {
         const labels = this.caller.kind === "admin" ? await this.store.listLabels() : this.caller.kind === "agent" ? [this.caller.label] : this.caller.labels;
