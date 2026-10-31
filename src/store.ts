@@ -18,6 +18,9 @@
 //   otpip:<ip>               sign-in codes requested from this IP this hour
 //   sess:<sha256>            email session token -> { email, createdAt } (7 days)
 //   acct:<email>             cards an email account issued or approves, by key (like wallet:)
+//   org:<slug>               a company: { slug, name, operators, caps }
+//   orgm:<email>             the org this email operates
+//   orgc:<slug>              the org's cards, by key
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
 import type { RecordSource } from "./ens/gateway.ts";
@@ -29,6 +32,18 @@ export interface CardRef {
   createdAt: number;
   /** Who issued it for themselves: a wallet (connector test cards) or an email (demo accounts); absent = the operator. */
   issuedBy?: string;
+  /** The company it belongs to; that org's operators manage it. */
+  org?: string;
+}
+
+/** A company. Operators issue and manage its cards; approvals stay with each card's card.approver. */
+export interface Org {
+  slug: string;
+  name: string;
+  /** Lowercase emails. */
+  operators: string[];
+  caps: { tx: number; daily: number; monthly: number; cards: number };
+  createdAt: number;
 }
 
 export interface CardEvent {
@@ -73,6 +88,28 @@ export class Store implements RecordSource {
   async addToAccountIndex(email: string, label: string): Promise<void> {
     const have = await this.accountIndex(email);
     if (!have.includes(label)) await this.kv.put(`acct:${email.toLowerCase()}`, JSON.stringify([...have, label]));
+  }
+
+  getOrg(slug: string) { return this.kv.get<Org>(`org:${slug}`, "json"); }
+  /** Writes the org and moves its operators' memberships to match. */
+  async putOrg(org: Org, removed: string[] = []) {
+    await this.kv.put(`org:${org.slug}`, JSON.stringify(org));
+    await Promise.all(org.operators.map((e) => this.kv.put(`orgm:${e}`, org.slug)));
+    await Promise.all(removed.map((e) => this.kv.delete(`orgm:${e}`)));
+  }
+  /** The org this email operates, if it's still listed there. */
+  async orgOf(email: string): Promise<Org | null> {
+    const me = email.toLowerCase();
+    const slug = await this.kv.get(`orgm:${me}`);
+    const org = slug ? await this.getOrg(slug) : null;
+    return org?.operators.includes(me) ? org : null;
+  }
+  async orgIndex(slug: string): Promise<string[]> {
+    return (await this.kv.get<string[]>(`orgc:${slug}`, "json")) ?? [];
+  }
+  async addToOrgIndex(slug: string, label: string): Promise<void> {
+    const have = await this.orgIndex(slug);
+    if (!have.includes(label)) await this.kv.put(`orgc:${slug}`, JSON.stringify([...have, label]));
   }
 
   getOtp(key: string) { return this.kv.get<{ hash: string; tries: number }>(`otp:${key}`, "json"); }

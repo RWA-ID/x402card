@@ -205,7 +205,9 @@ const HTML = /* html */ `<!doctype html>
       el("div", { class: "row" }, el("div", { class: "lbl", text: "Payee check" }), el("div", { class: "chips" }, ...payeeChips)),
       approverField,
       el("div", { class: "actions" }, go),
-      el("p", { class: "note", text: account
+      el("p", { class: "note", text: me.org
+        ? "A sandbox virtual Visa for " + me.org + ". Anything over these limits waits for the approver."
+        : account
         ? "A sandbox virtual Visa under your name. Anything over these limits waits for the approver."
         : "You'll get the next free test name (testN.xcard.eth) on a sandbox virtual Visa. Anything over these limits waits for the approver." }),
       err);

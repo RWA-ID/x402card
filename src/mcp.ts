@@ -45,7 +45,7 @@ export const TOOLS = [
     _meta: issueUi,
     title: "Issue an agent card",
     description:
-      "Issue a virtual card with a spend policy published as ENS text records. Signed in (email or wallet): call it with no arguments, or with a suggested name and policy, and the person fills in the form in the chat and submits it: the limits, merchant categories, payee check and the approver (an email, a wallet or an ENS name; by default themselves). Signed in by email they name the card (<name>.xcard.eth; caps $500/transaction, $2,000/day, $5,000/month, USD, 5 cards); by wallet they get the next free testN.xcard.eth (caps $50/transaction, $200/day, $500/month, USD, 3 cards). Never set submit yourself. The issued card in the chat shows the person an agent token, once, for an autonomous agent to use this card; it isn't in your result. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
+      "Issue a virtual card with a spend policy published as ENS text records. Signed in (email or wallet): call it with no arguments, or with a suggested name and policy, and the person fills in the form in the chat and submits it: the limits, merchant categories, payee check and the approver (an email, a wallet or an ENS name; by default themselves). Signed in by email they name the card (<name>.xcard.eth; caps $500/transaction, $2,000/day, $5,000/month, USD, 5 cards); by wallet they get the next free testN.xcard.eth (caps $50/transaction, $200/day, $500/month, USD, 3 cards). An org's operator issues for the company within its caps, and sees all its cards. Never set submit yourself. The issued card in the chat shows the person an agent token, once, for an autonomous agent to use this card; it isn't in your result. Operator (admin token): pass name and policy; returns an agent token scoped to the card (shown once).",
     inputSchema: {
       type: "object",
       properties: {
@@ -303,19 +303,25 @@ export class McpServer {
         if (this.caller.kind === "admin") return { ...(await issueWithToken(this.svc, this.store, str(a.name, "name"), a.policy)) };
         if (this.caller.kind !== "owner") throw toolError("forbidden", "an agent token can't issue cards");
         const { email, address } = this.caller;
-        const me = email ? { email } : { address };
+        // An org's operator issues for the company, within its caps; anyone else gets a demo or test card.
+        const org = email ? await this.store.orgOf(email) : null;
+        const me = email ? { email, ...(org ? { org: org.name } : {}) } : { address };
         // The form shows first; the person submits it (submit: true) from the chat.
         if (a.submit !== true) {
           return {
             decision: "form",
-            caps: email ? DEMO_CARDS : TEST_CARDS,
+            caps: org?.caps ?? (email ? DEMO_CARDS : TEST_CARDS),
             me,
             defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy), ...(email && typeof a.name === "string" ? { name: a.name.trim().toLowerCase().replace(/\.xcard\.eth$/, "") } : {}) },
           };
         }
         const picked = pickPolicy(a.policy);
-        const records = policyToRecords({ ...TEST_DEFAULTS, ...picked, currencies: ["USD"], approver: optStr(picked.approver) || email || address });
-        const card = email
+        // A blank daily limit on a named card isn't the test default: the service sets it from the caps.
+        const { limit_daily: _testDaily, ...named } = TEST_DEFAULTS;
+        const records = policyToRecords({ ...(email ? named : TEST_DEFAULTS), ...picked, currencies: ["USD"], approver: optStr(picked.approver) || email || address });
+        const card = org
+          ? await this.svc.issueOrgCard(email!, org, str(a.name, "name"), records)
+          : email
           ? await this.svc.issueAccountCard(email, str(a.name, "name"), records)
           : await this.svc.issueTestCard(address!, records);
         // It joins this connection's cards now (the grant re-reads them on the next request).

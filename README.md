@@ -552,6 +552,7 @@ Admin endpoints (`Authorization: Bearer <admin token>`):
 | Method | Path | Body | Purpose |
 |---|---|---|---|
 | `GET` | `/api/approvals` | | Pending and decided approvals, newest first: funding requests (`kind: "funding"`) and payments the payee gate held (`kind: "payment"`, with `payment: { merchant, merchantUrl, payeeName, payeeStatus, mcc, purpose }`) |
+| `POST` | `/api/orgs` | `{ "slug": "acme", "name": "Acme", "operators": ["ops@acme.com"], "caps"?: { tx, daily, monthly, cards } }` | Create or replace a company. Its operators sign in by email, issue its cards within its caps over the connector and see them all; approvals stay with each card's approver |
 | `POST` | `/api/approvals/:id` | `{ "approve": true \| false, "by": "alice.eth" }` | Decide. Applies exactly what was signed: funding raises the allowance; a held payment is re-checked against the policy and charged (the response's `approval.charge` says whether the issuer approved it). A second decision fails. |
 | `POST` | `/api/cards/:name/unfreeze` | | Human-only unfreeze; also flips `card.status` back to `active` |
 

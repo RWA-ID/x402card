@@ -179,3 +179,52 @@ test("issue_card in the chat for an email sign-in: names the card, approver from
   const mine = await owner({ submit: true, name: "chat-two", policy: { limit_tx: 10, limit_monthly: 100 } });
   assert.equal(mine.card.records["card.approver"], "chat@acme.com", "no approver given: the signed-in email");
 });
+
+test("orgs: an operator issues for the company within its caps, sees its cards, and can't loosen one alone", async () => {
+  const { McpServer } = await import("./mcp.ts");
+  const { Store } = await import("./store.ts");
+  const { emailCards, callerFor } = await import("./oauth/access.ts");
+  const { service } = await import("./index.ts");
+  const store = new Store(env.KV);
+  const made = await call("POST", "/api/orgs", { slug: "acme", name: "Acme", operators: ["Ops@Acme.com", "ops2@acme.com"], caps: { tx: 100, cards: 2 } }, "admin-token");
+  assert.equal(made.status, 201);
+  assert.equal(made.body.org.caps.daily, 2000, "unset caps take the defaults");
+  assert.equal((await call("POST", "/api/orgs", { slug: "acme", name: "Acme", operators: ["x@y.com"] })).status, 401);
+  assert.equal((await call("POST", "/api/orgs", { slug: "Bad Slug", name: "A", operators: ["x@y.com"] }, "admin-token")).status, 400);
+  assert.equal((await call("POST", "/api/orgs", { slug: "other", name: "O", operators: ["ops@acme.com"] }, "admin-token")).status, 400, "one org per operator");
+
+  const svc = service(env, store);
+  const as = async (email: string, name: string, args: Record<string, unknown>) => {
+    const caller = await callerFor({ email, grant: { kind: "wallet" } }, { store, resolve: async () => null });
+    const req = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) });
+    return ((await (await new McpServer(svc, store, caller!).handle(req)).json()) as any).result;
+  };
+  const f = (await as("ops@acme.com", "issue_card", {})).structuredContent;
+  assert.equal(f.caps.tx, 100);
+  assert.equal(f.me.org, "Acme");
+
+  const policy = { limit_tx: 50, limit_monthly: 200, approver: "manager@acme.com" };
+  const one = await as("ops@acme.com", "issue_card", { submit: true, name: "orgmaria", policy });
+  assert.equal(one.structuredContent.card.name, "orgmaria.xcard.eth");
+  assert.match(one.structuredContent.agent_token, /^x4c_/);
+  assert.equal((await store.getCard("orgmaria.xcard.eth"))!.org, "acme");
+  assert.equal(one.structuredContent.card.records["card.limit.daily"], "200", "blank daily: the most the caps allow, never above monthly");
+  assert.match((await as("ops@acme.com", "issue_card", { submit: true, name: "orgbig", policy: { ...policy, limit_tx: 101 } })).content[0].text, /over_org_caps/);
+
+  // The second operator sees it, can manage it, and can't loosen it alone.
+  assert.deepEqual((await emailCards("ops2@acme.com", store)).map((c) => c.label), ["orgmaria.xcard.eth"]);
+  assert.equal((await as("ops2@acme.com", "get_card", { name: "orgmaria.xcard.eth" })).structuredContent.card.name, "orgmaria.xcard.eth");
+  const loosen = (await as("ops2@acme.com", "update_policy", { name: "orgmaria.xcard.eth", limit_monthly: 300 })).structuredContent;
+  assert.equal(loosen.decision, "pending_human", "loosening still waits for the approver");
+  assert.ok(!(await emailCards("outsider@else.com", store)).length);
+  assert.match((await as("outsider@else.com", "get_card", { name: "orgmaria.xcard.eth" })).content[0].text, /forbidden/);
+
+  // The caps count cards, and many cards can share one approver and one issuer.
+  await as("ops@acme.com", "issue_card", { submit: true, name: "orgjon", policy });
+  assert.match((await as("ops@acme.com", "issue_card", { submit: true, name: "organa", policy })).content[0].text, /limit_reached/);
+
+  // Removed operators lose the org at once.
+  await call("POST", "/api/orgs", { slug: "acme", name: "Acme", operators: ["ops@acme.com"], caps: { tx: 100, cards: 2 } }, "admin-token");
+  assert.equal(await store.orgOf("ops2@acme.com"), null);
+  assert.ok(!(await emailCards("ops2@acme.com", store)).length);
+});

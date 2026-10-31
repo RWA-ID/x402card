@@ -13,7 +13,7 @@ import { decidePayee, toOrigin, type PayeeCheck, type PayeeChecker } from "./pol
 import type { TapSigner, TapTag } from "./tap/sign.ts";
 import { type CardPolicy, PolicyError, type TextRecords, isEmail, maskEmail, parseRecords, toRecords } from "./policy/records.ts";
 import { describeChanges, planChanges, type PolicyChange, type PolicyInput } from "./policy/changes.ts";
-import type { Store } from "./store.ts";
+import type { Org, Store } from "./store.ts";
 
 /** The Airwallex surface the service needs; faked in tests. */
 export interface Issuer {
@@ -77,6 +77,9 @@ export class AirwallexIssuer implements Issuer {
     }
   }
 }
+
+/** An org's caps unless it sets its own. */
+export const ORG_DEFAULT_CAPS = { tx: 500, daily: 2000, monthly: 5000, cards: 50 } as const;
 
 /** Self-serve test cards: what any signed-in wallet may issue itself. */
 export const TEST_CARDS = { tx: 50, daily: 200, monthly: 500, perWallet: 3 } as const;
@@ -276,13 +279,25 @@ export class CardService {
    */
   async issueAccountCard(email: string, name: string, records: TextRecords): Promise<CardView> {
     const me = email.toLowerCase();
-    const full = name.trim().toLowerCase();
-    const label = full.endsWith(`.${DEMO_CARDS.parent}`) ? full : `${full}.${DEMO_CARDS.parent}`;
-    if (label.split(".").length !== 3) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${DEMO_CARDS.parent}`);
     const refs = await Promise.all((await this.store.accountIndex(me)).map((l) => this.store.getCard(l)));
     if (refs.filter((r) => r?.issuedBy === me).length >= DEMO_CARDS.perAccount) {
       throw new ServiceError("limit_reached", `a demo account can issue ${DEMO_CARDS.perAccount} cards`);
     }
+    return this.issueCapped(me, name, records, DEMO_CARDS, "demo");
+  }
+
+  /** An org's operator issues a card for the company, within the org's caps. */
+  async issueOrgCard(email: string, org: Org, name: string, records: TextRecords): Promise<CardView> {
+    if ((await this.store.orgIndex(org.slug)).length >= org.caps.cards) {
+      throw new ServiceError("limit_reached", `${org.name} can issue ${org.caps.cards} cards`);
+    }
+    return this.issueCapped(email.toLowerCase(), name, records, org.caps, "org", org.slug);
+  }
+
+  private async issueCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string): Promise<CardView> {
+    const full = name.trim().toLowerCase();
+    const label = full.endsWith(`.${DEMO_CARDS.parent}`) ? full : `${full}.${DEMO_CARDS.parent}`;
+    if (label.split(".").length !== 3) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${DEMO_CARDS.parent}`);
     let policy: CardPolicy;
     try {
       policy = parseRecords({ "card.currencies": "USD", "card.payee": "verified-or-escalate", "card.approver": me, ...records, "card.status": "active" });
@@ -290,16 +305,16 @@ export class CardService {
       if (e instanceof PolicyError) throw new ServiceError("bad_policy", e.message);
       throw e;
     }
-    // No daily limit asked for: the most the demo allows, never above the monthly one.
-    policy.limitDaily ??= Math.min(policy.limitMonthly, DEMO_CARDS.daily);
+    // No daily limit asked for: the most allowed, never above the monthly one.
+    policy.limitDaily ??= Math.min(policy.limitMonthly, caps.daily);
     const over = [
-      policy.limitTx > DEMO_CARDS.tx && `per transaction max ${DEMO_CARDS.tx}`,
-      (policy.limitDaily ?? Infinity) > DEMO_CARDS.daily && `daily max ${DEMO_CARDS.daily}`,
-      policy.limitMonthly > DEMO_CARDS.monthly && `monthly max ${DEMO_CARDS.monthly}`,
+      policy.limitTx > caps.tx && `per transaction max ${caps.tx}`,
+      (policy.limitDaily ?? Infinity) > caps.daily && `daily max ${caps.daily}`,
+      policy.limitMonthly > caps.monthly && `monthly max ${caps.monthly}`,
       policy.currencies.join(",") !== "USD" && "USD only",
     ].filter(Boolean);
-    if (over.length) throw new ServiceError("over_demo_caps", `demo cards: ${over.join(", ")}`);
-    return this.issueCard(label, toRecords(policy), { issuedBy: me });
+    if (over.length) throw new ServiceError(`over_${kind}_caps`, `${kind} cards: ${over.join(", ")}`);
+    return this.issueCard(label, toRecords(policy), { issuedBy: me, ...(org ? { org } : {}) });
   }
 
   /** The cards an email account issued or approves, as it is now. */
@@ -314,7 +329,7 @@ export class CardService {
     return out;
   }
 
-  async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string } = {}): Promise<CardView> {
+  async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string; org?: string } = {}): Promise<CardView> {
     const label = normalizeLabel(name);
     if (RESERVED_LABELS.has(labelOfKey(label)) || RESERVED_KEYS.has(label)) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
     if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
@@ -335,6 +350,7 @@ export class CardService {
     await this.store.putCard(label, {
       cardholderId: holder.cardholderId, cardId: card.cardId, last4: card.last4, createdAt: Date.now(),
       ...(opts.issuedBy ? { issuedBy: opts.issuedBy } : {}),
+      ...(opts.org ? { org: opts.org } : {}),
     });
     await this.store.putRecords(label, toRecords(policy));
     await this.store.clearRequestId("issue", label);
@@ -344,6 +360,7 @@ export class CardService {
     if (isEmail(policy.approver)) await this.store.addToAccountIndex(policy.approver, label);
     if (opts.issuedBy && isEmail(opts.issuedBy)) await this.store.addToAccountIndex(opts.issuedBy, label);
     if (opts.issuedBy && isAddress(opts.issuedBy)) await this.store.addToWalletIndex(opts.issuedBy, label);
+    if (opts.org) await this.store.addToOrgIndex(opts.org, label);
     await this.store.addEvent(label, { at: Date.now(), kind: "issued", detail: "card issued" });
     return this.getCard(label);
   }

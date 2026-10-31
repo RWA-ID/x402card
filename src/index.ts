@@ -9,6 +9,7 @@
 //   /api/names/:name       is this card name free?
 //   /api/approvals[/:id]   list / decide escalated requests (an account decides those whose approver is its email)
 //   /api/cards             GET cards with records + pending count; POST issue a card {name, policy}
+//   /api/orgs              POST create or replace a company {slug, name, operators[], caps?} (admin token)
 //   /api/cards/:name/unfreeze   human-only unfreeze
 //   /api/cards/:name/simulate   sandbox: a merchant charges the card directly, skipping the pre-check (admin token)
 //   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
@@ -33,7 +34,7 @@ import { isEmail, maskEmail, publicRecords } from "./policy/records.ts";
 import { ensPayeeChecker } from "./policy/payee.ts";
 import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
 import { verifyTap } from "./tap/verify.ts";
-import { AirwallexIssuer, CardService, DEMO_CARDS, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
+import { AirwallexIssuer, CardService, DEMO_CARDS, ORG_DEFAULT_CAPS, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
 import { FakeIssuer } from "./testing.ts";
 
@@ -301,6 +302,24 @@ export default {
           const b = (await req.json().catch(() => ({}))) as { name?: unknown; policy?: unknown };
           if (typeof b.name !== "string" || !b.name.trim()) return json({ error: { code: "bad_input", message: "name is required" } }, 400);
           return json(await issueWithToken(svc, store, b.name, b.policy), 201);
+        }
+        if (path === "/api/orgs" && req.method === "POST") {
+          const b = (await req.json().catch(() => ({}))) as { slug?: unknown; name?: unknown; operators?: unknown; caps?: Record<string, unknown> };
+          const bad = (message: string) => json({ error: { code: "bad_input", message } }, 400);
+          if (typeof b.slug !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(b.slug)) return bad("slug: lowercase letters, digits and hyphens");
+          if (typeof b.name !== "string" || !b.name.trim()) return bad("name is required");
+          const operators = Array.isArray(b.operators) ? b.operators.map((e) => String(e).trim().toLowerCase()) : [];
+          if (!operators.length || !operators.every(isEmail)) return bad("operators: one or more emails");
+          const caps = { ...ORG_DEFAULT_CAPS, ...b.caps };
+          if (!Object.values(caps).every((v) => typeof v === "number" && v > 0)) return bad("caps must be positive numbers");
+          for (const e of operators) {
+            const other = await store.orgOf(e);
+            if (other && other.slug !== b.slug) return bad(`${e} already operates ${other.slug}`);
+          }
+          const was = await store.getOrg(b.slug);
+          const org = { slug: b.slug, name: b.name.trim(), operators, caps, createdAt: was?.createdAt ?? Date.now() };
+          await store.putOrg(org, (was?.operators ?? []).filter((e) => !operators.includes(e)));
+          return json({ org }, 201);
         }
         const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/(unfreeze|simulate|check)$/);
         if (u && req.method === "POST") {
