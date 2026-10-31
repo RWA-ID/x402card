@@ -219,11 +219,11 @@ const HTML = /* html */ `<!doctype html>
       e.preventDefault();
       err.textContent = "";
       const approver = approverIn.value.trim();
-      if (!/^([^\s@]+@[^\s@]+\.[a-z]{2,}|0x[0-9a-fA-F]{40}|[^\s.,@]+(\.[^\s.,@]+)*\.[a-z]{2,})$/i.test(approver)) { err.textContent = "The approver is an email, a 0x address or an ENS name."; return; }
-      const name = nameIn.value.trim().toLowerCase().replace(me.parent ? "." + me.parent : ".xcard.eth", "").replace(/\.xcard\.eth$/, "");
+      if (!/^([^\\s@]+@[^\\s@]+\\.[a-z]{2,}|0x[0-9a-fA-F]{40}|[^\\s.,@]+(\\.[^\\s.,@]+)*\\.[a-z]{2,})$/i.test(approver)) { err.textContent = "The approver is an email, a 0x address or an ENS name."; return; }
+      const name = nameIn.value.trim().toLowerCase().replace(me.parent ? "." + me.parent : ".xcard.eth", "").replace(/\\.xcard\\.eth$/, "");
       if (account && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) { err.textContent = "Pick a name: lowercase letters, digits and hyphens."; return; }
       const holder = holderField ? holderIn.value.trim() : "";
-      if (holder && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(holder)) { err.textContent = "The holder is an email address."; return; }
+      if (holder && !/^[^\\s@]+@[^\\s@]+\\.[a-z]{2,}$/i.test(holder)) { err.textContent = "The holder is an email address."; return; }
       const policy = { mcc_allow: [...chosen], payee, approver };
       for (const x of fields) {
         const raw = x.input.value.trim();

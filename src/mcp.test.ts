@@ -467,3 +467,36 @@ test("issue_card from a wallet sign-in: the form first, then the next testN.xcar
   const agent = (await tool(ADMIN, "issue_card", { name: "z.xcard.eth", policy: { limit_tx: 10, limit_monthly: 100, currencies: ["USD"], approver: "alice.eth" } })).structuredContent.agent_token;
   assert.match((await tool(agent, "issue_card", {})).content[0].text, /forbidden/);
 });
+
+test("transactions: the sandbox's padding comes off merchant names", async () => {
+  const { toSafe } = await import("./service.ts");
+  const tx = { transaction_id: "t", card_id: "c", transaction_type: "CLEARING", status: "APPROVED", transaction_amount: 1, transaction_currency: "USD" } as const;
+  assert.equal(toSafe({ ...tx, merchant: { name: "Demo Shop____" } }).merchant, "Demo Shop");
+  assert.equal(toSafe({ ...tx, merchant: { name: "Snake_Case Co" } }).merchant, "Snake_Case Co");
+  assert.equal(toSafe(tx).merchant, undefined);
+});
+
+test("the issue form's email checks survive the HTML template: an s is a letter like any other", async () => {
+  const { issueResource } = await import("./ui/issue.ts");
+  const html = issueResource().text;
+  const holder = html.match(/holder && !(\/\^.*?\$\/i)\.test/)![1];
+  const approver = html.match(/if \(!(\/\^\(.*?\$\/i)\.test\(approver\)/)![1];
+  const re = (src: string) => new RegExp(src.slice(1, -2), "i");
+  for (const ok of ["ensgiant@gmail.com", "sara.s@sales.com"]) {
+    assert.ok(re(holder).test(ok), ok);
+    assert.ok(re(approver).test(ok), ok);
+  }
+  for (const bad of ["not-an-email", "a b@c.com", "a@bcom"]) assert.ok(!re(holder).test(bad), bad);
+  assert.ok(re(approver).test("alice.eth"));
+  assert.ok(re(approver).test("0xc32A9e2f1092F1D57D3267C2E70b80DA9De06D59"));
+  assert.ok(!re(approver).test("not an approver"));
+});
+
+test("issue_card: an operator's suggested holder fills the form", async () => {
+  const { svc, store } = setup();
+  await store.putOrg({ slug: "acme", name: "Acme", operators: ["ops@acme.com"], caps: { tx: 100, daily: 200, monthly: 500, cards: 5 }, createdAt: 1 });
+  const req = new Request("https://x/mcp", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "issue_card", arguments: { name: "maria", holder: "ensgiant@gmail.com" } } }) });
+  const f = ((await (await new McpServer(svc, store, { kind: "owner", email: "ops@acme.com", labels: [] }).handle(req)).json()) as any).result.structuredContent;
+  assert.equal(f.defaults.holder, "ensgiant@gmail.com");
+  assert.equal(f.defaults.name, "maria");
+});

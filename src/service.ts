@@ -970,14 +970,15 @@ function payeeLabel(merchant: string, name: string | undefined, status: string):
   return name && status === "verified" ? `${merchant} (${name} ✓)` : merchant;
 }
 
-function toSafe(t: IssuingTransaction): SafeTransaction {
+export function toSafe(t: IssuingTransaction): SafeTransaction {
   return {
     type: t.transaction_type,
     status: t.status,
     settled: issuing.isSettled(t),
     amount: t.transaction_amount,
     currency: t.transaction_currency,
-    merchant: t.merchant?.name,
+    // The sandbox pads merchant names: "Demo Shop____".
+    merchant: t.merchant?.name?.replace(/[_\s]+$/, ""),
     mcc: t.merchant?.category_code,
     decline_reason: t.failure_reason,
     at: t.transaction_date,

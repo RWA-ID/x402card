@@ -334,7 +334,7 @@ export class McpServer {
             decision: "form",
             caps: org?.caps ?? (email ? DEMO_CARDS : TEST_CARDS),
             me,
-            defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy), ...(email && typeof a.name === "string" ? { name: cardWord(a.name, org ? `${org.slug}.${DEMO_CARDS.parent}` : DEMO_CARDS.parent) } : {}) },
+            defaults: { ...TEST_DEFAULTS, ...pickPolicy(a.policy), ...(org && optStr(a.holder) ? { holder: optStr(a.holder) } : {}), ...(email && typeof a.name === "string" ? { name: cardWord(a.name, org ? `${org.slug}.${DEMO_CARDS.parent}` : DEMO_CARDS.parent) } : {}) },
           };
         }
         const picked = pickPolicy(a.policy);
