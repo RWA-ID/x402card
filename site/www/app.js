@@ -83,7 +83,7 @@
       name.textContent = v;
       const ok = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/i.test(v) && v.length > 4;
       if (ok) {
-        const l4 = v === target ? "4021" : last4(v);
+        const l4 = v === target ? "7273" : last4(v);
         num.textContent = "•••• •••• •••• " + l4;
         res.textContent = `${v} → card ••${l4} · active`;
         if (!resolved) {
