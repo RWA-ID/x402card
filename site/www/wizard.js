@@ -96,7 +96,7 @@
     shownMonthly = to;
     if (R) { w("fill").style.transform = `scaleX(${to / scale})`; w("allow").textContent = money(to); return; }
     w("fill").animate([{ transform: `scaleX(${from / scale})` }, { transform: `scaleX(${to / scale})` }], { duration: 1100, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
-    w("rec").animate([{ color: "oklch(0.86 0.1 258)" }, { color: "oklch(0.86 0.1 258)", offset: 0.7 }, { color: "#5d626c" }], { duration: 2000 });
+    w("rec").animate([{ color: "oklch(var(--accent-tag-lch))" }, { color: "oklch(var(--accent-tag-lch))", offset: 0.7 }, { color: "var(--dim)" }], { duration: 2000 });
     const t0 = performance.now(), el = w("allow"), seq = ++countSeq;
     const f = (t) => {
       if (seq !== countSeq) return; // a newer step took over

@@ -67,14 +67,14 @@
     return Math.round(s / 86400) + "d ago";
   };
   const STATUS = {
-    pending: ["PENDING_HUMAN", "var(--warning)", "oklch(0.84 0.14 80 / 0.1)"],
-    approved: ["APPROVED", "var(--success)", "oklch(0.8 0.16 155 / 0.1)"],
-    denied: ["DENIED", "var(--error)", "oklch(0.7 0.19 25 / 0.12)"],
-    expired: ["EXPIRED", "var(--muted)", "rgba(255,255,255,0.06)"],
-    active: ["ACTIVE", "var(--success)", "oklch(0.8 0.16 155 / 0.1)"],
-    frozen: ["FROZEN", "var(--ice)", "oklch(0.9 0.05 230 / 0.1)"],
+    pending: ["PENDING_HUMAN", "var(--warning)", "oklch(var(--warning-lch) / 0.1)"],
+    approved: ["APPROVED", "var(--success)", "oklch(var(--success-lch) / 0.1)"],
+    denied: ["DENIED", "var(--error)", "oklch(var(--error-lch) / 0.12)"],
+    expired: ["EXPIRED", "var(--muted)", "rgb(var(--ink) / 0.06)"],
+    active: ["ACTIVE", "var(--success)", "oklch(var(--success-lch) / 0.1)"],
+    frozen: ["FROZEN", "var(--ice)", "oklch(var(--ice-lch) / 0.1)"],
   };
-  const pill = (k) => { const [t, c, bg] = STATUS[k] || [k.toUpperCase(), "var(--muted)", "rgba(255,255,255,0.06)"]; return el("span", { class: "status-pill", style: `color:${c};background:${bg}`, text: t }); };
+  const pill = (k) => { const [t, c, bg] = STATUS[k] || [k.toUpperCase(), "var(--muted)", "rgb(var(--ink) / 0.06)"]; return el("span", { class: "status-pill", style: `color:${c};background:${bg}`, text: t }); };
   const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
   // card.approver as people read it: the name or email, or a bare address shortened.
   const who = (s) => (/^0x[0-9a-fA-F]{40}$/.test(s) ? short(s) : s);
@@ -227,7 +227,7 @@
       recLine.textContent = `card.limit.monthly = ${after}`;
       if (!R) {
         fill.animate([{ transform: `scaleX(${now / scale})` }, { transform: `scaleX(${after / scale})` }], { duration: 1100, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
-        recLine.animate([{ color: "oklch(0.86 0.1 258)" }, { color: "oklch(0.86 0.1 258)", offset: 0.7 }, { color: "#5d626c" }], { duration: 2000 });
+        recLine.animate([{ color: "oklch(var(--accent-tag-lch))" }, { color: "oklch(var(--accent-tag-lch))", offset: 0.7 }, { color: "var(--dim)" }], { duration: 2000 });
         await countUp(allowVal, now, after, cur, 1100);
       } else { allowVal.textContent = money(after, cur); }
     });
@@ -452,7 +452,7 @@
     return el("article", { class: "fleet-item", "data-card": c.name },
       face,
       el("div", { class: "fleet-meta" },
-        el("div", { class: "fleet-row" }, pill(c.status), pending ? el("span", { class: "status-pill", style: "color:var(--warning);background:oklch(0.84 0.14 80 / 0.1)", text: `${pending} PENDING` }) : null, el("span", { style: "flex:1" }), action, resend),
+        el("div", { class: "fleet-row" }, pill(c.status), pending ? el("span", { class: "status-pill", style: "color:var(--warning);background:oklch(var(--warning-lch) / 0.1)", text: `${pending} PENDING` }) : null, el("span", { style: "flex:1" }), action, resend),
         el("div", { class: "kv" },
           ...(c.holder ? [el("span", { text: "holder" }), el("span", { text: `${c.holder} · ${c.claimed ? "claimed" : "not claimed yet"}` })] : []),
           el("span", { text: "approver" }), el("span", { text: who(r["card.approver"] || "—") }),

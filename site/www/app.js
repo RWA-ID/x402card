@@ -233,9 +233,9 @@
         stage.appendChild(cl);
         const dx = rb.left - (ra.left + ra.width / 2 - rb.width / 2), dy = rb.top - (ra.top + ra.height / 2 - rb.height / 2);
         await to(cl, [
-          { transform: "translate(0,0) scale(0.9)", boxShadow: "0 0 0 0 oklch(0.74 0.19 258 / 0)" },
-          { transform: `translate(${dx * 0.5}px,${dy * 0.5}px) scale(1.06)`, boxShadow: "0 0 24px 2px oklch(0.74 0.19 258 / 0.6)", offset: 0.5 },
-          { transform: `translate(${dx}px,${dy}px) scale(1)`, boxShadow: "0 0 12px 0 oklch(0.74 0.19 258 / 0.4)" },
+          { transform: "translate(0,0) scale(0.9)", boxShadow: "0 0 0 0 oklch(var(--accent-lch) / 0)" },
+          { transform: `translate(${dx * 0.5}px,${dy * 0.5}px) scale(1.06)`, boxShadow: "0 0 24px 2px oklch(var(--accent-lch) / 0.6)", offset: 0.5 },
+          { transform: `translate(${dx}px,${dy}px) scale(1)`, boxShadow: "0 0 12px 0 oklch(var(--accent-lch) / 0.4)" },
         ], { d: o.d || 650, e: "cubic-bezier(.45,0,.2,1)" });
         return cl;
       },
@@ -252,7 +252,7 @@
       await c.type(a("in"), "scout.xcard.eth", 55);
       await c.wait(250);
       c.to(a("btn"), [{ transform: "scale(1)" }, { transform: "scale(0.93)" }, { transform: "scale(1)" }], { d: 260 });
-      await c.to(a("btn"), [{ boxShadow: "0 0 0 0 oklch(0.74 0.19 258 / 0.6)" }, { boxShadow: "0 0 0 14px oklch(0.74 0.19 258 / 0)" }], { d: 450 });
+      await c.to(a("btn"), [{ boxShadow: "0 0 0 0 oklch(var(--accent-lch) / 0.6)" }, { boxShadow: "0 0 0 14px oklch(var(--accent-lch) / 0)" }], { d: 450 });
       await c.to(a("card"), [{ opacity: 0, transform: "translateY(28px) scale(0.96)" }, { opacity: 1, transform: "translateY(0) scale(1)" }], { d: 700 });
       await c.scramble(a("num"), "5880");
       await c.type(a("name"), "scout.xcard.eth", 26);
@@ -262,73 +262,73 @@
     async 2(c) {
       const { a } = c;
       await c.wait(400);
-      const hl = "oklch(0.74 0.19 258 / 0.12)";
+      const hl = "oklch(var(--accent-lch) / 0.12)";
       for (let i = 1; i <= 3; i++) {
         const row = a("r" + i), tag = a("t" + i);
         await c.to(row, [{ background: "rgba(0,0,0,0)" }, { background: hl }], { d: 280 });
         const clone = await c.fly(a("v" + i), tag, { d: 700 });
-        await c.to(tag, [{ opacity: 0, boxShadow: "0 0 12px 0 oklch(0.74 0.19 258 / 0.4)" }, { opacity: 1, boxShadow: "0 0 0 0 oklch(0.74 0.19 258 / 0)" }], { d: 60 });
+        await c.to(tag, [{ opacity: 0, boxShadow: "0 0 12px 0 oklch(var(--accent-lch) / 0.4)" }, { opacity: 1, boxShadow: "0 0 0 0 oklch(var(--accent-lch) / 0)" }], { d: 60 });
         clone.remove();
-        c.to(row, [{ background: hl }, { background: "rgba(255,255,255,0.02)" }], { d: 500 });
+        c.to(row, [{ background: hl }, { background: "rgb(var(--ink) / 0.02)" }], { d: 500 });
         await c.wait(180);
       }
-      const base = "0 30px 60px -24px rgba(0,0,0,0.8)";
-      c.to(a("card"), [{ boxShadow: base + ", 0 0 0 0 oklch(0.74 0.19 258 / 0)" }, { boxShadow: base + ", 0 0 0 1px oklch(0.74 0.19 258 / 0.6)", offset: 0.4 }, { boxShadow: base + ", 0 0 0 0 oklch(0.74 0.19 258 / 0)" }], { d: 900 });
+      const base = "0 30px 60px -24px rgb(var(--shade) / calc(0.8 * var(--shade-k)))";
+      c.to(a("card"), [{ boxShadow: base + ", 0 0 0 0 oklch(var(--accent-lch) / 0)" }, { boxShadow: base + ", 0 0 0 1px oklch(var(--accent-lch) / 0.6)", offset: 0.4 }, { boxShadow: base + ", 0 0 0 0 oklch(var(--accent-lch) / 0)" }], { d: 900 });
     },
 
     async 3(c) {
       const { a } = c, card = a("card"), m1 = a("m1"), m2 = a("m2");
-      const base = "0 30px 60px -24px rgba(0,0,0,0.8)";
+      const base = "0 30px 60px -24px rgb(var(--shade) / calc(0.8 * var(--shade-k)))";
       await c.wait(300);
       await c.to(m1, [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "translateY(0)" }], { d: 450 });
       await c.wait(450);
       const d = c.dy(m1, card);
       await c.to(m1, [{ opacity: 1, transform: "translateY(0) scale(1)" }, { opacity: 0, transform: `translateY(${d}px) scale(0.4)` }], { d: 560, e: "cubic-bezier(.55,0,.8,.2)" });
-      c.to(card, [{ transform: "scale(1)", boxShadow: base + ", 0 0 0 0 oklch(0.8 0.16 155 / 0)" }, { transform: "scale(1.025)", boxShadow: base + ", 0 0 0 2px oklch(0.8 0.16 155 / 0.7), 0 0 40px oklch(0.8 0.16 155 / 0.3)", offset: 0.3 }, { transform: "scale(1)", boxShadow: base + ", 0 0 0 0 oklch(0.8 0.16 155 / 0)" }], { d: 800 });
+      c.to(card, [{ transform: "scale(1)", boxShadow: base + ", 0 0 0 0 oklch(var(--success-lch) / 0)" }, { transform: "scale(1.025)", boxShadow: base + ", 0 0 0 2px oklch(var(--success-lch) / 0.7), 0 0 40px oklch(var(--success-lch) / 0.3)", offset: 0.3 }, { transform: "scale(1)", boxShadow: base + ", 0 0 0 0 oklch(var(--success-lch) / 0)" }], { d: 800 });
       c.text(a("spent"), "$42 / $500");
-      c.to(a("spent"), [{ color: "oklch(0.8 0.16 155)" }, { color: "#eceef1" }], { d: 1200 });
+      c.to(a("spent"), [{ color: "oklch(var(--success-lch))" }, { color: "var(--text)" }], { d: 1200 });
       await c.to(a("ok"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 400 });
       await c.wait(1500);
       c.to(a("ok"), [{ opacity: 1 }, { opacity: 0 }], { d: 300 });
       await c.to(m2, [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "translateY(0)" }], { d: 450 });
       await c.wait(450);
       await c.to(m2, [{ transform: "translateY(0)" }, { transform: `translateY(${d * 0.5}px)` }], { d: 380, e: "cubic-bezier(.55,0,.8,.2)" });
-      c.to(m2, [{ borderColor: "rgba(255,255,255,0.12)", background: "#15181e" }, { borderColor: "oklch(0.7 0.19 25)", background: "oklch(0.7 0.19 25 / 0.12)" }], { d: 200 });
+      c.to(m2, [{ borderColor: "rgb(var(--ink) / 0.12)", background: "var(--chip)" }, { borderColor: "oklch(var(--error-lch))", background: "oklch(var(--error-lch) / 0.12)" }], { d: 200 });
       c.to(card, [{ transform: "translateY(0)" }, { transform: "translateY(4px)", offset: 0.3 }, { transform: "translateY(0)" }], { d: 300 });
       c.to(a("err"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 400, delay: 350 });
       await c.to(m2, [{ transform: `translateY(${d * 0.5}px)` }, { transform: "translateY(-12px)", offset: 0.4 }, { transform: "translate(-9px,0)", offset: 0.55 }, { transform: "translate(8px,0)", offset: 0.68 }, { transform: "translate(-5px,0)", offset: 0.8 }, { transform: "translate(3px,0)", offset: 0.9 }, { transform: "translate(0,0)" }], { d: 800, e: "ease-out" });
     },
 
     async payee(c) {
-      const { a } = c, red = "oklch(0.7 0.19 25)", amb = "oklch(0.84 0.14 80)";
+      const { a } = c, red = "oklch(var(--error-lch))", amb = "oklch(var(--warning-lch))";
       const inRow = [{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }];
       const pill = [{ opacity: 0, transform: "scale(0.9)" }, { opacity: 1, transform: "none" }];
       await c.wait(300);
       // 1. The listed origin pays: the record row lights up as it matches.
       await c.to(a("p1"), inRow, { d: 420 });
       await c.wait(350);
-      c.to(a("origin"), [{ background: "rgba(0,0,0,0)" }, { background: "oklch(0.8 0.16 155 / 0.14)", offset: 0.4 }, { background: "rgba(0,0,0,0)" }], { d: 1200 });
-      c.to(a("p1"), [{ borderColor: "rgba(255,255,255,0.1)" }, { borderColor: "oklch(0.8 0.16 155 / 0.5)" }], { d: 300 });
+      c.to(a("origin"), [{ background: "rgba(0,0,0,0)" }, { background: "oklch(var(--success-lch) / 0.14)", offset: 0.4 }, { background: "rgba(0,0,0,0)" }], { d: 1200 });
+      c.to(a("p1"), [{ borderColor: "rgb(var(--ink) / 0.1)" }, { borderColor: "oklch(var(--success-lch) / 0.5)" }], { d: 300 });
       await c.to(a("s1"), pill, { d: 300, delay: 250 });
       await c.wait(650);
       // 2. A lookalike claims the same name: no match, blocked.
       await c.to(a("p2"), inRow, { d: 420 });
       await c.wait(350);
-      c.to(a("origin"), [{ background: "rgba(0,0,0,0)" }, { background: "oklch(0.7 0.19 25 / 0.12)", offset: 0.4 }, { background: "rgba(0,0,0,0)" }], { d: 1200 });
-      c.to(a("p2"), [{ borderColor: "rgba(255,255,255,0.1)", background: "#0a0b0d" }, { borderColor: red, background: "oklch(0.7 0.19 25 / 0.08)" }], { d: 250 });
+      c.to(a("origin"), [{ background: "rgba(0,0,0,0)" }, { background: "oklch(var(--error-lch) / 0.12)", offset: 0.4 }, { background: "rgba(0,0,0,0)" }], { d: 1200 });
+      c.to(a("p2"), [{ borderColor: "rgb(var(--ink) / 0.1)", background: "var(--bg)" }, { borderColor: red, background: "oklch(var(--error-lch) / 0.08)" }], { d: 250 });
       c.to(a("p2"), [{ transform: "translateX(0)" }, { transform: "translateX(-8px)", offset: 0.25 }, { transform: "translateX(7px)", offset: 0.5 }, { transform: "translateX(-4px)", offset: 0.75 }, { transform: "translateX(0)" }], { d: 480, e: "ease-out" });
       await c.to(a("s2"), pill, { d: 300, delay: 200 });
       await c.wait(650);
       // 3. No name to check: held for the approver.
       await c.to(a("p3"), inRow, { d: 420 });
       await c.wait(350);
-      c.to(a("p3"), [{ borderColor: "rgba(255,255,255,0.1)" }, { borderColor: amb }], { d: 300 });
+      c.to(a("p3"), [{ borderColor: "rgb(var(--ink) / 0.1)" }, { borderColor: amb }], { d: 300 });
       await c.to(a("s3"), pill, { d: 300, delay: 200 });
       await c.to(a("cap"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 450 });
     },
 
     async tap(c) {
-      const { a } = c, grn = "oklch(0.8 0.16 155)";
+      const { a } = c, grn = "oklch(var(--success-lch))";
       await c.wait(300);
       await c.to(a("req"), [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }], { d: 450 });
       await c.to(a("l1"), [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], { d: 300 });
@@ -338,12 +338,12 @@
         await c.wait(260);
         const step = a("v" + i), dot = step.querySelector("i");
         c.text(dot, "✓");
-        c.to(dot, [{ background: "rgba(0,0,0,0)", borderColor: "rgba(255,255,255,0.18)" }, { background: grn, borderColor: grn }], { d: 200 });
-        c.to(step, [{ color: "#5d626c" }, { color: "#b9bdc6" }], { d: 200 });
+        c.to(dot, [{ background: "rgba(0,0,0,0)", borderColor: "rgb(var(--ink) / 0.18)" }, { background: grn, borderColor: grn }], { d: 200 });
+        c.to(step, [{ color: "var(--dim)" }, { color: "var(--text-2)" }], { d: 200 });
       }
       c.text(a("vst"), "trusted agent");
       c.to(a("vst"), [{ color: grn }, { color: grn }], { d: 10 });
-      c.to(a("ver"), [{ borderColor: "rgba(255,255,255,0.08)" }, { borderColor: "oklch(0.8 0.16 155 / 0.5)" }], { d: 300 });
+      c.to(a("ver"), [{ borderColor: "rgb(var(--ink) / 0.08)" }, { borderColor: "oklch(var(--success-lch) / 0.5)" }], { d: 300 });
       await c.to(a("ok"), [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { d: 400 });
       await c.wait(1200);
       // The same headers again: rejected, while the first request stays trusted.
@@ -354,19 +354,19 @@
 
     async 4(c) {
       const { a } = c;
-      const amb = "oklch(0.84 0.14 80)", grn = "oklch(0.8 0.16 155)";
+      const amb = "oklch(var(--warning-lch))", grn = "oklch(var(--success-lch))";
       approveResolver = null;
       await c.wait(300);
       await c.to(a("req"), [{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }], { d: 450 });
       await c.to(a("l1"), [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], { d: 300 });
       await c.to(a("pol"), [{ opacity: 0 }, { opacity: 1 }], { d: 300 });
       c.text(a("polst"), "evaluating…");
-      c.to(a("dot"), [{ background: "#5d626c" }, { background: "#eceef1" }], { d: 300 });
+      c.to(a("dot"), [{ background: "var(--dim)" }, { background: "var(--text)" }], { d: 300 });
       await c.wait(800);
       c.text(a("polst"), "PAUSED · $300 > card.limit.tx");
       c.to(a("polst"), [{ color: amb }, { color: amb }], { d: 10 });
-      c.to(a("pol"), [{ borderColor: "rgba(255,255,255,0.1)" }, { borderColor: "oklch(0.84 0.14 80 / 0.6)" }], { d: 300 });
-      c.to(a("dot"), [{ background: amb, boxShadow: "0 0 0 0 oklch(0.84 0.14 80 / 0.6)" }, { background: amb, boxShadow: "0 0 0 7px oklch(0.84 0.14 80 / 0)" }], { d: 1200, it: Infinity, e: "ease-out" });
+      c.to(a("pol"), [{ borderColor: "rgb(var(--ink) / 0.1)" }, { borderColor: "oklch(var(--warning-lch) / 0.6)" }], { d: 300 });
+      c.to(a("dot"), [{ background: amb, boxShadow: "0 0 0 0 oklch(var(--warning-lch) / 0.6)" }, { background: amb, boxShadow: "0 0 0 7px oklch(var(--warning-lch) / 0)" }], { d: 1200, it: Infinity, e: "ease-out" });
       c.to(a("dot"), [{ background: amb }, { background: amb }], { d: 10 });
       await c.to(a("l2"), [{ transform: "scaleY(0)" }, { transform: "scaleY(1)" }], { d: 300 });
       await c.to(a("act"), [{ opacity: 0.25 }, { opacity: 1 }], { d: 300 });
@@ -376,31 +376,31 @@
       a("ring").getAnimations().forEach((an) => an.cancel());
       c.to(a("approve"), [{ transform: "scale(1)" }, { transform: "scale(0.94)" }, { transform: "scale(1)" }], { d: 240 });
       c.text(a("approve"), "Approved ✓");
-      c.to(a("approve"), [{ background: "oklch(0.74 0.19 258)" }, { background: grn }], { d: 300 });
+      c.to(a("approve"), [{ background: "oklch(var(--accent-lch))" }, { background: grn }], { d: 300 });
       c.text(a("polst"), "RELEASED · approved by alice.eth");
       c.to(a("polst"), [{ color: grn }, { color: grn }], { d: 10 });
-      c.to(a("pol"), [{ borderColor: "oklch(0.84 0.14 80 / 0.6)" }, { borderColor: "oklch(0.8 0.16 155 / 0.5)" }], { d: 300 });
+      c.to(a("pol"), [{ borderColor: "oklch(var(--warning-lch) / 0.6)" }, { borderColor: "oklch(var(--success-lch) / 0.5)" }], { d: 300 });
       a("dot").getAnimations().forEach((an) => an.cancel());
       c.to(a("dot"), [{ background: grn }, { background: grn }], { d: 10 });
       await c.wait(250);
       c.text(a("rec"), "card.limit.monthly = 800");
-      c.to(a("rec"), [{ color: "oklch(0.86 0.1 258)" }, { color: "oklch(0.86 0.1 258)", offset: 0.7 }, { color: "#5d626c" }], { d: 2000 });
+      c.to(a("rec"), [{ color: "oklch(var(--accent-tag-lch))" }, { color: "oklch(var(--accent-tag-lch))", offset: 0.7 }, { color: "var(--dim)" }], { d: 2000 });
       c.to(a("fill"), [{ transform: "scaleX(0.5)" }, { transform: "scaleX(0.8)" }], { d: 1100, e: "cubic-bezier(.4,0,.2,1)" });
       await c.count(a("allow"), 500, 800, 1100);
     },
 
     async 5(c) {
-      const { a } = c, red = "oklch(0.7 0.19 25)", ice = "oklch(0.9 0.05 230)";
+      const { a } = c, red = "oklch(var(--error-lch))", ice = "oklch(var(--ice-lch))";
       await c.wait(300);
       const spike = [...c.stage.querySelectorAll("[data-bar]")].slice(-8);
       spike.forEach((b, i) => {
         const s = Math.min(92, 46 + i * 7) / +b.dataset.h;
-        c.to(b, [{ transform: "scaleY(1)", background: "rgba(255,255,255,0.16)" }, { transform: `scaleY(${s})`, background: red }], { d: 380, delay: i * 85, e: "cubic-bezier(.3,1.3,.5,1)" });
+        c.to(b, [{ transform: "scaleY(1)", background: "rgb(var(--ink) / 0.16)" }, { transform: `scaleY(${s})`, background: red }], { d: 380, delay: i * 85, e: "cubic-bezier(.3,1.3,.5,1)" });
       });
       await c.wait(spike.length * 85 + 380);
       await c.to(a("alert"), [{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { d: 350 });
       await c.wait(400);
-      c.to(a("card"), [{ boxShadow: "0 30px 60px -24px rgba(0,0,0,0.8)" }, { boxShadow: "0 30px 60px -24px rgba(0,0,0,0.8), 0 0 50px oklch(0.9 0.05 230 / 0.25)" }], { d: 1100 });
+      c.to(a("card"), [{ boxShadow: "0 30px 60px -24px rgb(var(--shade) / calc(0.8 * var(--shade-k)))" }, { boxShadow: "0 30px 60px -24px rgb(var(--shade) / calc(0.8 * var(--shade-k))), 0 0 50px oklch(var(--ice-lch) / 0.25)" }], { d: 1100 });
       await c.to(a("frost"), [{ opacity: 0 }, { opacity: 1 }], { d: 1100, e: "cubic-bezier(.3,.6,.3,1)" });
       const s = a("status");
       await c.to(s, [{ transform: "rotateX(0deg)" }, { transform: "rotateX(90deg)" }], { d: 170, e: "ease-in" });
@@ -413,20 +413,20 @@
 
   // ---------- Activity feed ----------
   const KINDS = {
-    ok: { st: "APPROVED", c: "oklch(0.8 0.16 155)", bg: "oklch(0.8 0.16 155 / 0.1)" },
-    mcc: { st: "MCC_NOT_ALLOWED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
-    hold: { st: "PENDING_HUMAN", c: "oklch(0.84 0.14 80)", bg: "oklch(0.84 0.14 80 / 0.1)" },
+    ok: { st: "APPROVED", c: "oklch(var(--success-lch))", bg: "oklch(var(--success-lch) / 0.1)" },
+    mcc: { st: "MCC_NOT_ALLOWED", c: "oklch(var(--error-lch))", bg: "oklch(var(--error-lch) / 0.12)" },
+    hold: { st: "PENDING_HUMAN", c: "oklch(var(--warning-lch))", bg: "oklch(var(--warning-lch) / 0.1)" },
     // A logged escalation: it was sent to the human then; the decision is its own row.
-    policy: { st: "POLICY", c: "oklch(0.86 0.1 258)", bg: "oklch(0.74 0.19 258 / 0.14)" },
-    esc: { st: "ESCALATED", c: "oklch(0.84 0.14 80)", bg: "oklch(0.84 0.14 80 / 0.1)" },
-    fund: { st: "FUNDED", c: "oklch(0.86 0.1 258)", bg: "oklch(0.74 0.19 258 / 0.14)" },
-    frz: { st: "FROZEN", c: "oklch(0.9 0.05 230)", bg: "oklch(0.9 0.05 230 / 0.1)" },
-    issued: { st: "ISSUED", c: "oklch(0.86 0.1 258)", bg: "oklch(0.74 0.19 258 / 0.14)" },
-    denied: { st: "DENIED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
-    active: { st: "UNFROZEN", c: "oklch(0.8 0.16 155)", bg: "oklch(0.8 0.16 155 / 0.1)" },
-    declined: { st: "DECLINED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
-    blocked: { st: "BLOCKED", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
-    payee: { st: "PAYEE_MISMATCH", c: "oklch(0.7 0.19 25)", bg: "oklch(0.7 0.19 25 / 0.12)" },
+    policy: { st: "POLICY", c: "oklch(var(--accent-tag-lch))", bg: "oklch(var(--accent-lch) / 0.14)" },
+    esc: { st: "ESCALATED", c: "oklch(var(--warning-lch))", bg: "oklch(var(--warning-lch) / 0.1)" },
+    fund: { st: "FUNDED", c: "oklch(var(--accent-tag-lch))", bg: "oklch(var(--accent-lch) / 0.14)" },
+    frz: { st: "FROZEN", c: "oklch(var(--ice-lch))", bg: "oklch(var(--ice-lch) / 0.1)" },
+    issued: { st: "ISSUED", c: "oklch(var(--accent-tag-lch))", bg: "oklch(var(--accent-lch) / 0.14)" },
+    denied: { st: "DENIED", c: "oklch(var(--error-lch))", bg: "oklch(var(--error-lch) / 0.12)" },
+    active: { st: "UNFROZEN", c: "oklch(var(--success-lch))", bg: "oklch(var(--success-lch) / 0.1)" },
+    declined: { st: "DECLINED", c: "oklch(var(--error-lch))", bg: "oklch(var(--error-lch) / 0.12)" },
+    blocked: { st: "BLOCKED", c: "oklch(var(--error-lch))", bg: "oklch(var(--error-lch) / 0.12)" },
+    payee: { st: "PAYEE_MISMATCH", c: "oklch(var(--error-lch))", bg: "oklch(var(--error-lch) / 0.12)" },
   };
   const SAMPLE = [
     ["researcher", "ModelHub API (modelhub.eth ✓) · inference", "$4.12", "ok"],
@@ -479,7 +479,7 @@
     const add = (el, animate) => {
       box.prepend(el);
       while (box.children.length > 6) box.lastElementChild.remove();
-      if (animate && !R) el.animate([{ opacity: 0, transform: "translateY(-8px)", background: "oklch(0.74 0.19 258 / 0.08)" }, { opacity: 1, transform: "none", background: "rgba(0,0,0,0)" }], { duration: 900, easing: "cubic-bezier(.2,.8,.2,1)" });
+      if (animate && !R) el.animate([{ opacity: 0, transform: "translateY(-8px)", background: "oklch(var(--accent-lch) / 0.08)" }, { opacity: 1, transform: "none", background: "rgba(0,0,0,0)" }], { duration: 900, easing: "cubic-bezier(.2,.8,.2,1)" });
     };
     const startSample = () => {
       sampleTimer = setInterval(() => add(rowEl(sample(SAMPLE[n++ % SAMPLE.length], hhmmss(new Date()))), true), 2600);
