@@ -830,3 +830,43 @@ details.op p { font-size: 13px !important; }
 .batch-table tr.bad td { color: var(--error, #f27474); }
 .batch-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .batch-go { margin-top: 12px; }
+
+/* ---------- Connect + request access ---------- */
+.access { padding-top: clamp(72px, 12vh, 140px); padding-bottom: clamp(72px, 12vh, 140px); display: flex; flex-direction: column; gap: 36px; }
+.access-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px; align-items: start; }
+.access-card { border-radius: 18px; background: var(--surface); border: 1px solid rgba(255,255,255,0.07); padding: 26px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.access-card h3 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
+.access-card > p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.55; }
+.access-card .k { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--dim); text-transform: uppercase; }
+.get-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.get-list li { padding: 13px 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.get-list li:first-child { border-top: none; padding-top: 0; }
+.get-list b { font-size: 14.5px; font-weight: 500; color: var(--text); }
+.get-list span { font-size: 13.5px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.access-note { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.55; }
+.access-form { display: flex; flex-direction: column; gap: 14px; }
+.access-form label { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.access-form label > span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.access-form label > small { font-size: 12.5px; color: var(--dim); line-height: 1.45; overflow-wrap: anywhere; }
+.access-form input, .access-form select, .access-form textarea { width: 100%; background: var(--inset); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; color: var(--text); font-family: var(--sans); font-size: 15px; padding: 12px 14px; outline: none; }
+.access-form textarea { resize: vertical; min-height: 76px; }
+.access-form input:focus, .access-form select:focus, .access-form textarea:focus { border-color: oklch(0.74 0.19 258 / 0.6); }
+.access-form .mono-in { font-family: var(--mono); font-size: 14px; }
+.access-form small b { font-family: var(--mono); font-weight: 400; color: var(--accent-tag); }
+.access-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.access-status { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; min-height: 20px; }
+.access-status.bad { color: var(--error); }
+.access-done { display: flex; flex-direction: column; gap: 8px; padding: 12px 0; }
+.access-done h3 { color: var(--success); }
+.access-done p { margin: 0; font-size: 14.5px; color: var(--text-2); line-height: 1.55; overflow-wrap: anywhere; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 14px; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: 14px; color: var(--text-2); line-height: 1.55; min-width: 0; }
+.steps li::before { content: counter(s); font-family: var(--mono); font-size: 11.5px; color: var(--accent-tag); background: var(--accent-soft); border-radius: 999px; width: 24px; height: 24px; display: grid; place-items: center; }
+.steps li > div { min-width: 0; overflow-wrap: anywhere; }
+.access-card pre.code { margin: 0; overflow-x: auto; }
+.try-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.try-list li { font-size: 14px; color: var(--text-2); line-height: 1.5; background: var(--inset); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; }
+.access-card.wide { grid-column: 1 / -1; }
+.access-card.wide .try-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+@media (max-width: 1140px) { .nav-links .hide-md { display: none; } }
+@media (max-width: 900px) { .nav-links .hide-sm { display: none; } }

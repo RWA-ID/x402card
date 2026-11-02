@@ -18,14 +18,14 @@ export interface Mail {
 }
 
 /** Sends one email; throws when Resend refuses it. */
-export type Mailer = (m: Mail & { from: string }) => Promise<void>;
+export type Mailer = (m: Mail & { from: string; replyTo?: string }) => Promise<void>;
 
 export function resendMailer(apiKey: string): Mailer {
   return async (m) => {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: m.from, to: [m.to], subject: m.subject, html: m.html, text: m.text }),
+      body: JSON.stringify({ from: m.from, to: [m.to], subject: m.subject, html: m.html, text: m.text, ...(m.replyTo ? { reply_to: m.replyTo } : {}) }),
     });
     if (!r.ok) throw new Error(`resend ${r.status}: ${(await r.text()).slice(0, 200)}`);
   };
@@ -33,6 +33,8 @@ export function resendMailer(apiKey: string): Mailer {
 
 export const FROM_LOGIN = "X Card <login@x-card.dev>";
 export const FROM_APPROVALS = "X Card <approvals@x-card.dev>";
+export const FROM_HELLO = "X Card <hello@x-card.dev>";
+export const REQUESTS_INBOX = "hello@x-card.dev";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -189,4 +191,29 @@ function money(n: number, cur: string): string {
   const sym = ({ USD: "$", EUR: "€", GBP: "£", JPY: "¥" } as Record<string, string>)[cur];
   const v = n.toLocaleString("en-US", { maximumFractionDigits: 2 });
   return sym ? sym + v : `${v} ${cur}`;
+}
+
+/** To us: a company or merchant asked for access on the site. Replying reaches them. */
+export function accessRequestEmail(r: { kind: "org" | "merchant"; slug: string; company: string; email: string; cards?: string; origins?: string[]; note?: string }): Mail {
+  const what = r.kind === "org" ? "Company access" : "Verified merchant";
+  const name = `${r.slug}.xcard.eth`;
+  const rows: [string, string][] = [
+    ["Name held", name],
+    [r.kind === "org" ? "Company" : "Merchant", r.company],
+    ["Email", r.email],
+    ...(r.cards ? [["Cards", r.cards] as [string, string]] : []),
+    ...(r.origins ? [["Origins", r.origins.join(" ")] as [string, string]] : []),
+    ...(r.note ? [["Note", r.note] as [string, string]] : []),
+  ];
+  const next = r.kind === "org"
+    ? "To approve: POST /api/orgs with the admin token."
+    : "Check they control the domain first. To approve: POST /api/merchants with the admin token.";
+  return {
+    to: REQUESTS_INBOX,
+    subject: `${what} request: ${name}`,
+    text: `${what} request\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${next}\nThe name is held for 30 days.`,
+    html: frame(`${what} request: ${name}`, `<div style="font-family:${SANS};font-size:20px;font-weight:600;color:#eceef1;padding-bottom:16px;">${esc(what)} request</div>
+${rows.map(([k, v]) => `<div style="font-family:${MONO};font-size:11px;color:#8b909a;padding-top:12px;">${esc(k)}</div><div style="font-family:${SANS};font-size:14px;line-height:1.5;color:#eceef1;word-break:break-word;">${esc(v)}</div>`).join("\n")}
+<div style="font-family:${SANS};font-size:13px;line-height:1.5;color:#8b909a;padding-top:20px;">${esc(next)} The name is held for 30 days.</div>`),
+  };
 }

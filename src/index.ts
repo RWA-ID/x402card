@@ -10,12 +10,15 @@
 //   /api/approvals[/:id]   list / decide escalated requests (an account decides those whose approver is its email)
 //   /api/cards             GET cards with records + pending count; POST issue a card {name, policy}
 //   /api/orgs              POST create or replace a company {slug, name, operators[], caps?} (admin token)
+//   /api/merchants         POST give a merchant <slug>.xcard.eth listing its origins {slug, name, origins[]} (admin token)
+//   /api/requests          GET access requests from the site (admin token)
 //   /api/cards/:name/unfreeze   human-only unfreeze
 //   /api/cards/:name/simulate   sandbox: a merchant charges the card directly, skipping the pre-check (admin token)
 //   /api/cards/:name/check      run the anomaly rules now instead of waiting for cron (admin token)
 //   /public/cards/:name    public ENS records for a name (same data the gateway serves)
 //   /approvals/:id         GET an approval + the EIP-712 typed data card.approver signs; POST {approve, signature} decides it (no token: the signature is the authority)
 //   /public/feed           recent policy events across cards, for the demo site
+//   /public/requests       POST a company or merchant asks for access: holds the name for 30 days, grants nothing
 //   /keys[?keyID=]         Visa TAP public keys as a JWK set (the spec's Public Key Retrieval)
 //   /keys/:keyid           the same key in the agent-registry shape Visa's reference merchant fetches
 //   /demo-merchant/*       a merchant that verifies TAP signatures, for the demo
@@ -25,12 +28,12 @@ import { mainnet } from "viem/chains";
 import { viemReader } from "@x402identity/payee";
 import { AirwallexClient, KvTokenStore } from "./airwallex/client.ts";
 import { AuthError, EmailAuth } from "./auth/email.ts";
-import { FROM_APPROVALS, approvalEmail, claimEmail, resendMailer, type Mailer } from "./auth/mail.ts";
+import { FROM_APPROVALS, FROM_HELLO, accessRequestEmail, approvalEmail, claimEmail, resendMailer, type Mailer } from "./auth/mail.ts";
 import { RESERVED_KEYS, RESERVED_LABELS, gatewayResponse } from "./ens/gateway.ts";
 import { McpServer, authenticate, issueAccountWithToken, issueWithToken, mintAgentToken } from "./mcp.ts";
 import { ensApproverAuth } from "./policy/approver.ts";
 import { describeChanges } from "./policy/changes.ts";
-import { isEmail, maskEmail, publicRecords } from "./policy/records.ts";
+import { isEmail, maskEmail, publicRecords, type TextRecords } from "./policy/records.ts";
 import { ensPayeeChecker } from "./policy/payee.ts";
 import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
 import { verifyTap } from "./tap/verify.ts";
@@ -204,6 +207,8 @@ export default {
       });
     }
 
+    if (path === "/public/requests" && req.method === "POST") return accessRequest(req, env, store);
+
     if (path.startsWith("/public/") && req.method === "GET") {
       const c = path.match(/^\/public\/cards\/([a-z0-9.-]+)$/);
       if (c) {
@@ -332,7 +337,7 @@ export default {
         if (path === "/api/orgs" && req.method === "POST") {
           const b = (await req.json().catch(() => ({}))) as { slug?: unknown; name?: unknown; operators?: unknown; caps?: Record<string, unknown> };
           const bad = (message: string) => json({ error: { code: "bad_input", message } }, 400);
-          if (typeof b.slug !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(b.slug)) return bad("slug: lowercase letters, digits and hyphens");
+          if (typeof b.slug !== "string" || !SLUG.test(b.slug)) return bad("slug: lowercase letters, digits and hyphens");
           if (typeof b.name !== "string" || !b.name.trim()) return bad("name is required");
           const operators = Array.isArray(b.operators) ? b.operators.map((e) => String(e).trim().toLowerCase()) : [];
           if (!operators.length || !operators.every(isEmail)) return bad("operators: one or more emails");
@@ -341,6 +346,7 @@ export default {
           // <slug>.xcard.eth becomes the company's namespace.
           if (RESERVED_LABELS.has(b.slug)) return bad(`${b.slug} is reserved`);
           if (await store.getCard(`${b.slug}.${DEMO_CARDS.parent}`)) return bad(`${b.slug}.${DEMO_CARDS.parent} already has a card`);
+          if ((await store.getHold(b.slug))?.status === "active") return bad(`${b.slug}.${DEMO_CARDS.parent} is a merchant's name`);
           for (const e of operators) {
             const other = await store.orgOf(e);
             if (other && other.slug !== b.slug) return bad(`${e} already operates ${other.slug}`);
@@ -348,7 +354,23 @@ export default {
           const was = await store.getOrg(b.slug);
           const org = { slug: b.slug, name: b.name.trim(), operators, caps, createdAt: was?.createdAt ?? Date.now() };
           await store.putOrg(org, (was?.operators ?? []).filter((e) => !operators.includes(e)));
+          await store.deleteHold(b.slug); // the org itself reserves the name from here on
           return json({ org }, 201);
+        }
+        if (path === "/api/requests" && req.method === "GET") return json({ requests: await store.listRequests() });
+        if (path === "/api/merchants" && req.method === "POST") {
+          const b = (await req.json().catch(() => ({}))) as { slug?: unknown; origins?: unknown };
+          const bad = (message: string) => json({ error: { code: "bad_input", message } }, 400);
+          if (typeof b.slug !== "string" || !SLUG.test(b.slug)) return bad("slug: lowercase letters, digits and hyphens");
+          const origins = parseOrigins(b.origins);
+          if (!origins) return bad("origins: one to ten https origins");
+          if (RESERVED_LABELS.has(b.slug)) return bad(`${b.slug} is reserved`);
+          const key = `${b.slug}.${DEMO_CARDS.parent}`;
+          if (await store.getCard(key)) return bad(`${key} already has a card`);
+          if (await store.getOrg(b.slug)) return bad(`${key} is a company's name`);
+          await store.putRecords(key, { "org.x402.origins": origins.join(" ") } as TextRecords);
+          await store.putHold(b.slug, { kind: "merchant", status: "active", at: Date.now() });
+          return json({ name: key, origins }, 201);
         }
         const u = path.match(/^\/api\/cards\/([a-z0-9.-]+)\/(unfreeze|simulate|check)$/);
         if (u && req.method === "POST") {
@@ -398,7 +420,69 @@ async function nameStatus(store: Store, name: string): Promise<{ name: string; a
   }
   if (RESERVED_LABELS.has(labelOfKey(key)) || RESERVED_KEYS.has(key)) return { name: full, available: false, reason: `${full} is reserved.` };
   if (await store.getCard(key)) return { name: full, available: false, reason: `${full} already has a card.` };
+  if (key.split(".").length === 3 && key.endsWith(`.${DEMO_CARDS.parent}`) && ((await store.getOrg(labelOfKey(key))) || (await store.getHold(labelOfKey(key))))) {
+    return { name: full, available: false, reason: `${full} is reserved.` };
+  }
   return { name: full, available: true };
+}
+
+const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const REQUEST_HOLD_S = 30 * 24 * 3600;
+const REQUESTS_PER_IP_PER_HOUR = 5;
+
+/** Https origins from a list or a space-separated string, or null if any isn't one. */
+function parseOrigins(v: unknown): string[] | null {
+  const raw = Array.isArray(v) ? v.map(String) : typeof v === "string" ? v.split(/[\s,]+/).filter(Boolean) : [];
+  if (!raw.length || raw.length > 10) return null;
+  const out: string[] = [];
+  for (const r of raw) {
+    try {
+      const u = new URL(r);
+      if (u.protocol !== "https:") return null;
+      if (!out.includes(u.origin)) out.push(u.origin);
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+
+/**
+ * The site's request forms. Holds the name so no demo card can take it while a
+ * person reviews the request; it grants nothing else. Anyone can send one, so
+ * it's rate limited, and the only mail it sends goes to us.
+ */
+async function accessRequest(req: Request, env: Env, store: Store): Promise<Response> {
+  const bad = (message: string, code = "bad_input", status = 400) => json({ error: { code, message } }, status);
+  const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const text = (k: string, max: number) => (typeof b[k] === "string" ? (b[k] as string).replace(/\s+/g, " ").trim().slice(0, max) : "");
+  // The hidden field only a bot fills in: looks accepted, does nothing.
+  if (text("url", 200)) return json({ ok: true }, 201);
+  const kind = b.kind;
+  if (kind !== "org" && kind !== "merchant") return bad("kind: org or merchant");
+  const slug = text("slug", 63).toLowerCase();
+  if (!SLUG.test(slug)) return bad("Name: lowercase letters, digits and hyphens.");
+  const company = text("company", 120);
+  if (!company) return bad(kind === "org" ? "Add your company's name." : "Add your business name.");
+  const email = text("email", 254).toLowerCase();
+  if (!isEmail(email)) return bad("Add a valid email.");
+  const origins = kind === "merchant" ? parseOrigins(b.origins) : undefined;
+  if (origins === null) return bad("List one to ten https addresses you take payments on.");
+  const ip = req.headers.get("CF-Connecting-IP") ?? "local";
+  if ((await store.hit(`reqip:${ip}`)) > REQUESTS_PER_IP_PER_HOUR) return bad("Too many requests. Try again in an hour, or write to hello@x-card.dev.", "rate_limited", 429);
+  const full = `${slug}.${DEMO_CARDS.parent}`;
+  const taken = RESERVED_LABELS.has(slug) || /^test\d+$/.test(slug) || (await store.getCard(full)) || (await store.getOrg(slug)) || (await store.getHold(slug));
+  if (taken) return bad(`${full} is taken. Try another name, or write to hello@x-card.dev if it's yours.`, "name_taken", 409);
+  const cards = text("cards", 40);
+  const note = text("note", 1000);
+  const request = { id: crypto.randomUUID(), kind, slug, company, email, ...(cards && kind === "org" ? { cards } : {}), ...(origins ? { origins } : {}), ...(note ? { note } : {}), at: Date.now() } as const;
+  await store.putRequest(request);
+  await store.putHold(slug, { kind, status: "requested", at: request.at }, REQUEST_HOLD_S);
+  // The request is saved either way, so a mail failure doesn't lose it.
+  if (env.RESEND_API_KEY) {
+    await resendMailer(env.RESEND_API_KEY)({ from: FROM_HELLO, replyTo: email, ...accessRequestEmail(request) }).catch((e) => console.error("request mail failed", e));
+  }
+  return json({ ok: true, name: full }, 201);
 }
 
 /**

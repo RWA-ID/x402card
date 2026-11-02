@@ -466,6 +466,7 @@ export class CardService {
     const [, deeper] = label.split(".");
     if (label.split(".").length === 4 && deeper !== opts.org) throw new ServiceError("bad_name", `only ${deeper}'s operators can issue under ${deeper}.${DEMO_CARDS.parent}`);
     if (label.split(".").length === 3 && label.endsWith(`.${DEMO_CARDS.parent}`) && (await this.store.getOrg(labelOfKey(label)))) throw new ServiceError("reserved", `${fullName(label)} is a company's name`);
+    if (label.split(".").length === 3 && label.endsWith(`.${DEMO_CARDS.parent}`) && (await this.store.getHold(labelOfKey(label)))) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
 
     const policy = parseRecords({ "card.status": "active", ...records });
     const [user, domain] = this.opts.cardholderEmail.split("@");

@@ -44,6 +44,9 @@ The policy is enforced twice: by X Card before anything is sent, and by the card
 - [Status](#status)
 - [ENS records](#ens-records-the-policy)
 - [Policy engine](#policy-engine)
+- [Connect your AI app](#connect-your-ai-app)
+- [Company access](#company-access)
+- [Verified merchants](#verified-merchants)
 - [Integrate: agents (MCP)](#integrate-agents-over-mcp)
 - [Integrate: read policy from any ENS client](#integrate-read-a-cards-policy-from-any-ens-client)
 - [Demo accounts and email approvals](#demo-accounts-and-email-approvals)
@@ -342,18 +345,19 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 |---|---|
 | ENS OffchainResolver on mainnet, `xcard.eth` and `x402card.eth` pointed at it | ✅ live, source verified |
 | CCIP-Read gateway (signed records) | ✅ live |
-| MCP server (11 tools; OAuth wallet sign-in or scoped tokens) | ✅ live at `mcp.x-card.dev` |
+| MCP server (11 tools; OAuth email or wallet sign-in, or scoped tokens) | ✅ live at `mcp.x-card.dev` |
 | In-chat views (MCP Apps): card view, approval card, issue form, TAP signature | ✅ live; rendered in Claude.ai |
 | `update_policy` + daily limit (tighten now, loosen with a wallet signature) | ✅ live; first live policy approval signed in Claude.ai on 2026-10-28 |
 | Self-serve test cards (`testN.xcard.eth`, issued from the chat) | ✅ live |
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
 | Site on `x-card.dev` (Cloudflare) with an IPFS mirror (`ai.xcard.eth`) | ✅ live |
 | Airwallex card creation | ✅ live on an Airwallex demo account: real sandbox virtual Visa cards with our controls applied |
-| Airwallex charges (`pay`) | ⏳ the sandbox's transaction simulator is down for Airwallex maintenance ([status page](https://status.airwallex.com/): "Degraded performance in Sandbox simulation features", since 2026-10-26), so charges fail at the issuer step. Everything before it (pre-check, payee gate, held payments) works live; tests run the full flow against `FakeIssuer`. |
+| Airwallex charges (`pay`) | ✅ live on the sandbox, through Airwallex's transaction simulator: a real `CLEARING` transaction on a live card |
 | Root governance: names + resolver owned by a 2-of-3 Safe | ✅ done; both parent names and the resolver are owned by the Safe |
 | Agent `pay` tool with policy pre-check | ✅ live; tested end to end against a fake issuer |
 | Company distribution (operators, claim links, company names, CSV batches) | ✅ live on the sandbox; tested with real Airwallex cards up to 3-row batches. The 200-row limit isn't load-tested against Airwallex |
-| Verified payee (payee gate, `card.payee`, held payments) | ✅ live; tested end to end, verifier checked against mainnet ENS. Not yet exercised on a live card (needs Airwallex issuance). |
+| Verified payee (payee gate, `card.payee`, held payments) | ✅ live; a live card paid `shop.xcard.eth` verified, checked against mainnet ENS |
+| Company and merchant requests (`/public/requests`, name holds, `/api/merchants`) | ✅ built; a person approves each one. Merchant domain checks are manual |
 | Visa TAP signing (`sign_request`, `/keys`, demo merchant) | ✅ live; signatures verified by a port of Visa's reference merchant |
 | TAP body objects (consumer recognition, payment container) | ⏳ need Visa Intelligent Commerce onboarding |
 | Demo accounts (email code sign-in), the console (`/console`), email approvers with branded approval emails | ✅ built 2026-10-29; codes and approval emails from `x-card.dev` via Resend; approver emails masked on every public surface |
@@ -399,16 +403,85 @@ Amounts are major units (`300` = $300), rounded to the currency's decimals. A ch
 
 ---
 
+## Connect your AI app
+
+**People: sign in.** For Claude and other apps that add a connector by URL:
+
+1. In the app's connector settings, add a custom connector with the URL `https://mcp.x-card.dev/mcp`.
+2. Sign in with an emailed code, or with a wallet.
+3. Choose **All my cards**, or one card. With no cards yet you can still connect, then issue one from the chat.
+4. Ask in plain words: "Issue a card for my research agent, $50 a transaction and $500 a month", "Show my cards", "Pay shop.xcard.eth $1 for the demo order", "Ask for $300 more for the dataset license", "Freeze this card".
+
+Cards, forms and approvals open in the chat. Connecting never lets the app approve anything: requests over the policy still go to the card's approver. If an app keeps showing an old view after an update, disconnect and reconnect it, because some apps cache views. This flow is tested in Claude.ai; other apps that support MCP OAuth should work the same way.
+
+**Agents: use a token.** Every card comes with an agent token, shown once and limited to that card. Setup for [Claude Code and JSON-configured clients](#claude-code) is below, along with the [tools](#tools).
+
+## Company access
+
+A demo account issues single cards under `xcard.eth`. A company gets its own namespace and the tools to hand out cards to a team. [Request access on the site](https://x-card.dev/#companies).
+
+| A company gets | |
+|---|---|
+| **Its own namespace** | Every card reads `word.yourcompany.xcard.eth`. Only the company's operators can issue under it, and each new card costs no gas, because the gateway serves it. |
+| **Operators** | Named people sign in by email to issue and manage all the company's cards, on the console or over the connector. |
+| **Issuing to a person by email** | Name a `holder`. They get a one-time link (valid 7 days), sign in with a code to that address and receive the agent token, which the operator never sees. Holders can't lift a freeze. |
+| **CSV batches** | Up to 200 cards per file, on the console or with `issue_cards`. A preview checks every row and nothing is issued until a person confirms; the job keeps going if the page closes. |
+| **A company panel** | Cards used, monthly allowance, requests waiting on approvers and frozen cards. |
+| **Separation of duties** | Each card has its own approver. Operators see requests but can't decide them, and loosening a policy still needs that approver. |
+| **Limits set per company** | Starts at $500 a transaction, $2,000 a day, $5,000 a month and 50 cards; adjustable per company. |
+
+Names and limits are public ENS records, so use role names (`emp-4801`) where you'd rather not publish a person's name. Holder emails are never published. All of this runs on the Airwallex sandbox, with no real money.
+
+### Reserved names
+
+`<slug>.xcard.eth` is one namespace shared by cards, companies and merchants, so a name is spoken for once any of these is true:
+
+- **A request is under review.** The form holds the name for 30 days, so no demo card can take it in the meantime. A hold grants nothing else: the requester gets no access until a person approves it, and the hold lapses if nobody does.
+- **It belongs to a company or a merchant.** That's permanent, and the name can't also be a card.
+- **It's already a card, or an infrastructure label** (`ai`, `www`, `app`, `api`, `gateway`, `shop`), **or a self-serve test name** (`testN`).
+
+### Approving a request (operator)
+
+Requests are emailed to `hello@x-card.dev` and stored. With the admin token:
+
+```sh
+# Read them
+curl -s https://api.x-card.dev/api/requests -H "Authorization: Bearer $ADMIN"
+# Approve a company: the first operator is the requester's email
+curl -s https://api.x-card.dev/api/orgs -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"slug":"acme","name":"Acme Inc","operators":["ops@acme.com"]}'
+# Approve a merchant, after checking it controls these domains
+curl -s https://api.x-card.dev/api/merchants -H "Authorization: Bearer $ADMIN" -H "Content-Type: application/json" \
+  -d '{"slug":"modelhub","origins":["https://modelhub.example","https://api.modelhub.example"]}'
+```
+
+## Verified merchants
+
+Before an agent pays, X Card checks that the checkout belongs to the merchant it means to pay ([how the check works](#verified-payee)). There are two ways to pass it:
+
+- **You have an ENS name:** set `org.x402.origins` on it. There's no sign-up, and X Card isn't involved.
+- **You don't:** [request a name on the site](https://x-card.dev/#merchants). After checking you control the domains, we publish `yourshop.xcard.eth` listing your origins, through the same signed gateway as the cards. There's nothing to buy, no gas and no key to manage.
+
+| A verified merchant gets | |
+|---|---|
+| **Payments without a hold** | Cards on `verified-or-escalate` pay you within their limits; an unverified merchant waits for the card's approver. |
+| **Access to the strictest cards** | Cards on `verified-only` can't pay an unverified merchant at all. |
+| **Protection from lookalikes** | A checkout using your name from an origin you don't list is blocked before the charge (`PAYEE_MISMATCH`). Two in 10 minutes freeze the agent's card. |
+| **Its name on every payment** | The feed and approvals show `yourshop.xcard.eth ✓`, not the text the agent typed. |
+| **Agent recognition** | Check the [Visa TAP](#visa-trusted-agent-protocol-tap) signature on an agent's request against [our public key](https://api.x-card.dev/keys). This part is open to any merchant, verified or not. |
+
+"Verified" means the name lists that checkout's origin. It isn't an endorsement of the business. A card's limits and merchant categories still apply, and a card on `card.payee.allow` pays only the merchants it names.
+
 ## Integrate: agents over MCP
 
-The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol versions `2025-06-18`, `2025-03-26`, `2024-11-05`) and takes a bearer token: an OAuth access token from signing in with your wallet, or one of the static tokens.
+The MCP server speaks **Streamable HTTP** (stateless JSON responses; protocol versions `2025-06-18`, `2025-03-26`, `2024-11-05`) and takes a bearer token: an OAuth access token from signing in by email or wallet, or one of the static tokens.
 
-- **OAuth, for Claude.ai, ChatGPT and other apps that add a connector by URL.** Add `https://mcp.x-card.dev/mcp` as a custom connector. The app finds the sign-in on its own (RFC 9728 metadata on the `401`, then dynamic client registration or a client ID metadata document, PKCE). You sign in with your wallet (Sign-In with Ethereum) and pick what to connect:
-  - **All my cards** (offered first): every card whose `card.approver` resolves to your wallet, read again on each request, so cards issued to you later show up and reassigned ones drop off. Offered even with no cards yet, so a new wallet can connect and issue itself a test card.
+- **OAuth, for Claude.ai, ChatGPT and other apps that add a connector by URL.** Add `https://mcp.x-card.dev/mcp` as a custom connector. The app finds the sign-in on its own (RFC 9728 metadata on the `401`, then dynamic client registration or a client ID metadata document, PKCE). You sign in with an emailed code, or with your wallet (Sign-In with Ethereum), and pick what to connect:
+  - **All my cards** (offered first): every card you issued or approve, read again on each request, so cards issued to you later show up and reassigned ones drop off. Offered even with no cards yet, so a new account can connect and issue itself a card.
   - **one card whose `card.approver` resolves to your wallet.** The app acts as that card's agent, with the same tools and limits as its agent token.
   - **every card**, if your wallet is listed in the Worker's `OPERATORS`. Same as the admin token.
 
-  Connecting never lets the app approve anything: requests over the policy still need your signature on the approval page. A connection ends if the card's `card.approver` changes. Tokens last an hour and refresh for up to 30 days.
+  Connecting never lets the app approve anything: requests over the policy still need the approver's email code or wallet signature on the approval page. A connection ends if the card's `card.approver` changes. Tokens last an hour and refresh for up to 30 days.
 - **Admin token**: can call every tool; `issue_card` with any name and policy, and `update_policy` applies directly. Keep it on the operator side.
 - **Agent token** (`x4c_…`): returned once by `issue_card`. It only works for its own card, and `issue_card` is hidden from it. Give this to the agent.
 
@@ -798,7 +871,7 @@ src/
   airwallex/simulator.ts  every sandbox simulation call behind one interface
 contracts/              OffchainResolver.sol + Hardhat deploy
 scripts/                Airwallex checks, resolver e2e, IPFS pinning, TAP key generation
-site/www/               site + approvals page (static; served on x-card.dev, mirrored to IPFS), brand/ logos, og.png
+site/www/               site (access.js = the request forms) + approvals page (static; served on x-card.dev, mirrored to IPFS), brand/ logos, og.png
 site/wrangler.jsonc     the site's assets-only Worker
 site/og/                source of the og.png share card
 ```

@@ -394,3 +394,56 @@ test("CSV batches: a preview issues nothing, every row is checked, the job issue
   const done = (await mcp({ kind: "owner", email: "op@sigma.com", labels: [] }, { batch_id: prev.batch_id, submit: true })).structuredContent;
   assert.deepEqual([done.status, done.totals.issued], ["done", 1]);
 });
+
+test("access requests: a request holds the name and grants nothing; approving it makes the company or merchant", async () => {
+  const req = (b: object, ip = "9.9.9.1") => call("POST", "/public/requests", b, undefined, ip);
+  const org = { kind: "org", slug: "initech", company: "Initech", email: "Ops@Initech.com", cards: "11-50" };
+  const before = sent.length;
+  const made = await req(org);
+  assert.equal(made.status, 201);
+  assert.equal(made.body.name, "initech.xcard.eth");
+  const mail = sent[sent.length - 1];
+  assert.equal(sent.length, before + 1);
+  assert.deepEqual(mail.to, ["hello@x-card.dev"]);
+  assert.equal((mail as any).reply_to, "ops@initech.com");
+
+  // Spoken for, by anyone else's card and any second request.
+  const solo = await signIn("squatter@x.com");
+  const policy = { limit_tx: 10, limit_monthly: 100 };
+  assert.equal((await call("POST", "/api/cards", { name: "initech", policy }, solo)).status, 400);
+  assert.equal((await call("GET", "/api/names/initech", undefined, solo)).body.available, false);
+  assert.equal((await req({ ...org, email: "x@y.com" }, "9.9.9.2")).status, 409);
+  // It grants nothing: the requester isn't an operator until someone approves.
+  const ops = await signIn("ops@initech.com");
+  assert.equal((await call("GET", "/api/me", undefined, ops)).body.org, undefined);
+  assert.equal((await call("POST", "/api/cards", { name: "maria.initech.xcard.eth", policy }, ops)).status, 400);
+  // Only the admin token reads requests.
+  assert.equal((await call("GET", "/api/requests", undefined, ops)).status, 404);
+  assert.ok((await call("GET", "/api/requests", undefined, "admin-token")).body.requests.some((r: any) => r.slug === "initech"));
+
+  assert.equal((await call("POST", "/api/orgs", { slug: "initech", name: "Initech", operators: ["ops@initech.com"] }, "admin-token")).status, 201);
+  assert.equal((await call("POST", "/api/cards", { name: "maria", policy }, ops)).body.card.name, "maria.initech.xcard.eth");
+  assert.equal((await req({ ...org, slug: "initech" }, "9.9.9.3")).status, 409, "a company's name stays taken");
+
+  // Merchants: bad input never holds a name.
+  const shop = { kind: "merchant", slug: "bookstore", company: "Bookstore", email: "pay@bookstore.example" };
+  assert.equal((await req({ ...shop, origins: "http://bookstore.example" }, "9.9.9.4")).status, 400, "https only");
+  assert.equal((await req({ ...shop }, "9.9.9.4")).status, 400, "origins required");
+  assert.equal((await req({ ...shop, slug: "shop", origins: "https://a.example" }, "9.9.9.4")).status, 409, "reserved");
+  assert.equal((await req({ ...org, slug: "test77", email: "a@b.com" }, "9.9.9.4")).status, 409, "test names stay with the numbering");
+  assert.equal((await req({ ...shop, origins: "https://bookstore.example/checkout https://api.bookstore.example" }, "9.9.9.5")).status, 201);
+  assert.equal((await call("GET", "/public/cards/bookstore.xcard.eth")).status, 404, "nothing published before it's approved");
+  assert.equal((await call("POST", "/api/merchants", { slug: "bookstore", origins: ["https://bookstore.example"] })).status, 401);
+  assert.equal((await call("POST", "/api/merchants", { slug: "bookstore", origins: ["http://bookstore.example"] }, "admin-token")).status, 400);
+  assert.equal((await call("POST", "/api/merchants", { slug: "bookstore", origins: ["https://bookstore.example/checkout"] }, "admin-token")).status, 201);
+  assert.equal((await call("GET", "/public/cards/bookstore.xcard.eth")).body.records["org.x402.origins"], "https://bookstore.example");
+  // A merchant's name is permanent: no card, no company.
+  assert.equal((await call("POST", "/api/cards", { name: "bookstore", policy }, solo)).status, 400);
+  assert.equal((await call("POST", "/api/orgs", { slug: "bookstore", name: "B", operators: ["b@b.com"] }, "admin-token")).status, 400);
+
+  // The bot trap looks accepted and holds nothing; the rate limit stops a flood.
+  assert.equal((await req({ ...org, slug: "trapped", url: "http://spam" }, "9.9.9.6")).status, 201);
+  assert.equal((await call("GET", "/api/names/trapped", undefined, solo)).body.available, true);
+  for (let i = 0; i < 5; i++) await req({ ...org, slug: `flood${i}`, email: "f@f.com" }, "9.9.9.7");
+  assert.equal((await req({ ...org, slug: "flood9", email: "f@f.com" }, "9.9.9.7")).status, 429);
+});

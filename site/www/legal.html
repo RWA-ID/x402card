@@ -67,6 +67,7 @@
       <li><b>Fonts.</b> Pages load the Geist fonts from Google Fonts, so Google receives your IP address and browser details.</li>
       <li><b>Live data.</b> The home page asks the X Card API (a Cloudflare Worker at <span class="mono">api.x-card.dev</span>) for public card records and the public activity feed. Cloudflare processes these requests, including your IP address, under its own policy. We don't store your IP address or build a profile of you.</li>
       <li><b>Demo accounts.</b> When you sign in with your email, we send a 6-digit code from <span class="mono">login@x-card.dev</span> through Resend, our email provider, which receives your address to deliver it. The code is stored only as a hash, for 10 minutes. Your session token is kept in this browser's local storage for up to 7 days, and signing out deletes it on both sides.</li>
+      <li><b>Company and merchant requests.</b> The request forms send your company name, the name you want to reserve, your email and anything else you write to the X Card API. We keep the request so we can review it and reply, and email it to ourselves through Resend. Ask us at the address above to delete it.</li>
       <li><b>Operator token.</b> If you sign in on the console with the admin token, it is kept only in this browser tab's session storage, is sent only to the X Card API, and is cleared when you close the tab or sign out.</li>
     </ul>
 

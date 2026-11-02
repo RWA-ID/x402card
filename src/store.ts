@@ -26,6 +26,8 @@
 //   batch:<id>               a CSV of cards, previewed or being issued (7 days)
 //   batchrun:<id>            a batch still issuing, for the cron
 //   batchlock:<id>           the batch's one runner (a minute at most)
+//   req:<id>                 a company's or merchant's access request from the site
+//   hold:<slug>              <slug>.xcard.eth is spoken for: a request under review (30 days) or a merchant's name
 import type { TextRecords } from "./policy/records.ts";
 import type { PendingApproval } from "./policy/approvals.ts";
 import type { RecordSource } from "./ens/gateway.ts";
@@ -82,6 +84,27 @@ export interface Org {
   operators: string[];
   caps: { tx: number; daily: number; monthly: number; cards: number };
   createdAt: number;
+}
+
+/** A company or merchant asking for access on the site. Grants nothing until a person acts on it. */
+export interface AccessRequest {
+  id: string;
+  kind: "org" | "merchant";
+  slug: string;
+  company: string;
+  email: string;
+  /** Companies: how many cards they expect. */
+  cards?: string;
+  /** Merchants: the origins they take payments on. */
+  origins?: string[];
+  note?: string;
+  at: number;
+}
+
+export interface NameHold {
+  kind: "org" | "merchant";
+  status: "requested" | "active";
+  at: number;
 }
 
 export interface CardEvent {
@@ -149,6 +172,19 @@ export class Store implements RecordSource {
     const have = await this.orgIndex(slug);
     if (!have.includes(label)) await this.kv.put(`orgc:${slug}`, JSON.stringify([...have, label]));
   }
+
+  putRequest(r: AccessRequest) { return this.kv.put(`req:${r.id}`, JSON.stringify(r)); }
+  async listRequests(): Promise<AccessRequest[]> {
+    const { keys } = await this.kv.list({ prefix: "req:" });
+    const all = await Promise.all(keys.map((k) => this.kv.get<AccessRequest>(k.name, "json")));
+    return all.filter((r) => r !== null).sort((a, b) => b.at - a.at);
+  }
+  getHold(slug: string) { return this.kv.get<NameHold>(`hold:${slug}`, "json"); }
+  /** ttlS: a request's hold lapses unless someone acts on it; a merchant's name doesn't. */
+  putHold(slug: string, h: NameHold, ttlS?: number) {
+    return this.kv.put(`hold:${slug}`, JSON.stringify(h), ttlS ? { expirationTtl: ttlS } : undefined);
+  }
+  deleteHold(slug: string) { return this.kv.delete(`hold:${slug}`); }
 
   getClaim(hash: string) { return this.kv.get<Claim>(`claim:${hash}`, "json"); }
   /** Stores a card's claim link, ending any earlier one. */

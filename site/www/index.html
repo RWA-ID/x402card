@@ -35,9 +35,11 @@
     </div>
     <div class="nav-links">
       <a href="#manage" class="hide-sm">How it works</a>
-      <a href="#uses" class="hide-sm">Use cases</a>
-      <a href="#beat-payee" class="hide-sm">Trust</a>
-      <a href="#hood" class="hide-sm">Under the hood</a>
+      <a href="#uses" class="hide-sm hide-md">Use cases</a>
+      <a href="#beat-payee" class="hide-sm hide-md">Trust</a>
+      <a href="#connect" class="hide-sm">Connect</a>
+      <a href="#companies" class="hide-sm">Companies</a>
+      <a href="#merchants" class="hide-sm">Merchants</a>
       <a href="console.html" class="hide-sm">Console</a>
       <button class="btn-nav" data-signup>Create demo account</button>
     </div>
@@ -209,7 +211,7 @@
       <div class="use"><div class="use-k mono">offsite-lisbon.acme.eth</div><h3>Events and per diems</h3><p>A daily limit for each attendee during the event, and nothing after it.</p></div>
       <div class="use"><div class="use-k mono">lab-7.grants.uni.eth</div><h3>Grants and stipends</h3><p>Research grants, scholarships, allowances. Every rule is a public record anyone can audit, every top-up names who approved it.</p></div>
     </div>
-    <p class="built-note">In the demo, cards live under <span class="mono">xcard.eth</span>. A company would issue under its own ENS name, so cards read <span class="mono">maria.acme.eth</span>.</p>
+    <p class="built-note">In the sandbox, a company’s cards live under <span class="mono">xcard.eth</span>, as <span class="mono">maria.acme.xcard.eth</span>. Issuing under a company’s own ENS name, such as <span class="mono">maria.acme.eth</span>, isn’t built yet.</p>
   </div>
 </section>
 
@@ -477,12 +479,141 @@
   </div>
 </section>
 
+<section id="connect" class="section">
+  <div class="wrap access">
+    <div class="section-copy" style="max-width:680px">
+      <div class="kicker"><span class="n">→</span><span>Connect</span></div>
+      <h2>Add X Card to your AI app.</h2>
+      <p class="body">One connector URL. A person signs in and manages their cards from the chat. An autonomous agent uses its own token, limited to its own card.</p>
+    </div>
+    <div class="access-grid">
+      <div class="access-card">
+        <div class="k">People · sign in</div>
+        <h3>Claude and other apps that add a connector by URL</h3>
+        <ol class="steps">
+          <li><div>In your app’s connector settings, add a custom connector with this URL:<pre class="code" style="margin-top:8px">https://mcp.x-card.dev/mcp</pre></div></li>
+          <li><div>Sign in with an emailed code, or with a wallet.</div></li>
+          <li><div>Choose <b>All my cards</b>, or just one card. No card yet? You can connect and issue one from the chat.</div></li>
+          <li><div>Ask for what you need. Cards, forms and approvals open right in the chat.</div></li>
+        </ol>
+        <p class="access-note">Connecting never lets the app approve anything: requests over the policy still go to the card’s approver. If your app keeps showing an old view after an update, disconnect and reconnect.</p>
+      </div>
+      <div class="access-card">
+        <div class="k">Agents · token</div>
+        <h3>Claude Code, Cursor and other agents</h3>
+        <p>Every card comes with an agent token, shown once. It works only for that card, and it can’t issue cards or approve its own requests.</p>
+<pre class="code"><span class="c"># Claude Code</span>
+claude mcp add --transport http xcard \
+  https://mcp.x-card.dev/mcp \
+  --header <span class="s">"Authorization: Bearer x4c_…"</span></pre>
+<pre class="code"><span class="c">// JSON-configured clients</span>
+{ <span class="s">"mcpServers"</span>: { <span class="s">"xcard"</span>: {
+    <span class="s">"type"</span>: <span class="s">"http"</span>,
+    <span class="s">"url"</span>: <span class="s">"https://mcp.x-card.dev/mcp"</span>,
+    <span class="s">"headers"</span>: { <span class="s">"Authorization"</span>: <span class="s">"Bearer x4c_…"</span> } } } }</pre>
+        <a class="addr" href="https://github.com/RWA-ID/x402card#integrate-agents-over-mcp" target="_blank" rel="noopener">Full setup in the README →</a>
+      </div>
+      <div class="access-card wide">
+        <div class="k">Then · try asking</div>
+        <h3>Say it in plain words</h3>
+        <ul class="try-list">
+          <li>“Issue a card for my research agent, $50 a transaction and $500 a month.”</li>
+          <li>“Show my cards and what each one spent.”</li>
+          <li>“Pay shop.xcard.eth $1 for the demo order.”</li>
+          <li>“Ask for $300 more for the dataset license.”</li>
+          <li>“Lower the monthly limit to $200.”</li>
+          <li>“Freeze this card.”</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="companies" class="section">
+  <div class="wrap access">
+    <div class="section-copy" style="max-width:680px">
+      <div class="kicker"><span class="n">→</span><span>For companies</span></div>
+      <h2>Reserve your company’s name.</h2>
+      <p class="body">A demo account issues single cards. A company gets its own namespace and tools to hand out cards to a whole team. Sending this form holds your name while a person reviews the request.</p>
+    </div>
+    <div class="access-grid">
+      <div class="access-card">
+        <div class="k">What a company gets</div>
+        <h3><span class="mono" style="font-size:16px">maria.acme.xcard.eth</span></h3>
+        <ul class="get-list">
+          <li><b>Your own namespace</b><span>Every card reads <span class="mono">word.yourcompany.xcard.eth</span>. Only your operators can issue under it, and each new card costs no gas.</span></li>
+          <li><b>Operators</b><span>Named people sign in by email to issue and manage all the company’s cards, on the console or from their AI app.</span></li>
+          <li><b>Issue to a person by email</b><span>Name a holder and they get a one-time link. They sign in with a code and receive the agent token, which the operator never sees.</span></li>
+          <li><b>CSV for the whole team</b><span>Up to 200 cards per file. A preview checks every row and nothing is issued until a person confirms; the job keeps going if the page closes.</span></li>
+          <li><b>A company panel</b><span>Cards used, monthly allowance, requests waiting on approvers and frozen cards, all in one place.</span></li>
+          <li><b>Approvals kept separate</b><span>Each card has its own approver. Operators see a request but can’t decide it, so whoever issues a card can’t also sign off its spending.</span></li>
+          <li><b>Limits set per company</b><span>Starts at $500 a transaction, $2,000 a day, $5,000 a month and 50 cards, adjustable on request. Every card’s limits are public ENS records, so use role names where you’d rather not publish a person’s.</span></li>
+        </ul>
+        <p class="access-note">Sandbox: cards and charges run on the Airwallex sandbox, with no real money.</p>
+      </div>
+      <div class="access-card">
+        <div class="k">Request company access</div>
+        <form class="access-form" data-access="org" autocomplete="on">
+          <label><span>Company</span><input name="company" required maxlength="120" autocomplete="organization" placeholder="Acme Inc"></label>
+          <label><span>Name to reserve</span><input class="mono-in" name="slug" required maxlength="63" pattern="[a-zA-Z0-9\-\s\.]+" autocapitalize="none" spellcheck="false" placeholder="acme"><small>Cards will read <b>maria.<span data-slug-preview>yourcompany</span>.xcard.eth</b></small></label>
+          <label><span>Work email</span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@acme.com"><small>This email becomes your first operator.</small></label>
+          <label><span>Cards you expect</span><select name="cards"><option>1–10</option><option>11–50</option><option>51–200</option><option>More than 200</option></select></label>
+          <label><span>What will the cards be for? (optional)</span><textarea name="note" maxlength="1000" placeholder="Employee travel, AI agents buying APIs, team budgets…"></textarea></label>
+          <div class="access-trap" aria-hidden="true"><label>Leave this empty<input name="url" tabindex="-1" autocomplete="off"></label></div>
+          <button type="button" class="btn-primary" data-send>Reserve and request access</button>
+          <p class="access-status" data-status role="status"></p>
+          <p class="access-note">We hold the name for 30 days while we review the request. It gives no access until we approve it. <a href="legal.html#privacy">Privacy</a></p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="merchants" class="section">
+  <div class="wrap access">
+    <div class="section-copy" style="max-width:680px">
+      <div class="kicker"><span class="n">→</span><span>For merchants</span></div>
+      <h2>Become a merchant agents can trust.</h2>
+      <p class="body">Before an agent pays, X Card checks that the checkout really belongs to the merchant it means to pay. A verified merchant passes that check and gets paid without waiting on a person.</p>
+    </div>
+    <div class="access-grid">
+      <div class="access-card">
+        <div class="k">What a verified merchant gets</div>
+        <h3><span class="mono" style="font-size:16px">yourshop.xcard.eth ✓</span></h3>
+        <ul class="get-list">
+          <li><b>Payments clear without a hold</b><span>Cards on the recommended <span class="mono">verified-or-escalate</span> rule pay you within their limits. An unverified merchant waits for the card’s approver.</span></li>
+          <li><b>Access to the strictest cards</b><span>Cards set to <span class="mono">verified-only</span> can’t pay an unverified merchant at all.</span></li>
+          <li><b>Protection from lookalikes</b><span>A fake checkout using your name is blocked before the charge, because its address isn’t on your list. Two such attempts in 10 minutes freeze the agent’s card.</span></li>
+          <li><b>Your name on every payment</b><span>Activity and approvals show <span class="mono">yourshop.xcard.eth ✓</span>, not whatever text the agent typed.</span></li>
+          <li><b>A name without buying one</b><span>We publish your payment addresses under <span class="mono">xcard.eth</span>. There’s no ENS name to buy, no gas and no key to manage.</span></li>
+          <li><b>Recognize trusted agents</b><span>Check the Visa Trusted Agent Protocol signature on an agent’s request against our <a href="https://api.x-card.dev/keys" target="_blank" rel="noopener">public key</a>, and tell it apart from a bot.</span></li>
+        </ul>
+        <p class="access-note"><b style="font-weight:500;color:var(--text-2)">Already have an ENS name?</b> You don’t need us. Set <span class="mono">org.x402.origins</span> to your checkout addresses and you’re verified, with no sign-up. Verified means the name lists that checkout address; it isn’t an endorsement of your business.</p>
+      </div>
+      <div class="access-card">
+        <div class="k">Request a verified name</div>
+        <form class="access-form" data-access="merchant" autocomplete="on">
+          <label><span>Business</span><input name="company" required maxlength="120" autocomplete="organization" placeholder="ModelHub"></label>
+          <label><span>Name to reserve</span><input class="mono-in" name="slug" required maxlength="63" pattern="[a-zA-Z0-9\-\s\.]+" autocapitalize="none" spellcheck="false" placeholder="modelhub"><small>Your name will be <b><span data-slug-preview>yourshop</span>.xcard.eth</b></small></label>
+          <label><span>Work email</span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@modelhub.example"></label>
+          <label><span>Addresses you take payments on</span><textarea class="mono-in" name="origins" required maxlength="800" autocapitalize="none" spellcheck="false" placeholder="https://modelhub.example&#10;https://api.modelhub.example"></textarea><small>Https only, up to ten. We’ll ask you to prove you control these domains before we publish them.</small></label>
+          <label><span>Anything else? (optional)</span><textarea name="note" maxlength="1000" placeholder="What you sell, and how agents buy from you…"></textarea></label>
+          <div class="access-trap" aria-hidden="true"><label>Leave this empty<input name="url" tabindex="-1" autocomplete="off"></label></div>
+          <button type="button" class="btn-primary" data-send>Reserve and request verification</button>
+          <p class="access-status" data-status role="status"></p>
+          <p class="access-note">We hold the name for 30 days while we review the request. Nothing is published until we’ve checked your domain. <a href="legal.html#privacy">Privacy</a></p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="hood" class="section">
   <div class="wrap" style="padding-top:clamp(72px,12vh,140px);padding-bottom:clamp(48px,8vh,96px);display:flex;flex-direction:column;gap:36px">
     <div class="section-copy" style="max-width:640px">
       <div class="kicker"><span class="n">→</span><span>Under the hood</span></div>
       <h2>Real names. Real resolver. Sandbox money.</h2>
-      <p class="body"><span class="mono" style="color:var(--text)">*.xcard.eth</span> and <span class="mono" style="color:var(--text)">*.x402card.eth</span> resolve on Ethereum mainnet through an ENSIP-10 offchain resolver. The cards come from a card program behind one adapter interface; this demo uses the Airwallex sandbox, where card issuing is waiting on activation. Agents connect over MCP and never see a card number or an API key.</p>
+      <p class="body"><span class="mono" style="color:var(--text)">*.xcard.eth</span> and <span class="mono" style="color:var(--text)">*.x402card.eth</span> resolve on Ethereum mainnet through an ENSIP-10 offchain resolver. The cards come from a card program behind one adapter interface; this demo uses the Airwallex sandbox. Agents connect over MCP and never see a card number or an API key.</p>
     </div>
     <div class="hood-grid">
       <div class="hood-card">
@@ -499,8 +630,8 @@
       </div>
       <div class="hood-card">
         <div class="k">Agents · MCP</div>
-        <h3>Ten tools, each with a view in the chat</h3>
-        <p>issue_card, list_cards, get_card, pay, sign_request, request_funding, update_policy, get_approval, freeze, list_transactions. Every card comes with an agent token for it, shown once; approvals open as a card in the chat and are confirmed by email or signed with a wallet.</p>
+        <h3>Eleven tools, each with a view in the chat</h3>
+        <p>issue_card, issue_cards, list_cards, get_card, pay, sign_request, request_funding, update_policy, get_approval, freeze, list_transactions. Every card comes with an agent token for it, shown once; approvals open as a card in the chat and are confirmed by email or signed with a wallet.</p>
 <pre class="code"><span class="c">// MCP client config</span>
 { <span class="s">"xcard"</span>: {
     <span class="s">"type"</span>: <span class="s">"http"</span>,
@@ -511,7 +642,7 @@
         <div class="k">Merchant identity · x402 payee-name</div>
         <h3>Verified payees</h3>
         <p><span class="mono">pay</span> takes the checkout URL and the ENS name the merchant claims. X Card reads <span class="mono">org.x402.origins</span> on mainnet and applies <span class="mono">card.payee</span>: any, verified-or-escalate or verified-only. A held payment’s approval is bound to that exact merchant.</p>
-        <a class="addr" href="https://github.com/RWA-ID/x402card#payee-gate" target="_blank" rel="noopener">README · payee gate →</a>
+        <a class="addr" href="https://github.com/RWA-ID/x402card#verified-payee" target="_blank" rel="noopener">README · verified payee →</a>
       </div>
       <div class="hood-card">
         <div class="k">Agent identity · Visa TAP</div>
@@ -587,5 +718,6 @@
 
 <script src="auth.js" defer></script>
 <script src="app.js" defer></script>
+<script src="access.js" defer></script>
 </body>
 </html>
