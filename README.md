@@ -1,7 +1,7 @@
 # X Card
 
-**Company cards you run by name.**
-Every card has a name. Run them all from your AI app.
+**Programmable spending for humans and AI agents.**
+Every card has a name. Run them all from the console or your AI app.
 
 X Card is not a card issuer. Card programs issue the cards (Airwallex is the first one we plug into). X Card gives each card a company issues, to an employee, a team or an AI agent, a name with its spend policy on it. The name is the whole interface: a manager says "give maria.xcard.eth $300 for the offsite" or "freeze sam's card" to their AI app, and anything over the limits goes to the card's approver by email (or to their wallet). Nobody handles a card number.
 
