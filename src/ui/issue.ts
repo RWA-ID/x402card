@@ -1,7 +1,7 @@
 // The issue form: an MCP App (ui:// resource) for issue_card. The tool's
 // first result carries the defaults and caps; the person sets the policy here
 // and submits, which calls issue_card again through the host (tools/call,
-// submit: true). A wallet sign-in gets the next testN.xcard.eth; an email
+// submit: true). A wallet sign-in gets the next testN.demo.xcard.eth; an email
 // sign-in names its card. The approver is an email, wallet or ENS name
 // (default: whoever signed in); the server enforces the caps whatever this form sends.
 import { UI_MIME } from "./approval.ts";
@@ -213,7 +213,7 @@ const HTML = /* html */ `<!doctype html>
         ? "A sandbox virtual Visa for " + me.org + ". Anything over these limits waits for the approver."
         : account
         ? "A sandbox virtual Visa under your name. Anything over these limits waits for the approver."
-        : "You'll get the next free test name (testN.xcard.eth) on a sandbox virtual Visa. Anything over these limits waits for the approver." }),
+        : "You'll get the next free test name (testN.demo.xcard.eth) on a sandbox virtual Visa. Anything over these limits waits for the approver." }),
       err);
     f.addEventListener("submit", async (e) => {
       e.preventDefault();

@@ -528,7 +528,7 @@
   const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
   // Same as the Worker (ens/gateway.ts): demo is only reserved under x402card.eth, its hosted site.
   const RESERVED = new Set(["ai", "www", "app", "api", "gateway", "shop"]);
-  const isReserved = (v, ns) => RESERVED.has(v) || (v === "demo" && ns === "x402card.eth");
+  const isReserved = (v) => RESERVED.has(v) || v === "demo";
   const MCP_URL = API.replace("://api.", "://mcp.") + "/mcp";
   // Same shape the Worker checks for card.payee.allow (policy/records.ts).
   const PAYEE_NAME_RE = /^[^\s.,]+(\.[^\s.,]+)*\.eth$/;
@@ -601,7 +601,7 @@
     // Pasting a full name picks its namespace.
     const label = () => {
       let v = labelIn.value.trim().toLowerCase();
-      for (const p of [...(me?.org ? [`${me.org.slug}.xcard.eth`] : []), "xcard.eth", "x402card.eth"]) {
+      for (const p of [...(me?.org ? [`${me.org.slug}.xcard.eth`] : isAccount() ? ["demo.xcard.eth"] : []), "xcard.eth", "x402card.eth"]) {
         if (!v.endsWith("." + p)) continue;
         v = v.slice(0, -(p.length + 1));
         labelIn.value = v;
@@ -780,12 +780,12 @@
 
     return function configure() {
       const account = isAccount();
-      // Demo accounts issue under xcard.eth within the demo caps; the operator picks the namespace.
+      // Demo accounts issue under demo.xcard.eth within the demo caps; the operator picks the namespace.
       $("[data-ns-switch]").hidden = account;
       $("[data-ns-fixed]").hidden = !account;
       const capEl = $("[data-caps]");
       capEl.hidden = !account;
-      if (account && caps) capEl.textContent = `${me?.org ? me.org.name : "Demo"} limits: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month, USD.`;
+      if (account && caps) capEl.textContent = `${me?.org ? me.org.name : "Demo"} limits: up to ${money(caps.tx)} per transaction, ${money(caps.daily)} a day, ${money(caps.monthly)} a month, USD.${me?.org ? "" : " Demo cards read maria.demo.xcard.eth; a single name like acme.xcard.eth comes with company access."}`;
       const maxes = account && caps ? { limit_tx: caps.tx, limit_daily: caps.daily, limit_monthly: caps.monthly } : { limit_tx: 1000, limit_daily: 5000, limit_monthly: 20000 };
       const defaults = { limit_tx: 100, limit_daily: 500, limit_monthly: 2000 };
       for (const k of KEYS) {
@@ -809,9 +809,9 @@
         if (guess && LABEL_RE.test(guess)) labelIn.value = guess;
       }
       nsGroup.set(saved);
-      // An operator's cards are under the company's namespace.
-      if (me.org) {
-        ns = `${me.org.slug}.xcard.eth`;
+      // An operator's cards are under the company's namespace, a demo account's under demo.xcard.eth.
+      if (account) {
+        ns = me.org ? `${me.org.slug}.xcard.eth` : "demo.xcard.eth";
         $("[data-ns-fixed]").textContent = `.${ns}`;
         edited();
       }

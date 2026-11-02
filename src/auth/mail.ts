@@ -194,23 +194,24 @@ function money(n: number, cur: string): string {
 }
 
 /** To us: a company or merchant asked for access on the site. Replying reaches them. */
-export function accessRequestEmail(r: { kind: "org" | "merchant"; slug: string; company: string; email: string; cards?: string; origins?: string[]; note?: string }): Mail {
+export function accessRequestEmail(r: { kind: "org" | "merchant"; slug: string; company: string; email: string; cards?: string; origins?: string[]; note?: string; domain_check?: { result: string; detail: string } }): Mail {
   const what = r.kind === "org" ? "Company access" : "Verified merchant";
   const name = `${r.slug}.xcard.eth`;
   const rows: [string, string][] = [
     ["Name held", name],
     [r.kind === "org" ? "Company" : "Merchant", r.company],
     ["Email", r.email],
+    ...(r.domain_check ? [["Domain check", `${{ match: "Matches", mismatch: "DOESN'T MATCH", free_email: "FREE EMAIL" }[r.domain_check.result] ?? r.domain_check.result}: ${r.domain_check.detail}`] as [string, string]] : []),
     ...(r.cards ? [["Cards", r.cards] as [string, string]] : []),
     ...(r.origins ? [["Origins", r.origins.join(" ")] as [string, string]] : []),
     ...(r.note ? [["Note", r.note] as [string, string]] : []),
   ];
   const next = r.kind === "org"
-    ? "To approve: POST /api/orgs with the admin token."
+    ? "The email is only typed into a form so far: reply to it before approving. To approve: POST /api/orgs with the admin token."
     : "Check they control the domain first. To approve: POST /api/merchants with the admin token.";
   return {
     to: REQUESTS_INBOX,
-    subject: `${what} request: ${name}`,
+    subject: `${what} request: ${name}${r.domain_check && r.domain_check.result !== "match" ? " (domain doesn't match)" : ""}`,
     text: `${what} request\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${next}\nThe name is held for 30 days.`,
     html: frame(`${what} request: ${name}`, `<div style="font-family:${SANS};font-size:20px;font-weight:600;color:#eceef1;padding-bottom:16px;">${esc(what)} request</div>
 ${rows.map(([k, v]) => `<div style="font-family:${MONO};font-size:11px;color:#8b909a;padding-top:12px;">${esc(k)}</div><div style="font-family:${SANS};font-size:14px;line-height:1.5;color:#eceef1;word-break:break-word;">${esc(v)}</div>`).join("\n")}

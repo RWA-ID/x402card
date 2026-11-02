@@ -348,7 +348,7 @@ What's already in place: agents hold only scoped tokens, approvals are HMAC-boun
 | MCP server (11 tools; OAuth email or wallet sign-in, or scoped tokens) | ✅ live at `mcp.x-card.dev` |
 | In-chat views (MCP Apps): card view, approval card, issue form, TAP signature | ✅ live; rendered in Claude.ai |
 | `update_policy` + daily limit (tighten now, loosen with a wallet signature) | ✅ live; first live policy approval signed in Claude.ai on 2026-10-28 |
-| Self-serve test cards (`testN.xcard.eth`, issued from the chat) | ✅ live |
+| Self-serve test cards (`testN.demo.xcard.eth`, issued from the chat) | ✅ live |
 | Policy engine, approvals, anomaly freeze | ✅ live; tested end to end against a fake issuer |
 | Site on `x-card.dev` (Cloudflare) with an IPFS mirror (`ai.xcard.eth`) | ✅ live |
 | Airwallex card creation | ✅ live on an Airwallex demo account: real sandbox virtual Visa cards with our controls applied |
@@ -418,7 +418,7 @@ Cards, forms and approvals open in the chat. Connecting never lets the app appro
 
 ## Company access
 
-A demo account issues single cards under `xcard.eth`. A company gets its own namespace and the tools to hand out cards to a team. [Request access on the site](https://x-card.dev/#companies).
+A demo card reads `maria.demo.xcard.eth`. A company gets a name of its own, `acme.xcard.eth`, and the tools to hand out cards to a team. [Request access on the site](https://x-card.dev/#companies).
 
 | A company gets | |
 |---|---|
@@ -434,15 +434,17 @@ Names and limits are public ENS records, so use role names (`emp-4801`) where yo
 
 ### Reserved names
 
-`<slug>.xcard.eth` is one namespace shared by cards, companies and merchants, so a name is spoken for once any of these is true:
+A single name such as `google.xcard.eth` looks like it belongs to that brand, so it isn't self-serve. Demo accounts and wallet sign-ins get `word.demo.xcard.eth` (wallets: `testN.demo.xcard.eth`), whatever they type. Single names go only to approved companies and merchants, and to cards the operator issues with the admin token. Cards issued before this rule keep their names.
+
+A single name is spoken for once any of these is true:
 
 - **A request is under review.** The form holds the name for 30 days, so no demo card can take it in the meantime. A hold grants nothing else: the requester gets no access until a person approves it, and the hold lapses if nobody does.
 - **It belongs to a company or a merchant.** That's permanent, and the name can't also be a card.
-- **It's already a card, or an infrastructure label** (`ai`, `www`, `app`, `api`, `gateway`, `shop`), **or a self-serve test name** (`testN`).
+- **It's already a card, or an infrastructure label** (`ai`, `www`, `app`, `api`, `gateway`, `shop`, `demo`).
 
 ### Approving a request (operator)
 
-Requests are emailed to `hello@x-card.dev` and stored. With the admin token:
+Requests are emailed to `hello@x-card.dev` and stored, each with a **domain check** comparing the email's domain to the name and, for a merchant, to its origins: `match`, `mismatch` or `free_email`. It's a hint and approves nothing. The email is only typed into a form at this point, so reply to it before approving; a company's operators still have to sign in with a code sent to that address, so naming someone else's email gives the requester no access. With the admin token:
 
 ```sh
 # Read them
@@ -521,7 +523,7 @@ curl -s https://mcp.x-card.dev/mcp \
 
 | Tool | Arguments | Returns |
 |---|---|---|
-| `issue_card` | A company's operator (email sign-in) also passes `holder`, the email of the person the card is for: they claim it and get its agent token, and it's named `<name>.<company>.xcard.eth`. Admin token: `name`, `policy: { limit_tx, limit_daily?, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }`. Wallet sign-in: no arguments, or a suggested `policy` | Operator: `card`, `agent_token` (shown once). Wallet sign-in: `decision: "form"` with defaults and caps; the person submits the form in the chat and gets the next free `testN.xcard.eth` with their wallet as approver (caps: $50/transaction, $200/day, $500/month, USD, 3 per wallet). The issued card in the chat shows an agent token once, for an autonomous agent; it stays out of the text the model reads |
+| `issue_card` | A company's operator (email sign-in) also passes `holder`, the email of the person the card is for: they claim it and get its agent token, and it's named `<name>.<company>.xcard.eth`. Admin token: `name`, `policy: { limit_tx, limit_daily?, limit_monthly, currencies[], mcc_allow[], approver, payee?, payee_allow[]? }`. Wallet sign-in: no arguments, or a suggested `policy` | Operator: `card`, `agent_token` (shown once). Wallet sign-in: `decision: "form"` with defaults and caps; the person submits the form in the chat and gets the next free `testN.demo.xcard.eth` with their wallet as approver (caps: $50/transaction, $200/day, $500/month, USD, 3 per wallet). The issued card in the chat shows an agent token once, for an autonomous agent; it stays out of the text the model reads |
 | `issue_cards` | A company's operator: `csv`, or `batch_id` to check on one | `decision: "preview"` with every row and its errors, confirmed by the person in the chat; then progress. Each holder gets a claim link |
 | `list_cards` | | every card this connection can use: `name`, `status`, `last4`, limits, categories, payee rule, approver, `pending_approvals` |
 | `get_card` | `name?` | `name`, `status`, `last4`, `records`, `pending_approvals[]` |
@@ -600,7 +602,7 @@ curl https://api.x-card.dev/public/cards/researcher.x402card.eth
 Card programs and finance teams aren't crypto teams, so nothing on the main path needs a wallet.
 
 - **Sign in with an email.** "Create a demo account" on [x-card.dev](https://x-card.dev) asks for an email and mails a 6-digit code from `login@x-card.dev`. The code is stored only as a keyed hash, works once, for 10 minutes, with 5 tries; sending is limited to 5 codes per address and 20 per IP an hour. A good code returns a 7-day session token (`xs_…`), which the site keeps in local storage and sends as a Bearer token.
-- **The console** ([x-card.dev/console](https://x-card.dev/console)) is where cards are managed. A demo account picks a name under `xcard.eth` (the name check shows whether it's free), sets the per-transaction, daily and monthly limits, merchant categories and payee rule, and names the approver: its own email by default, a colleague's email, or a wallet / ENS name. Caps: $500 per transaction, $2,000 a day, $5,000 a month, USD, 5 cards per account. Every card comes with an agent token for it (shown once). The account sees the cards it issued and the cards it approves, as a grid of card faces, with pending requests and history. A company's operators also get a company panel (cards used, monthly allowance, requests waiting on approvers, frozen cards), issue within the company's caps and see all its cards; they can't decide requests, which stay with each card's approver. An operator can name a **holder**, by email, here or in the chat form: the holder gets a one-time link, signs in with a code to that address, and receives the agent token, which the operator never sees. A company's cards are named `maria.acme.xcard.eth`, and only its operators can issue under its namespace; they still cost no gas per card, because the gateway serves them. Operators can also issue from a CSV, on the console or with `issue_cards` in the chat: columns `name, holder_email, limit_tx, limit_monthly` and optionally `approver, limit_daily, mcc_allow, payee`, up to 200 rows. A preview checks every row and issues nothing until a person confirms it; the job then runs a few rows at a time and keeps going if the page closes. One email can hold many cards. Holders use a card but can't lift a freeze on it.
+- **The console** ([x-card.dev/console](https://x-card.dev/console)) is where cards are managed. A demo account picks a name under `demo.xcard.eth` (the name check shows whether it's free), sets the per-transaction, daily and monthly limits, merchant categories and payee rule, and names the approver: its own email by default, a colleague's email, or a wallet / ENS name. Caps: $500 per transaction, $2,000 a day, $5,000 a month, USD, 5 cards per account. Every card comes with an agent token for it (shown once). The account sees the cards it issued and the cards it approves, as a grid of card faces, with pending requests and history. A company's operators also get a company panel (cards used, monthly allowance, requests waiting on approvers, frozen cards), issue within the company's caps and see all its cards; they can't decide requests, which stay with each card's approver. An operator can name a **holder**, by email, here or in the chat form: the holder gets a one-time link, signs in with a code to that address, and receives the agent token, which the operator never sees. A company's cards are named `maria.acme.xcard.eth`, and only its operators can issue under its namespace; they still cost no gas per card, because the gateway serves them. Operators can also issue from a CSV, on the console or with `issue_cards` in the chat: columns `name, holder_email, limit_tx, limit_monthly` and optionally `approver, limit_daily, mcc_allow, payee`, up to 200 rows. A preview checks every row and issues nothing until a person confirms it; the job then runs a few rows at a time and keeps going if the page closes. One email can hold many cards. Holders use a card but can't lift a freeze on it.
 - **Email approvers.** When an agent asks for more than a card allows and `card.approver` is an email, X Card emails them (`approvals@x-card.dev`) the card, the amount, the rule it hit and a "Review and decide" link to `x-card.dev/approve#<id>`. The decision only counts if they're signed in as that email, so a forwarded email can't approve anything. Someone else signed in gets `403 not_approver`.
 - **Privacy.** ENS records are public, so an email approver is masked everywhere public: the gateway answer, `/public/cards`, the public approval link and the feed show `m•••@acme.com`. The full address stays private and is used only to email and sign in that approver.
 - **Wallets still work.** A card whose approver is a wallet or an ENS name is approved with an EIP-712 signature exactly as before ([Approving with a wallet](#approving-with-a-wallet)).

@@ -235,7 +235,7 @@ test("namespaces: the same label under x402card.eth and xcard.eth are separate c
   for (const name of ["ai.xcard.eth", "demo.x402card.eth", "shop.xcard.eth"]) {
     assert.match((await tool(ADMIN, "issue_card", { name, policy })).content[0].text, /reserved/);
   }
-  assert.equal((await tool(ADMIN, "issue_card", { name: "demo.xcard.eth", policy })).structuredContent.card.name, "demo.xcard.eth");
+  assert.match((await tool(ADMIN, "issue_card", { name: "demo.xcard.eth", policy })).content[0].text, /reserved/, "the demo namespace itself isn't a card");
   assert.match((await tool(ADMIN, "issue_card", { name: "scout.other.eth", policy })).content[0].text, /bad_name/);
 });
 
@@ -430,7 +430,7 @@ test("issue_card signed in: the view gets an agent token, the model's text doesn
   assert.ok(!("agent_token" in f));
 });
 
-test("issue_card from a wallet sign-in: the form first, then the next testN.xcard.eth, within the caps", async () => {
+test("issue_card from a wallet sign-in: the form first, then the next testN.demo.xcard.eth, within the caps", async () => {
   const { svc, store, tool } = setup();
   const wallet = "0xc32A9e2f1092F1D57D3267C2E70b80DA9De06D59";
   const owner = async (name: string, args: Record<string, unknown> = {}) => {
@@ -438,7 +438,7 @@ test("issue_card from a wallet sign-in: the form first, then the next testN.xcar
     return ((await (await new McpServer(svc, store, { kind: "owner", address: wallet, labels: [] }).handle(req)).json()) as any).result;
   };
   // A name someone already has is skipped.
-  await tool(ADMIN, "issue_card", { name: "test1.xcard.eth", policy: { limit_tx: 10, limit_monthly: 100, currencies: ["USD"], approver: "alice.eth" } });
+  await store.putCard("test1.demo.xcard.eth", { cardholderId: "h", cardId: "taken", createdAt: 0 }); // the numbering skips a taken name
 
   const f = (await owner("issue_card", { policy: { limit_monthly: 300 } })).structuredContent;
   assert.equal(f.decision, "form");
@@ -447,14 +447,14 @@ test("issue_card from a wallet sign-in: the form first, then the next testN.xcar
   assert.equal((await store.listLabels()).length, 1, "nothing issued yet");
 
   const r = (await owner("issue_card", { submit: true, policy: { limit_tx: 40, limit_daily: 150, limit_monthly: 400, mcc_allow: ["5734"], approver: "mallory.eth", currencies: ["EUR"] } })).structuredContent;
-  assert.equal(r.card.name, "test2.xcard.eth");
+  assert.equal(r.card.name, "test2.demo.xcard.eth");
   assert.equal(r.card.records["card.approver"], "mallory.eth", "the form's approver: email, wallet or ENS name");
   assert.equal(r.card.records["card.currencies"], "USD");
   assert.equal(r.card.records["card.limit.daily"], "150");
   assert.match(r.agent_token, /^x4c_/);
-  assert.equal((await store.getCard("test2.xcard.eth"))!.issuedBy, wallet);
+  assert.equal((await store.getCard("test2.demo.xcard.eth"))!.issuedBy, wallet);
   // Indexed under the wallet at once: list() can lag new keys on Cloudflare.
-  assert.deepEqual(await store.walletIndex(wallet), ["test2.xcard.eth"], "indexed as its issuer, though mallory.eth approves it");
+  assert.deepEqual(await store.walletIndex(wallet), ["test2.demo.xcard.eth"], "indexed as its issuer, though mallory.eth approves it");
 
   assert.match((await owner("issue_card", { submit: true, policy: { limit_tx: 60, limit_monthly: 400 } })).content[0].text, /over_test_caps/);
   assert.match((await owner("issue_card", { submit: true, policy: { limit_tx: 10, limit_daily: 900, limit_monthly: 400 } })).content[0].text, /over_test_caps|bad_policy/);

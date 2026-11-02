@@ -98,6 +98,8 @@ export interface AccessRequest {
   /** Merchants: the origins they take payments on. */
   origins?: string[];
   note?: string;
+  /** A hint for the reviewer: does the email look like it belongs to this name? */
+  domain_check?: { result: "match" | "mismatch" | "free_email"; detail: string };
   at: number;
 }
 

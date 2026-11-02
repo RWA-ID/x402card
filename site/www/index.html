@@ -534,7 +534,7 @@ claude mcp add --transport http xcard \
     <div class="section-copy" style="max-width:680px">
       <div class="kicker"><span class="n">→</span><span>For companies</span></div>
       <h2>Reserve your company’s name.</h2>
-      <p class="body">A demo account issues single cards. A company gets its own namespace and tools to hand out cards to a whole team. Sending this form holds your name while a person reviews the request.</p>
+      <p class="body">A demo card reads <span class="mono" style="color:var(--text)">maria.demo.xcard.eth</span>. A company gets its own name and tools to hand out cards to a whole team. Sending this form holds your name while a person reviews the request.</p>
     </div>
     <div class="access-grid">
       <div class="access-card">
@@ -556,13 +556,13 @@ claude mcp add --transport http xcard \
         <form class="access-form" data-access="org" autocomplete="on">
           <label><span>Company</span><input name="company" required maxlength="120" autocomplete="organization" placeholder="Acme Inc"></label>
           <label><span>Name to reserve</span><input class="mono-in" name="slug" required maxlength="63" pattern="[a-zA-Z0-9\-\s\.]+" autocapitalize="none" spellcheck="false" placeholder="acme"><small>Cards will read <b>maria.<span data-slug-preview>yourcompany</span>.xcard.eth</b></small></label>
-          <label><span>Work email</span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@acme.com"><small>This email becomes your first operator.</small></label>
+          <label><span>Work email</span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@acme.com"><small>Use your company’s domain: we check it against the name. This email becomes your first operator.</small></label>
           <label><span>Cards you expect</span><select name="cards"><option>1–10</option><option>11–50</option><option>51–200</option><option>More than 200</option></select></label>
           <label><span>What will the cards be for? (optional)</span><textarea name="note" maxlength="1000" placeholder="Employee travel, AI agents buying APIs, team budgets…"></textarea></label>
           <div class="access-trap" aria-hidden="true"><label>Leave this empty<input name="url" tabindex="-1" autocomplete="off"></label></div>
           <button type="button" class="btn-primary" data-send>Reserve and request access</button>
           <p class="access-status" data-status role="status"></p>
-          <p class="access-note">We hold the name for 30 days while we review the request. It gives no access until we approve it. <a href="legal.html#privacy">Privacy</a></p>
+          <p class="access-note">We hold the name for 30 days while we review the request. It gives no access until we approve it, and single names go only to approved companies and merchants. <a href="legal.html#privacy">Privacy</a></p>
         </form>
       </div>
     </div>
@@ -595,7 +595,7 @@ claude mcp add --transport http xcard \
         <form class="access-form" data-access="merchant" autocomplete="on">
           <label><span>Business</span><input name="company" required maxlength="120" autocomplete="organization" placeholder="ModelHub"></label>
           <label><span>Name to reserve</span><input class="mono-in" name="slug" required maxlength="63" pattern="[a-zA-Z0-9\-\s\.]+" autocapitalize="none" spellcheck="false" placeholder="modelhub"><small>Your name will be <b><span data-slug-preview>yourshop</span>.xcard.eth</b></small></label>
-          <label><span>Work email</span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@modelhub.example"></label>
+          <label><span>Work email</span><input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@modelhub.example"><small>Use your business’s domain: we check it against the name and the addresses below.</small></label>
           <label><span>Addresses you take payments on</span><textarea class="mono-in" name="origins" required maxlength="800" autocapitalize="none" spellcheck="false" placeholder="https://modelhub.example&#10;https://api.modelhub.example"></textarea><small>Https only, up to ten. We’ll ask you to prove you control these domains before we publish them.</small></label>
           <label><span>Anything else? (optional)</span><textarea name="note" maxlength="1000" placeholder="What you sell, and how agents buy from you…"></textarea></label>
           <div class="access-trap" aria-hidden="true"><label>Leave this empty<input name="url" tabindex="-1" autocomplete="off"></label></div>

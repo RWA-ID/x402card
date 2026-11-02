@@ -29,11 +29,11 @@ export const LEGACY_PARENT = "x402card.eth";
 export const PARENT_NAMES = [LEGACY_PARENT, "xcard.eth"];
 /**
  * Never issue cards under these: subnames with their own on-chain resolver
- * (ai.xcard.eth = hosted site), and shop.xcard.eth, the demo merchant's payee
- * name (see DEMO_MERCHANT).
+ * (ai.xcard.eth = hosted site), shop.xcard.eth, the demo merchant's payee
+ * name (see DEMO_MERCHANT), and demo.xcard.eth, the namespace demo cards live under.
  */
-export const RESERVED_LABELS = new Set(["ai", "www", "app", "api", "gateway", "shop"]);
-/** Card keys reserved under one namespace only: demo.x402card.eth is a hosted site; demo.xcard.eth is a card. */
+export const RESERVED_LABELS = new Set(["ai", "www", "app", "api", "gateway", "shop", "demo"]);
+/** Card keys reserved under one namespace only: demo.x402card.eth is a hosted site. */
 export const RESERVED_KEYS = new Set(["demo"]);
 /**
  * The demo merchant's ENS name. Its org.x402.origins (x402 payee-name) lists

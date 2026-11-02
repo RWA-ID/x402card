@@ -88,7 +88,7 @@ test("a demo account issues a named card, approves it by email, and the public s
 
   const issued = await call("POST", "/api/cards", { name: "maria", policy: { limit_tx: 100, limit_daily: 300, limit_monthly: 1000, mcc_allow: [], payee: "any" } }, maria);
   assert.equal(issued.status, 201, JSON.stringify(issued.body));
-  assert.equal(issued.body.card.name, "maria.xcard.eth");
+  assert.equal(issued.body.card.name, "maria.demo.xcard.eth");
   assert.equal(issued.body.card.records["card.approver"], "maria@acme.com");
   assert.match(issued.body.agent_token, /^x4c_/);
   assert.equal((await call("GET", "/api/names/maria", undefined, maria)).body.available, false);
@@ -98,7 +98,7 @@ test("a demo account issues a named card, approves it by email, and the public s
   assert.equal((await call("POST", "/api/cards", { name: "x.x402card.eth", policy: { limit_tx: 9, limit_monthly: 10 } }, maria)).body.error.code, "bad_name");
 
   // Public surfaces never show the email.
-  const pub = await call("GET", "/public/cards/maria.xcard.eth");
+  const pub = await call("GET", "/public/cards/maria.demo.xcard.eth");
   assert.equal(pub.body.records["card.approver"], "m•••@acme.com");
 
   // The agent asks for more than card.limit.tx: held, and the approver is emailed.
@@ -109,7 +109,7 @@ test("a demo account issues a named card, approves it by email, and the public s
   assert.equal(res.approval_url, `https://x-card.dev/approve#${res.approval_id}`);
   const mail = sent.slice(before).find((s) => s.from === "X Card <approvals@x-card.dev>")!;
   assert.deepEqual(mail.to, ["maria@acme.com"]);
-  assert.match(mail.subject, /Approve \$250 for maria\.xcard\.eth/);
+  assert.match(mail.subject, /Approve \$250 for maria\.demo\.xcard\.eth/);
   assert.ok(mail.html.includes(res.approval_url));
   assert.match(mail.text, /team offsite/);
 
@@ -145,7 +145,7 @@ test("a card approved by a colleague's email shows on both accounts; only the ap
   assert.equal(r.body.card.records["card.approver"], "lead@acme.com");
   const lead = await signIn("lead@acme.com");
   const leadCards = (await call("GET", "/api/cards", undefined, lead)).body.cards;
-  assert.deepEqual(leadCards.map((c: any) => c.name), ["dev-ana.xcard.eth"]);
+  assert.deepEqual(leadCards.map((c: any) => c.name), ["dev-ana.demo.xcard.eth"]);
   assert.equal(leadCards[0].issued_by_me, undefined);
   const opsCards = (await call("GET", "/api/cards", undefined, ops)).body.cards;
   assert.equal(opsCards[0].issued_by_me, true);
@@ -170,11 +170,11 @@ test("issue_card in the chat for an email sign-in: names the card, approver from
   };
   const f = await owner({ name: "chat-bot" });
   assert.equal(f.decision, "form");
-  assert.deepEqual(f.me, { email: "chat@acme.com" });
+  assert.deepEqual(f.me, { email: "chat@acme.com", parent: "demo.xcard.eth" });
   assert.equal(f.defaults.name, "chat-bot");
   assert.equal(f.caps.tx, 500);
   const r = await owner({ submit: true, name: "chat-bot", policy: { limit_tx: 100, limit_monthly: 1000, approver: "boss@acme.com" } });
-  assert.equal(r.card.name, "chat-bot.xcard.eth");
+  assert.equal(r.card.name, "chat-bot.demo.xcard.eth");
   assert.equal(r.card.records["card.approver"], "boss@acme.com");
   const mine = await owner({ submit: true, name: "chat-two", policy: { limit_tx: 10, limit_monthly: 100 } });
   assert.equal(mine.card.records["card.approver"], "chat@acme.com", "no approver given: the signed-in email");
@@ -309,8 +309,9 @@ test("company namespaces: maria.<org>.xcard.eth, only from that company's operat
   assert.equal((await call("POST", "/api/cards", { name: "jon.gamma.xcard.eth", policy }, delta)).status, 400, "another company's namespace");
   assert.equal((await call("POST", "/api/cards", { name: "jon.gamma.xcard.eth", policy }, solo)).status, 400);
   assert.equal((await call("POST", "/api/cards", { name: "jon.gamma.xcard.eth", policy: { ...policy, currencies: ["USD"] } }, "admin-token")).status, 400, "the admin token doesn't issue into a company either");
-  assert.equal((await call("POST", "/api/cards", { name: "gamma.xcard.eth", policy }, solo)).status, 400, "a company's name isn't a card");
-  assert.equal((await call("POST", "/api/cards", { name: "plain", policy }, solo)).body.card.name, "plain.xcard.eth", "others stay flat");
+  assert.equal((await call("POST", "/api/cards", { name: "gamma.xcard.eth", policy }, "admin-token")).status, 400, "a company's name isn't a card");
+  assert.equal((await call("POST", "/api/cards", { name: "plain", policy }, solo)).body.card.name, "plain.demo.xcard.eth", "others are under demo.xcard.eth");
+  await call("POST", "/api/cards", { name: "plain.xcard.eth", policy: { ...policy, currencies: ["USD"], approver: "a@b.com" } }, "admin-token");
   assert.equal((await call("POST", "/api/orgs", { slug: "plain", name: "P", operators: ["p@p.com"] }, "admin-token")).status, 400, "a name already a card can't become a company");
   assert.equal((await call("POST", "/api/orgs", { slug: "shop", name: "S", operators: ["s@s.com"] }, "admin-token")).status, 400);
 
@@ -410,8 +411,8 @@ test("access requests: a request holds the name and grants nothing; approving it
   // Spoken for, by anyone else's card and any second request.
   const solo = await signIn("squatter@x.com");
   const policy = { limit_tx: 10, limit_monthly: 100 };
-  assert.equal((await call("POST", "/api/cards", { name: "initech", policy }, solo)).status, 400);
-  assert.equal((await call("GET", "/api/names/initech", undefined, solo)).body.available, false);
+  const adminPolicy = { ...policy, currencies: ["USD"], approver: "a@b.com" };
+  assert.equal((await call("POST", "/api/cards", { name: "initech.xcard.eth", policy: adminPolicy }, "admin-token")).status, 400, "not even the admin token");
   assert.equal((await req({ ...org, email: "x@y.com" }, "9.9.9.2")).status, 409);
   // It grants nothing: the requester isn't an operator until someone approves.
   const ops = await signIn("ops@initech.com");
@@ -430,7 +431,7 @@ test("access requests: a request holds the name and grants nothing; approving it
   assert.equal((await req({ ...shop, origins: "http://bookstore.example" }, "9.9.9.4")).status, 400, "https only");
   assert.equal((await req({ ...shop }, "9.9.9.4")).status, 400, "origins required");
   assert.equal((await req({ ...shop, slug: "shop", origins: "https://a.example" }, "9.9.9.4")).status, 409, "reserved");
-  assert.equal((await req({ ...org, slug: "test77", email: "a@b.com" }, "9.9.9.4")).status, 409, "test names stay with the numbering");
+  assert.equal((await req({ ...org, slug: "demo", email: "a@b.com" }, "9.9.9.4")).status, 409, "the demo namespace");
   assert.equal((await req({ ...shop, origins: "https://bookstore.example/checkout https://api.bookstore.example" }, "9.9.9.5")).status, 201);
   assert.equal((await call("GET", "/public/cards/bookstore.xcard.eth")).status, 404, "nothing published before it's approved");
   assert.equal((await call("POST", "/api/merchants", { slug: "bookstore", origins: ["https://bookstore.example"] })).status, 401);
@@ -438,12 +439,52 @@ test("access requests: a request holds the name and grants nothing; approving it
   assert.equal((await call("POST", "/api/merchants", { slug: "bookstore", origins: ["https://bookstore.example/checkout"] }, "admin-token")).status, 201);
   assert.equal((await call("GET", "/public/cards/bookstore.xcard.eth")).body.records["org.x402.origins"], "https://bookstore.example");
   // A merchant's name is permanent: no card, no company.
-  assert.equal((await call("POST", "/api/cards", { name: "bookstore", policy }, solo)).status, 400);
+  assert.equal((await call("POST", "/api/cards", { name: "bookstore.xcard.eth", policy: adminPolicy }, "admin-token")).status, 400);
   assert.equal((await call("POST", "/api/orgs", { slug: "bookstore", name: "B", operators: ["b@b.com"] }, "admin-token")).status, 400);
 
   // The bot trap looks accepted and holds nothing; the rate limit stops a flood.
   assert.equal((await req({ ...org, slug: "trapped", url: "http://spam" }, "9.9.9.6")).status, 201);
-  assert.equal((await call("GET", "/api/names/trapped", undefined, solo)).body.available, true);
+  assert.equal((await req({ ...org, slug: "trapped" }, "9.9.9.8")).status, 201, "the trap held nothing");
   for (let i = 0; i < 5; i++) await req({ ...org, slug: `flood${i}`, email: "f@f.com" }, "9.9.9.7");
   assert.equal((await req({ ...org, slug: "flood9", email: "f@f.com" }, "9.9.9.7")).status, 429);
+});
+
+test("a self-serve account can't get a single name, however it asks", async () => {
+  const policy = { limit_tx: 10, limit_monthly: 100 };
+  const me = await signIn("brandless@x.com");
+  for (const [asked, want] of [["google", "google.demo.xcard.eth"], ["apple.xcard.eth", "apple.demo.xcard.eth"], ["amazon.demo.xcard.eth", "amazon.demo.xcard.eth"]]) {
+    assert.equal((await call("POST", "/api/cards", { name: asked, policy }, me)).body.card.name, want);
+  }
+  assert.equal((await call("GET", "/public/cards/google.xcard.eth")).status, 404);
+  assert.equal((await call("GET", "/api/names/netflix.xcard.eth", undefined, me)).body.name, "netflix.demo.xcard.eth");
+  // Google can still become a company, and its namespace is separate from the demo card.
+  assert.equal((await call("POST", "/api/orgs", { slug: "google", name: "Google", operators: ["ops@google.com"] }, "admin-token")).status, 201);
+  // No way out of the namespace, and nothing else can issue into it.
+  assert.equal((await call("POST", "/api/cards", { name: "x.google.xcard.eth", policy }, me)).status, 400);
+  assert.equal((await call("POST", "/api/cards", { name: "x.demo.xcard.eth", policy: { ...policy, currencies: ["USD"], approver: "a@b.com" } }, "admin-token")).status, 400);
+  assert.equal((await call("POST", "/api/orgs", { slug: "demo", name: "D", operators: ["d@d.com"] }, "admin-token")).status, 400);
+});
+
+test("domain check: a hint about the email, for the person reviewing a request", async () => {
+  const { domainCheck: d, siteOf } = await import("./domaincheck.ts");
+  assert.equal(siteOf("mail.acme.co.uk"), "acme.co.uk");
+  assert.equal(d({ kind: "org", slug: "acme", email: "ops@acme.com" }).result, "match");
+  assert.equal(d({ kind: "org", slug: "acme", email: "ops@mail.acme.co.uk" }).result, "match");
+  assert.equal(d({ kind: "org", slug: "acme-corp", email: "ops@acmecorp.io" }).result, "match");
+  assert.equal(d({ kind: "org", slug: "google", email: "x@gmail.com" }).result, "free_email");
+  assert.equal(d({ kind: "org", slug: "google", email: "x@evil.com" }).result, "mismatch");
+  assert.equal(d({ kind: "org", slug: "google", email: "x@google.evil.com" }).result, "mismatch", "a subdomain of someone else's site");
+  assert.equal(d({ kind: "org", slug: "google", email: "x@google.com.evil.io" }).result, "mismatch");
+  const m = (origins: string[], slug = "shop", email = "pay@shop.example") => d({ kind: "merchant", slug, email, origins }).result;
+  assert.equal(m(["https://shop.example", "https://api.shop.example"]), "match");
+  assert.equal(m(["https://shop.example", "https://other.example"]), "mismatch", "every origin must fit");
+  assert.equal(m(["https://shop.example"], "google"), "mismatch", "its own domain, someone else's name");
+
+  const before = sent.length;
+  await call("POST", "/public/requests", { kind: "org", slug: "wayne", company: "Wayne", email: "x@gmail.com" }, undefined, "9.9.9.20");
+  assert.equal(sent.length, before + 1);
+  assert.match(sent[before].subject, /doesn't match/);
+  assert.match(sent[before].text, /FREE EMAIL/);
+  const r = (await call("GET", "/api/requests", undefined, "admin-token")).body.requests.find((x: any) => x.slug === "wayne");
+  assert.equal(r.domain_check.result, "free_email");
 });

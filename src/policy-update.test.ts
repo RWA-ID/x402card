@@ -72,11 +72,11 @@ test("update_policy: tighten now, loosen after the approver signs, and the card 
     return ((await (await new McpServer(svc, store, (await authenticate(req.clone(), store, ADMIN))!).handle(req)).json()) as any).result;
   };
   const issued = await tool(ADMIN, "issue_card", {
-    name: "demo.xcard.eth",
+    name: "policy.xcard.eth",
     policy: { limit_tx: 50, limit_monthly: 500, currencies: ["USD"], mcc_allow: ["5734"], approver: "alice.eth" },
   });
   const agent = issued.structuredContent.agent_token as string;
-  const cardId = (await store.getCard("demo.xcard.eth"))!.cardId;
+  const cardId = (await store.getCard("policy.xcard.eth"))!.cardId;
   const controls = () => issuer.cards.get(cardId)!.controls.transaction_limits.limits.map((l) => `${l.interval}:${l.amount}`).join(" ");
 
   // Tighten: a daily limit of $200 applies at once, on the card too.
@@ -90,7 +90,7 @@ test("update_policy: tighten now, loosen after the approver signs, and the card 
   assert.equal(l.decision, "pending_human");
   assert.equal(l.changes, "card.limit.tx 50 → 100; card.limit.daily 200 → 300");
   assert.match(l.approval_url, /^https:\/\/x-card\.dev\/approve\.html#/);
-  assert.equal((await store.getRecords("demo.xcard.eth"))!["card.limit.tx"], "50");
+  assert.equal((await store.getRecords("policy.xcard.eth"))!["card.limit.tx"], "50");
 
   const v = (await svc.approvalView(l.approval_id)) as any;
   assert.equal(v.typed_data.approve.primaryType, "PolicyChange");
@@ -102,7 +102,7 @@ test("update_policy: tighten now, loosen after the approver signs, and the card 
   const done = await svc.decideSigned(l.approval_id, true, await alice.signTypedData(typed(v.typed_data.approve)));
   assert.equal(done.status, "approved");
   assert.equal(controls(), "PER_TRANSACTION:100 DAILY:300 MONTHLY:500");
-  const events = (await store.getEvents("demo.xcard.eth")).map((e) => e.kind);
+  const events = (await store.getEvents("policy.xcard.eth")).map((e) => e.kind);
   assert.deepEqual(events.slice(0, 2), ["policy", "escalated"]);
 
   // A request whose base moved since is refused rather than applied on top.
@@ -112,7 +112,7 @@ test("update_policy: tighten now, loosen after the approver signs, and the card 
   await assert.rejects(svc.decideSigned(stale.approval_id, true, await alice.signTypedData(typed(sv.typed_data.approve))), /changed since the request/);
 
   // Payments above the daily limit stop at the pre-check; the operator applies loosening directly.
-  assert.equal((await tool(ADMIN, "update_policy", { name: "demo.xcard.eth", limit_daily: 0 })).structuredContent.decision, "applied");
+  assert.equal((await tool(ADMIN, "update_policy", { name: "policy.xcard.eth", limit_daily: 0 })).structuredContent.decision, "applied");
   assert.equal(controls(), "PER_TRANSACTION:100 MONTHLY:450");
   assert.match((await tool(agent, "update_policy", {})).content[0].text, /bad_input/);
   assert.match((await tool(agent, "update_policy", { limit_daily: 9999 })).content[0].text, /bad_policy/);

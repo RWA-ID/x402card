@@ -91,6 +91,12 @@ export const TEST_CARDS = { tx: 50, daily: 200, monthly: 500, perWallet: 3 } as 
 /** Demo accounts (email sign-in): cards a tester issues on the console, named by them, under xcard.eth. */
 export const DEMO_CARDS = { tx: 500, daily: 2000, monthly: 5000, perAccount: 5, parent: "xcard.eth" } as const;
 
+/**
+ * Where self-serve cards live: word.demo.xcard.eth. A single name under xcard.eth
+ * looks like a brand's, so only a company, a merchant or the operator gets one.
+ */
+export const DEMO_NAMESPACE = `demo.${DEMO_CARDS.parent}`;
+
 /** Approval emails to one approver address an hour; the rest wait on the console. */
 const APPROVAL_MAILS_PER_HOUR = 10;
 
@@ -272,7 +278,7 @@ export class CardService {
 
   /**
    * A wallet issues itself a test card over the connector: the next free
-   * testN.xcard.eth, within TEST_CARDS' caps, approved by that wallet unless
+   * testN.demo.xcard.eth, within TEST_CARDS' caps, approved by that wallet unless
    * the records name another approver (an email, wallet or ENS name).
    */
   async issueTestCard(address: string, records: TextRecords): Promise<CardView> {
@@ -298,16 +304,16 @@ export class CardService {
     if (over.length) throw new ServiceError("over_test_caps", `test cards: ${over.join(", ")}`);
 
     for (let tries = 0; tries < 20; tries++) {
-      const label = `test${await this.store.nextTestNumber()}.xcard.eth`;
+      const label = `test${await this.store.nextTestNumber()}.${DEMO_NAMESPACE}`;
       if (await this.store.getCard(label)) continue;
-      return this.issueCard(label, toRecords(policy), { issuedBy: me });
+      return this.issueCard(label, toRecords(policy), { issuedBy: me, demo: true });
     }
     throw new ServiceError("busy", "couldn't find a free test name; try again");
   }
 
   /**
    * A demo account (signed in by email) issues a card on the console: a name
-   * they pick under xcard.eth, any approver (their own email by default, a
+   * they pick under demo.xcard.eth, any approver (their own email by default, a
    * colleague's email, a wallet or an ENS name), within DEMO_CARDS' caps.
    */
   async issueAccountCard(email: string, name: string, records: TextRecords): Promise<CardView> {
@@ -401,7 +407,7 @@ export class CardService {
 
   private async issueCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string, holder?: string): Promise<CardView> {
     const { label, policy } = this.checkCapped(me, name, records, caps, kind, org);
-    return this.issueCard(label, toRecords(policy), { issuedBy: me, ...(org ? { org } : {}), ...(holder ? { holder } : {}) });
+    return this.issueCard(label, toRecords(policy), { issuedBy: me, demo: kind === "demo", ...(org ? { org } : {}), ...(holder ? { holder } : {}) });
   }
 
   /** Everything an org card's row must pass before it's issued. Issues nothing. */
@@ -414,7 +420,7 @@ export class CardService {
   }
 
   private checkCapped(me: string, name: string, records: TextRecords, caps: { tx: number; daily: number; monthly: number }, kind: "demo" | "org", org?: string): { label: string; policy: CardPolicy } {
-    const parent = org ? `${org}.${DEMO_CARDS.parent}` : DEMO_CARDS.parent;
+    const parent = org ? `${org}.${DEMO_CARDS.parent}` : DEMO_NAMESPACE;
     const word = cardWord(name, parent);
     if (word.includes(".")) throw new ServiceError("bad_name", `pick one word for the name, e.g. maria.${parent}`);
     const label = `${word}.${parent}`;
@@ -458,13 +464,13 @@ export class CardService {
     return out;
   }
 
-  async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string; org?: string; holder?: string } = {}): Promise<CardView> {
+  async issueCard(name: string, records: TextRecords, opts: { issuedBy?: string; org?: string; holder?: string; demo?: boolean } = {}): Promise<CardView> {
     const label = normalizeLabel(name);
     if (RESERVED_LABELS.has(labelOfKey(label)) || RESERVED_KEYS.has(label)) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
     if (await this.store.getCard(label)) throw new ServiceError("exists", `${fullName(label)} already has a card`);
     // A company's namespace is its own: only its operators issue under it, and its name isn't a card.
     const [, deeper] = label.split(".");
-    if (label.split(".").length === 4 && deeper !== opts.org) throw new ServiceError("bad_name", `only ${deeper}'s operators can issue under ${deeper}.${DEMO_CARDS.parent}`);
+    if (label.split(".").length === 4 && deeper !== opts.org && !(opts.demo && label.endsWith(`.${DEMO_NAMESPACE}`))) throw new ServiceError("bad_name", `only ${deeper}'s operators can issue under ${deeper}.${DEMO_CARDS.parent}`);
     if (label.split(".").length === 3 && label.endsWith(`.${DEMO_CARDS.parent}`) && (await this.store.getOrg(labelOfKey(label)))) throw new ServiceError("reserved", `${fullName(label)} is a company's name`);
     if (label.split(".").length === 3 && label.endsWith(`.${DEMO_CARDS.parent}`) && (await this.store.getHold(labelOfKey(label)))) throw new ServiceError("reserved", `${fullName(label)} is reserved`);
 

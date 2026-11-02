@@ -37,10 +37,11 @@ import { isEmail, maskEmail, publicRecords, type TextRecords } from "./policy/re
 import { ensPayeeChecker } from "./policy/payee.ts";
 import { b64, fromB64, tapSigner, type TapSigner } from "./tap/sign.ts";
 import { verifyTap } from "./tap/verify.ts";
-import { AirwallexIssuer, CardService, DEMO_CARDS, ORG_DEFAULT_CAPS, cardWord, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
+import { AirwallexIssuer, CardService, DEMO_CARDS, DEMO_NAMESPACE, ORG_DEFAULT_CAPS, cardWord, describeError, fullName, labelOfKey, normalizeLabel } from "./service.ts";
 import { Store } from "./store.ts";
 import { advanceBatch, advanceRunning, batchFor, batchView, previewBatch, startBatch } from "./batch.ts";
 import { FakeIssuer } from "./testing.ts";
+import { domainCheck } from "./domaincheck.ts";
 
 export interface Env {
   KV: KVNamespace;
@@ -471,11 +472,11 @@ async function accessRequest(req: Request, env: Env, store: Store): Promise<Resp
   const ip = req.headers.get("CF-Connecting-IP") ?? "local";
   if ((await store.hit(`reqip:${ip}`)) > REQUESTS_PER_IP_PER_HOUR) return bad("Too many requests. Try again in an hour, or write to hello@x-card.dev.", "rate_limited", 429);
   const full = `${slug}.${DEMO_CARDS.parent}`;
-  const taken = RESERVED_LABELS.has(slug) || /^test\d+$/.test(slug) || (await store.getCard(full)) || (await store.getOrg(slug)) || (await store.getHold(slug));
+  const taken = RESERVED_LABELS.has(slug) || (await store.getCard(full)) || (await store.getOrg(slug)) || (await store.getHold(slug));
   if (taken) return bad(`${full} is taken. Try another name, or write to hello@x-card.dev if it's yours.`, "name_taken", 409);
   const cards = text("cards", 40);
   const note = text("note", 1000);
-  const request = { id: crypto.randomUUID(), kind, slug, company, email, ...(cards && kind === "org" ? { cards } : {}), ...(origins ? { origins } : {}), ...(note ? { note } : {}), at: Date.now() } as const;
+  const request = { id: crypto.randomUUID(), kind, slug, company, email, ...(cards && kind === "org" ? { cards } : {}), ...(origins ? { origins } : {}), ...(note ? { note } : {}), domain_check: domainCheck({ kind, slug, email, ...(origins ? { origins } : {}) }), at: Date.now() } as const;
   await store.putRequest(request);
   await store.putHold(slug, { kind, status: "requested", at: request.at }, REQUEST_HOLD_S);
   // The request is saved either way, so a mail failure doesn't lose it.
@@ -501,8 +502,8 @@ async function accountApi(req: Request, path: string, env: Env, store: Store, em
       // An operator's names are under the company's namespace.
       const org = await store.orgOf(email);
       const asked = decodeURIComponent(n[1]);
-      const parent = org ? `${org.slug}.${DEMO_CARDS.parent}` : "";
-      return json(await nameStatus(store, parent ? `${cardWord(asked, parent)}.${parent}` : asked));
+      const parent = org ? `${org.slug}.${DEMO_CARDS.parent}` : DEMO_NAMESPACE;
+      return json(await nameStatus(store, `${cardWord(asked, parent)}.${parent}`));
     }
     const cards = await svc.accountCards(email);
     const mine = new Set(cards.map((c) => normalizeLabel(c.name)));
